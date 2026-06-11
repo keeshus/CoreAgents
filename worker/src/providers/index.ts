@@ -1,4 +1,4 @@
-import { callAnthropic, type AnthropicCallParams } from './anthropic.js';
+import { callAnthropic, type AnthropicCallParams, type LLMResponse, type ToolDefinition } from './anthropic.js';
 import { callOpenAICompatible, type OpenAICallParams } from './openai-compatible.js';
 
 export interface LLMCallParams {
@@ -11,17 +11,18 @@ export interface LLMCallParams {
   onToken?: (token: string) => void;
   responseFormat?: 'text' | 'json_object';
   outputSchema?: string;
+  tools?: ToolDefinition[];
 }
 
-// The caller is responsible for looking up endpoint details from the DB
-// and passing them via the provider/params fields.
 export interface ResolvedEndpoint {
   providerType: 'anthropic' | 'openai' | 'litellm';
   apiKey: string;
   baseUrl: string | null;
 }
 
-export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint): Promise<string> {
+export type { LLMResponse, ToolDefinition };
+
+export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint): Promise<LLMResponse> {
   switch (endpoint.providerType) {
     case 'anthropic':
       return callAnthropic({
@@ -34,6 +35,7 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         onToken: params.onToken,
         responseFormat: params.responseFormat,
         outputSchema: params.outputSchema,
+        tools: params.tools,
       });
     case 'openai':
     case 'litellm':
@@ -48,6 +50,7 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         onToken: params.onToken,
         responseFormat: params.responseFormat,
         outputSchema: params.outputSchema,
+        tools: params.tools,
       });
     default:
       throw new Error(`Unknown provider type: ${endpoint.providerType}`);

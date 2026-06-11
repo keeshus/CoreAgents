@@ -134,6 +134,8 @@ router.post('/chat/sessions/:sessionId/messages', asyncHandler(async (req, res) 
         enabled: server.enabled,
       };
     },
+    flowNodes: flow.nodes as any[],
+    flowEdges: flow.edges as any[],
   };
 
   const { FlowExecutor } = await import('../../../worker/src/executor/engine.js');

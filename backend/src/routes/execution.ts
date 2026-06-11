@@ -85,6 +85,8 @@ router.post(
           enabled: server.enabled,
         };
       },
+      flowNodes: flowDef.nodes as any[],
+      flowEdges: flowDef.edges as any[],
     };
 
     const executor = new FlowExecutor();

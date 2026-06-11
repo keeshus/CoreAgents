@@ -17,10 +17,11 @@ interface BaseNodeProps {
   inputs?: number;
   outputs?: number;
   outputLabels?: string[];
+  toolInputs?: number;
   className?: string;
 }
 
-export function BaseNode({ children, label, nodeType, category = 'processing', selected, inputs = 1, outputs = 1, outputLabels, className }: BaseNodeProps) {
+export function BaseNode({ children, label, nodeType, category = 'processing', selected, inputs = 1, outputs = 1, outputLabels, toolInputs = 0, className }: BaseNodeProps) {
   const borderColor = CATEGORY_COLORS[category] || 'border-gray-300';
 
   return (
@@ -39,6 +40,18 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
       <div className="p-3 text-xs">
         {children}
       </div>
+      {/* Tool inputs — MCP tools wire in here */}
+      {Array.from({ length: toolInputs }).map((_, i) => (
+        <Handle
+          key={`tool-input-${i}`}
+          type="target"
+          position={Position.Bottom}
+          id={`tool-input-${i}`}
+          style={{ left: `${((i + 1) / (toolInputs + 1)) * 100}%` }}
+          className="!bg-purple-500 !w-3 !h-3"
+          title="Connect MCP Tools here"
+        />
+      ))}
       {outputLabels && outputLabels.length > 0 ? (
         outputLabels.map((lbl, i) => (
           <Handle

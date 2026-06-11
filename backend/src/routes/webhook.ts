@@ -54,6 +54,8 @@ router.post(
           baseUrl: endpoint.base_url,
         };
       },
+      flowNodes: flow.nodes as any[],
+      flowEdges: flow.edges as any[],
     };
 
     const executor = new FlowExecutor();

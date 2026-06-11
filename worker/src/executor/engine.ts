@@ -16,6 +16,8 @@ export type EventCallback = (nodeId: string, event: SSEEvent) => void | Promise<
 export interface ExecutionContext {
   getEndpoint: (endpointId: string) => Promise<ResolvedEndpoint | null>;
   getMCPServer?: (serverId: string) => Promise<any>;
+  flowNodes?: Array<{ id: string; type: string; data: any }>;
+  flowEdges?: Array<{ id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }>;
 }
 
 export class FlowExecutor {
@@ -184,11 +186,41 @@ export class FlowExecutor {
             ? inputObj
             : JSON.stringify(inputObj);
 
-        // Build messages from history if available, otherwise just the current message
         const history: Array<{ role: 'user' | 'assistant'; content: string }> =
           Array.isArray(inputObj?.history) ? inputObj.history as any[] : [];
 
         const messages = [...history, { role: 'user' as const, content: userMessage }];
+
+        // Collect tool definitions from MCP Tool nodes connected via tool-input handles
+        const toolDefs: Array<{ name: string; description: string; input_schema: Record<string, unknown> }> = [];
+        if (context.getMCPServer) {
+          // Look for edges where target is this LLM node and targetHandle starts with 'tool-input'
+          const toolEdges = context.flowEdges?.filter(
+            (e: any) => e.target === node.id && e.targetHandle?.startsWith('tool-input')
+          ) || [];
+
+          for (const edge of toolEdges) {
+            const mcpNode = context.flowNodes?.find((n: any) => n.id === edge.source);
+            if (!mcpNode || mcpNode.data?.type !== 'mcp-tool') continue;
+            const mcpConfig = (mcpNode.data as any).config || {};
+            if (!mcpConfig.serverId || !mcpConfig.toolName) continue;
+
+            try {
+              const server = await context.getMCPServer!(mcpConfig.serverId);
+              if (server) {
+                const serverTools = server.tools || [];
+                const tool = serverTools.find((t: any) => t.name === mcpConfig.toolName);
+                if (tool) {
+                  toolDefs.push({
+                    name: tool.name,
+                    description: tool.description || '',
+                    input_schema: tool.inputSchema || {},
+                  });
+                }
+              }
+            } catch { /* skip unavailable servers */ }
+          }
+        }
 
         // Token streaming callback
         let streamedContent = '';
@@ -203,22 +235,88 @@ export class FlowExecutor {
           });
         };
 
-        const response = await callLLM(
-          {
-            endpointId: config.endpointId,
-            model: config.model || endpoint.providerType,
-            systemPrompt: config.systemPrompt || '',
-            messages,
-            temperature: config.temperature ?? 0.7,
-            maxTokens: config.maxTokens ?? 4096,
-            onToken,
-            responseFormat: config.responseFormat || 'text',
-            outputSchema: config.outputSchema || undefined,
-          },
-          endpoint,
-        );
+        // Tool-use loop: LLM may call tools, we execute them, feed back results
+        const MAX_TOOL_ROUNDS = 5;
+        const conversation = [...messages];
+        let finalContent = '';
+        let finalStreamed = '';
 
-        return { content: response, streamedContent: streamedContent || response };
+        for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+          const response = await callLLM(
+            {
+              endpointId: config.endpointId,
+              model: config.model || endpoint.providerType,
+              systemPrompt: config.systemPrompt || '',
+              messages: conversation,
+              temperature: config.temperature ?? 0.7,
+              maxTokens: config.maxTokens ?? 4096,
+              onToken,
+              responseFormat: config.responseFormat || 'text',
+              outputSchema: config.outputSchema || undefined,
+              tools: toolDefs.length > 0 ? toolDefs : undefined,
+            },
+            endpoint,
+          );
+
+          if (response.text) {
+            finalContent = response.text;
+            finalStreamed = streamedContent || response.text;
+          }
+
+          // If no tool calls, we're done
+          if (!response.toolCalls || response.toolCalls.length === 0) break;
+
+          // Add the assistant's tool-use message to conversation
+          conversation.push({ role: 'assistant' as const, content: response.text || '' });
+
+          // Execute each tool call and add results
+          for (const tc of response.toolCalls) {
+            try {
+              // Find the MCP config from the connected tool nodes
+              const toolEdges = context.flowEdges?.filter(
+                (e: any) => e.target === node.id && e.targetHandle?.startsWith('tool-input')
+              ) || [];
+              let toolResult = 'Tool not found';
+
+              for (const edge of toolEdges) {
+                const mcpNode = context.flowNodes?.find((n: any) => n.id === edge.source);
+                if (!mcpNode) continue;
+                const mcpConfig = (mcpNode.data as any).config || {};
+                if (mcpConfig.toolName === tc.name && mcpConfig.serverId) {
+                  const { mcpHub } = await import('../mcp/hub.js');
+                  const server = await context.getMCPServer!(mcpConfig.serverId);
+                  if (server) {
+                    if (!mcpHub.isConnected(server.id)) {
+                      await mcpHub.connect(server);
+                    }
+                    toolResult = JSON.stringify(await mcpHub.callTool(server.id, tc.name, tc.input));
+                  }
+                  break;
+                }
+              }
+
+              conversation.push({
+                role: 'user' as const,
+                content: `Tool result for ${tc.name}: ${toolResult}`,
+              });
+
+              onEvent(node.id, {
+                type: 'log',
+                executionId: '',
+                nodeId: node.id,
+                data: { nodeId: node.id, toolCall: tc.name, toolResult },
+                timestamp: new Date().toISOString(),
+              });
+            } catch (err) {
+              conversation.push({
+                role: 'user' as const,
+                content: `Tool error for ${tc.name}: ${err instanceof Error ? err.message : String(err)}`,
+              });
+            }
+          }
+        }
+
+        return { content: finalContent, streamedContent: finalStreamed || finalContent };
       }
 
       case 'mcp-tool': {

@@ -61,6 +61,8 @@ async function main() {
             baseUrl: endpoint.base_url,
           };
         },
+        flowNodes: scheduledFlow.nodes,
+        flowEdges: scheduledFlow.edges,
       };
 
       const executor = new FlowExecutor();
