@@ -36,11 +36,12 @@ interface FlowEditorProps {
   initialEdges?: any[];
   onNodesChange?: (nodes: any[]) => void;
   onEdgesChange?: (edges: any[]) => void;
-  /** Refs for imperative node/edge access, set by parent via callback refs */
   addNodeCallbackRef?: React.MutableRefObject<((type: string, defaultConfig: Record<string, any>) => void) | null>;
+  setNodeDataCallbackRef?: React.MutableRefObject<((nodeId: string, config: Record<string, any>) => void) | null>;
+  onNodeClick?: (nodeId: string, nodeData: any) => void;
 }
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef }: FlowEditorProps) {
+export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef, setNodeDataCallbackRef, onNodeClick }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const onNodesChangeRef = useRef(onNodesChange);
@@ -78,6 +79,21 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     }
   }, [addNode, addNodeCallbackRef]);
 
+  // Expose setNodeData to parent via ref — updates a node's config in-place
+  const setNodeData = useCallback((nodeId: string, config: Record<string, any>) => {
+    setNodes((nds) => nds.map((n) =>
+      n.id === nodeId
+        ? { ...n, data: { ...n.data, config: { ...n.data.config, ...config } } }
+        : n
+    ));
+  }, [setNodes]);
+
+  useEffect(() => {
+    if (setNodeDataCallbackRef) {
+      setNodeDataCallbackRef.current = setNodeData;
+    }
+  }, [setNodeData, setNodeDataCallbackRef]);
+
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
     [setEdges]
@@ -95,6 +111,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
+          onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
         >
           <Background />
           <Controls />

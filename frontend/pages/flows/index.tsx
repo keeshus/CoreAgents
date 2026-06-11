@@ -56,7 +56,7 @@ export default function FlowsListPage() {
                 <div>
                   <Link href={`/flows/${flow.id}/edit`} className="font-medium text-gray-900 hover:text-blue-600">{flow.name}</Link>
                   <p className="text-xs text-gray-500 mt-0.5">{flow.description || 'No description'}</p>
-                  <p className="text-[10px] text-gray-400 mt-1">v{flow.version} · {new Date(flow.updatedAt).toLocaleDateString()}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">v{flow.version} · {new Date(flow.updated_at).toLocaleDateString()}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Link href={`/chat/${flow.id}`} className="p-2 text-gray-400 hover:text-green-600 transition-colors" title="Chat with this agent">

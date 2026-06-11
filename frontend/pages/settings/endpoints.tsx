@@ -70,11 +70,11 @@ export default function EndpointsPage() {
   const handleEdit = (ep: any) => {
     setForm({
       name: ep.name,
-      providerType: ep.providerType,
-      baseUrl: ep.baseUrl || '',
+      providerType: ep.provider_type,
+      baseUrl: ep.base_url || '',
       apiKey: '',
-      defaultModel: ep.defaultModel,
-      models: ep.models.join(', '),
+      defaultModel: ep.default_model,
+      models: (ep.models || []).join(', '),
     });
     setEditingId(ep.id);
     setShowForm(true);
@@ -327,17 +327,17 @@ export default function EndpointsPage() {
                     <h3 className="font-medium text-gray-900">{ep.name}</h3>
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        PROVIDER_STYLES[ep.providerType] || 'bg-gray-100 text-gray-700'
+                        PROVIDER_STYLES[ep.provider_type] || 'bg-gray-100 text-gray-700'
                       }`}
                     >
-                      {PROVIDER_LABELS[ep.providerType] || ep.providerType}
+                      {PROVIDER_LABELS[ep.provider_type] || ep.provider_type}
                     </span>
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
-                    Model: <span className="font-mono text-gray-600">{ep.defaultModel}</span>
+                    Model: <span className="font-mono text-gray-600">{ep.default_model}</span>
                   </p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    <span>{ep.models.length} model{ep.models.length !== 1 ? 's' : ''}</span>
+                    <span>{(ep.models || []).length} model{(ep.models || []).length !== 1 ? 's' : ''}</span>
                     <button
                       onClick={() => toggleShowApiKey(ep.id)}
                       className="flex items-center gap-1 hover:text-gray-600 transition-colors"
@@ -345,7 +345,7 @@ export default function EndpointsPage() {
                       {showApiKey[ep.id] ? (
                         <>
                           <EyeOff className="w-3 h-3" />
-                          <span>{ep.apiKey.slice(0, 8)}...</span>
+                          <span>{(ep.api_key || '').slice(0, 8)}...</span>
                         </>
                       ) : (
                         <>

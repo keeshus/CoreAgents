@@ -33,7 +33,7 @@ export function LLMAgentConfig({ config, onChange }: LLMAgentConfigProps) {
 
   const handleEndpointChange = (endpointId: string) => {
     const ep = endpoints.find((e: any) => e.id === endpointId);
-    onChange({ ...config, endpointId, model: ep?.defaultModel || '' });
+    onChange({ ...config, endpointId, model: ep?.default_model || '' });
   };
 
   return (
@@ -48,13 +48,13 @@ export function LLMAgentConfig({ config, onChange }: LLMAgentConfigProps) {
           <option value="">Select endpoint...</option>
           {endpoints.map((ep: any) => (
             <option key={ep.id} value={ep.id}>
-              {ep.name} ({PROVIDER_LABELS[ep.providerType] || ep.providerType})
+              {ep.name} ({PROVIDER_LABELS[ep.provider_type] || ep.provider_type})
             </option>
           ))}
         </select>
         {selectedEndpoint && (
           <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
-            {PROVIDER_LABELS[selectedEndpoint.providerType]}
+            {PROVIDER_LABELS[selectedEndpoint.provider_type]}
           </span>
         )}
       </label>
