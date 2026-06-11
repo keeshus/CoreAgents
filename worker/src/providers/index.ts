@@ -32,17 +32,9 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         onToken: params.onToken,
       });
     case 'openai':
-      return callOpenAICompatible({
-        apiKey: endpoint.apiKey,
-        model: params.model,
-        systemPrompt: params.systemPrompt,
-        messages: params.messages,
-        temperature: params.temperature,
-        maxTokens: params.maxTokens,
-        onToken: params.onToken,
-      });
     case 'litellm':
-      // LiteLLM uses OpenAI-compatible API at a custom base URL
+      // Both OpenAI and LiteLLM (and DeepSeek, Groq, etc.) use the same
+      // OpenAI-compatible API shape — just with different base URLs
       return callOpenAICompatible({
         apiKey: endpoint.apiKey,
         baseUrl: endpoint.baseUrl || undefined,
