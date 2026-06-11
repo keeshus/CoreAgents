@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '@/lib/api-client';
 import Link from 'next/link';
-import { Plus, Trash2, Edit3, MessageCircle, Settings } from 'lucide-react';
+import { Plus, Trash2, Edit3, MessageCircle, Settings, Play, Loader2, CheckCircle, XCircle } from 'lucide-react';
 
 export default function FlowsListPage() {
   const [flows, setFlows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState<Record<string, 'running' | 'ok' | 'error' | null>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -22,6 +23,17 @@ export default function FlowsListPage() {
     if (!confirm('Delete this flow?')) return;
     await api.flows.delete(id);
     setFlows(flows.filter(f => f.id !== id));
+  };
+
+  const handleRun = async (flowId: string) => {
+    setRunning((prev) => ({ ...prev, [flowId]: 'running' }));
+    try {
+      await api.flows.execute(flowId, { message: 'Hello!' });
+      setRunning((prev) => ({ ...prev, [flowId]: 'ok' }));
+    } catch {
+      setRunning((prev) => ({ ...prev, [flowId]: 'error' }));
+    }
+    setTimeout(() => setRunning((prev) => ({ ...prev, [flowId]: null })), 3000);
   };
 
   return (
@@ -59,6 +71,17 @@ export default function FlowsListPage() {
                   <p className="text-[10px] text-gray-400 mt-1">v{flow.version} · {new Date(flow.updated_at).toLocaleDateString()}</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {running[flow.id] === 'running' ? (
+                    <span className="p-2 text-blue-500" title="Running..."><Loader2 className="w-4 h-4 animate-spin" /></span>
+                  ) : running[flow.id] === 'ok' ? (
+                    <span className="p-2 text-green-500" title="Completed"><CheckCircle className="w-4 h-4" /></span>
+                  ) : running[flow.id] === 'error' ? (
+                    <span className="p-2 text-red-500" title="Failed"><XCircle className="w-4 h-4" /></span>
+                  ) : (
+                    <button onClick={() => handleRun(flow.id)} className="p-2 text-gray-400 hover:text-blue-600 transition-colors" title="Run flow">
+                      <Play className="w-4 h-4" />
+                    </button>
+                  )}
                   <Link href={`/chat/${flow.id}`} className="p-2 text-gray-400 hover:text-green-600 transition-colors" title="Chat with this agent">
                     <MessageCircle className="w-4 h-4" />
                   </Link>

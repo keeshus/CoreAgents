@@ -63,11 +63,30 @@ export const api = {
     update: (id: string, data: any) =>
       request<any>(`/flows/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/flows/${id}`, { method: 'DELETE' }),
-    execute: (id: string, input?: Record<string, unknown>) =>
-      request<{ executionId: string }>(`/flows/${id}/execute`, {
+    execute: async (id: string, input?: Record<string, unknown>) => {
+      const res = await fetch(`${BASE_URL}/flows/${id}/execute`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input }),
-      }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || `Request failed: ${res.status}`);
+      }
+      // Consume first SSE event to confirm execution started, then close
+      const reader = res.body?.getReader();
+      if (reader) {
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          if (buffer.includes('\n\n')) break;
+        }
+        reader.cancel();
+      }
+    },
     executeStream: (id: string, input?: Record<string, unknown>) =>
       streamSSE(`${BASE_URL}/flows/${id}/execute`, { input }),
   },
