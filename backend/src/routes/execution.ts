@@ -9,6 +9,39 @@ import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared
 
 const router = Router();
 
+// In-memory registry of active executors for cancellation
+const activeExecutors = new Map<string, FlowExecutor>();
+
+// GET /api/executions — global list of all executions across all flows
+router.get('/executions', asyncHandler(async (_req, res) => {
+  const result = await db
+    .select()
+    .from(executions)
+    .orderBy(desc(executions.created_at))
+    .limit(100);
+  res.json(result);
+}));
+
+// POST /api/executions/:executionId/cancel — cancel a running execution
+router.post('/executions/:executionId/cancel', asyncHandler(async (req, res) => {
+  const executionId = req.params.executionId as string;
+
+  // Abort in-process if available
+  const executor = activeExecutors.get(executionId);
+  if (executor) {
+    executor.abort();
+    activeExecutors.delete(executionId);
+  }
+
+  // Mark as cancelled in DB
+  await db
+    .update(executions)
+    .set({ status: 'cancelled', completed_at: new Date() })
+    .where(eq(executions.id, executionId));
+
+  res.json({ status: 'cancelled' });
+}));
+
 // ── POST /api/flows/:flowId/execute — SSE-streamed execution ───────────────────
 
 router.post(
@@ -97,10 +130,12 @@ router.post(
     };
 
     const executor = new FlowExecutor();
+    activeExecutors.set(exec.id, executor);
 
     // Handle client disconnect: abort the executor ----------------
     req.on('close', () => {
       executor.abort();
+      activeExecutors.delete(exec.id);
     });
 
     // Map Drizzle row (snake_case) to FlowDefinition (camelCase) --
@@ -187,6 +222,7 @@ router.post(
         })
         .where(eq(executions.id, exec.id));
 
+      activeExecutors.delete(exec.id);
       emitSSE({
         type: 'execution.completed',
         executionId: exec.id,
@@ -196,6 +232,7 @@ router.post(
     } catch (err: unknown) {
       const error = err instanceof Error ? err.message : String(err);
       console.error('Flow execution failed:', error);
+      activeExecutors.delete(exec.id);
 
       await db
         .update(executions)

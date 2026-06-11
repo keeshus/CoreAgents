@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Cpu, Server } from 'lucide-react';
+import { ArrowRight, Server, Zap } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -19,6 +19,9 @@ export default function Home() {
         <div className="flex items-center justify-center gap-4">
           <Link href="/flows" className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
             Open Builder <ArrowRight className="w-4 h-4" />
+          </Link>
+          <Link href="/executions" className="flex items-center gap-2 px-6 py-3 bg-zinc-700 text-zinc-200 rounded-lg hover:bg-zinc-600 transition-colors font-medium">
+            Executions <Zap className="w-4 h-4" />
           </Link>
           <Link href="/settings" className="flex items-center gap-2 px-6 py-3 bg-zinc-700 text-zinc-200 rounded-lg hover:bg-zinc-600 transition-colors font-medium">
             Settings <Server className="w-4 h-4" />
