@@ -1,0 +1,33 @@
+{
+  "name": "core-agents",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "backend",
+    "worker",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"backend,worker,frontend\" -c \"blue,green,magenta\" \"npm run backend:dev\" \"wait-on http://localhost:3001/api/health && npm run worker:dev\" \"wait-on http://localhost:3001/api/health && npm run frontend:dev\"",
+    "backend": "npm run start -w backend",
+    "backend:dev": "tsx watch --env-file=.env backend/src/index.ts",
+    "backend:build": "npm run build -w backend",
+    "worker": "npm run start -w worker",
+    "worker:dev": "tsx watch --env-file=.env worker/src/index.ts",
+    "worker:build": "npm run build -w worker",
+    "frontend:dev": "npm run dev -w frontend",
+    "frontend:build": "npm run build -w frontend",
+    "frontend:start": "npm run start -w frontend -- -H 0.0.0.0",
+    "shared:typecheck": "npm run typecheck -w shared",
+    "db:generate": "cd backend && drizzle-kit generate",
+    "db:migrate": "tsx --env-file=.env backend/src/db/migrate.ts",
+    "db:push": "cd backend && drizzle-kit push"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3",
+    "nodemon": "^3.1.14",
+    "wait-on": "^9.0.10"
+  },
+  "type": "module"
+}

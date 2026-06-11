@@ -1,0 +1,22 @@
+{
+  "name": "core-agents-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "core-agents-shared": "*",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.95.0",
+    "@modelcontextprotocol/sdk": "^1.15.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsx": "^4.19.4",
+    "@types/node": "^22.15.0"
+  }
+}

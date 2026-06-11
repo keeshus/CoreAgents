@@ -1,0 +1,122 @@
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api-client';
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  litellm: 'LiteLLM',
+};
+
+interface LLMAgentConfigProps {
+  config: {
+    endpointId: string;
+    model: string;
+    systemPrompt: string;
+    temperature: number;
+    maxTokens: number;
+  };
+  onChange: (config: any) => void;
+}
+
+export function LLMAgentConfig({ config, onChange }: LLMAgentConfigProps) {
+  const [endpoints, setEndpoints] = useState<any[]>([]);
+  const [selectedEndpoint, setSelectedEndpoint] = useState<any>(null);
+
+  useEffect(() => {
+    api.llmEndpoints.list().then(setEndpoints).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const ep = endpoints.find((e: any) => e.id === config.endpointId);
+    setSelectedEndpoint(ep || null);
+  }, [config.endpointId, endpoints]);
+
+  const handleEndpointChange = (endpointId: string) => {
+    const ep = endpoints.find((e: any) => e.id === endpointId);
+    onChange({ ...config, endpointId, model: ep?.defaultModel || '' });
+  };
+
+  return (
+    <div className="space-y-3">
+      <label className="block">
+        <span className="text-xs font-medium text-gray-700">LLM Endpoint</span>
+        <select
+          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
+          value={config.endpointId}
+          onChange={(e) => handleEndpointChange(e.target.value)}
+        >
+          <option value="">Select endpoint...</option>
+          {endpoints.map((ep: any) => (
+            <option key={ep.id} value={ep.id}>
+              {ep.name} ({PROVIDER_LABELS[ep.providerType] || ep.providerType})
+            </option>
+          ))}
+        </select>
+        {selectedEndpoint && (
+          <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+            {PROVIDER_LABELS[selectedEndpoint.providerType]}
+          </span>
+        )}
+      </label>
+
+      <label className="block">
+        <span className="text-xs font-medium text-gray-700">Model</span>
+        <input
+          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
+          value={config.model}
+          onChange={(e) => onChange({ ...config, model: e.target.value })}
+          placeholder="e.g. claude-sonnet-4-20250514"
+          list="model-suggestions"
+        />
+        {selectedEndpoint?.models?.length > 0 && (
+          <datalist id="model-suggestions">
+            {selectedEndpoint.models.map((m: string) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        )}
+      </label>
+
+      <label className="block">
+        <span className="text-xs font-medium text-gray-700">System Prompt</span>
+        <textarea
+          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[80px]"
+          value={config.systemPrompt}
+          onChange={(e) => onChange({ ...config, systemPrompt: e.target.value })}
+          placeholder="You are a helpful assistant..."
+          rows={4}
+        />
+      </label>
+
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="text-xs font-medium text-gray-700">Temperature: {config.temperature}</span>
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            className="mt-1 block w-full"
+            value={config.temperature}
+            onChange={(e) =>
+              onChange({ ...config, temperature: parseFloat(e.target.value) })
+            }
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-gray-700">Max Tokens</span>
+          <input
+            type="number"
+            className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
+            value={config.maxTokens}
+            onChange={(e) =>
+              onChange({ ...config, maxTokens: parseInt(e.target.value) || 4096 })
+            }
+            min={1}
+            max={200000}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}

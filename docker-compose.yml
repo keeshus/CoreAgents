@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: core-agents-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: coreagents
+      POSTGRES_PASSWORD: coreagents
+      POSTGRES_DB: coreagents
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U coreagents
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    container_name: core-agents-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
+    restart: always
+
+  worker:
+    container_name: core-agents-worker
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    restart: always
+
+  frontend:
+    container_name: core-agents-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+    restart: always
+
+volumes:
+  pgdata:
