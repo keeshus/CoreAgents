@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -10,6 +10,7 @@ import {
   type Connection,
   type OnConnect,
   ReactFlowProvider,
+  type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { TriggerNode } from './nodes/TriggerNode';
@@ -35,11 +36,47 @@ interface FlowEditorProps {
   initialEdges?: any[];
   onNodesChange?: (nodes: any[]) => void;
   onEdgesChange?: (edges: any[]) => void;
+  /** Refs for imperative node/edge access, set by parent via callback refs */
+  addNodeCallbackRef?: React.MutableRefObject<((type: string, defaultConfig: Record<string, any>) => void) | null>;
 }
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange }: FlowEditorProps) {
+export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
+  const onNodesChangeRef = useRef(onNodesChange);
+  const onEdgesChangeRef = useRef(onEdgesChange);
+  onNodesChangeRef.current = onNodesChange;
+  onEdgesChangeRef.current = onEdgesChange;
+
+  // Propagate changes back to parent (debounced via requestAnimationFrame)
+  const syncRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (syncRef.current) cancelAnimationFrame(syncRef.current);
+    syncRef.current = requestAnimationFrame(() => {
+      onNodesChangeRef.current?.(nodes);
+      onEdgesChangeRef.current?.(edges);
+    });
+  }, [nodes, edges]);
+
+  const addNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
+    const newNode: Node = {
+      id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type,
+      position: {
+        x: 150 + Math.random() * 300,
+        y: 100 + Math.random() * 200,
+      },
+      data: { label: type, type, config: { ...defaultConfig } },
+    };
+    setNodes((nds) => [...nds, newNode]);
+  }, [setNodes]);
+
+  // Expose addNode to parent via ref
+  useEffect(() => {
+    if (addNodeCallbackRef) {
+      addNodeCallbackRef.current = addNode;
+    }
+  }, [addNode, addNodeCallbackRef]);
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),

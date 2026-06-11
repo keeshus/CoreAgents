@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '@/lib/api-client';
 import Link from 'next/link';
-import { Plus, Trash2, Edit3, MessageCircle } from 'lucide-react';
+import { Plus, Trash2, Edit3, MessageCircle, Settings } from 'lucide-react';
 
 export default function FlowsListPage() {
   const [flows, setFlows] = useState<any[]>([]);
@@ -32,9 +32,14 @@ export default function FlowsListPage() {
             <h1 className="text-2xl font-bold text-gray-900">Flows</h1>
             <p className="text-sm text-gray-500 mt-1">Build and manage your LLM agent workflows</p>
           </div>
-          <button onClick={handleCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
-            <Plus className="w-4 h-4" /> New Flow
-          </button>
+          <div className="flex items-center gap-2">
+            <Link href="/settings" className="p-2 text-gray-400 hover:text-gray-600 transition-colors" title="Settings">
+              <Settings className="w-5 h-5" />
+            </Link>
+            <button onClick={handleCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+              <Plus className="w-4 h-4" /> New Flow
+            </button>
+          </div>
         </div>
 
         {loading ? (

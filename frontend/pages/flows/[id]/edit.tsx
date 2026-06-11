@@ -1,10 +1,10 @@
 import { useRouter } from 'next/router';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '@/lib/api-client';
 import { FlowEditor } from '@/components/flow/FlowEditor';
 import { NodeCatalog } from '@/components/flow/NodeCatalog';
 import { ExecutionPanel } from '@/components/flow/ExecutionPanel';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, Settings } from 'lucide-react';
 import Link from 'next/link';
 
 export default function FlowEditPage() {
@@ -15,8 +15,9 @@ export default function FlowEditPage() {
   const [edges, setEdges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const addNodeRef = useRef<((type: string, defaultConfig: Record<string, any>) => void) | null>(null);
 
-  // Execution state (will be wired up in Phase 3)
+  // Execution state
   const [isRunning, setIsRunning] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [output, setOutput] = useState<any>(null);
@@ -47,15 +48,9 @@ export default function FlowEditPage() {
     }
   }, [flow, nodes, edges]);
 
-  const handleAddNode = (type: string, defaultConfig: Record<string, any>) => {
-    const newNode = {
-      id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      type,
-      position: { x: 100 + Math.random() * 300, y: 100 + Math.random() * 200 },
-      data: { label: type, type, config: { ...defaultConfig } },
-    };
-    setNodes((prev) => [...prev, newNode]);
-  };
+  const handleAddNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
+    addNodeRef.current?.(type, defaultConfig);
+  }, []);
 
   const handleRun = async () => {
     setEvents([]);
@@ -101,6 +96,9 @@ export default function FlowEditPage() {
           />
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/settings" className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors" title="Manage LLM endpoints & MCP servers">
+            <Settings className="w-4 h-4" />
+          </Link>
           <button
             onClick={handleSave}
             disabled={saving}
@@ -120,6 +118,7 @@ export default function FlowEditPage() {
             initialEdges={edges}
             onNodesChange={setNodes}
             onEdgesChange={setEdges}
+            addNodeCallbackRef={addNodeRef}
           />
         </div>
         <ExecutionPanel
