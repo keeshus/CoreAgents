@@ -129,7 +129,7 @@ export default function ExecutionHistoryPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-4xl mx-auto p-6">
           <div className="flex items-center gap-3 mb-6">
-            <Link href={`/flows/${flowId}/edit`} className="text-gray-400 hover:text-gray-600">
+            <Link href="/flows" className="text-gray-400 hover:text-gray-600">
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div className="flex-1">
@@ -221,7 +221,7 @@ export default function ExecutionHistoryPage() {
           </div>
           {flowId && (
             <Link
-              href={`/flows/${flowId}/edit`}
+              href="/flows"
               className="text-xs text-blue-600 hover:text-blue-700 font-medium"
             >
               Open Flow Editor
