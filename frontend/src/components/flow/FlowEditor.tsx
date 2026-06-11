@@ -38,10 +38,11 @@ interface FlowEditorProps {
   onEdgesChange?: (edges: any[]) => void;
   addNodeCallbackRef?: React.MutableRefObject<((type: string, defaultConfig: Record<string, any>) => void) | null>;
   setNodeDataCallbackRef?: React.MutableRefObject<((nodeId: string, config: Record<string, any>) => void) | null>;
+  deleteNodeCallbackRef?: React.MutableRefObject<((nodeId: string) => void) | null>;
   onNodeClick?: (nodeId: string, nodeData: any) => void;
 }
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef, setNodeDataCallbackRef, onNodeClick }: FlowEditorProps) {
+export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef, setNodeDataCallbackRef, deleteNodeCallbackRef, onNodeClick }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const onNodesChangeRef = useRef(onNodesChange);
@@ -93,6 +94,18 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
       setNodeDataCallbackRef.current = setNodeData;
     }
   }, [setNodeData, setNodeDataCallbackRef]);
+
+  // Expose deleteNode to parent via ref
+  const deleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, [setNodes, setEdges]);
+
+  useEffect(() => {
+    if (deleteNodeCallbackRef) {
+      deleteNodeCallbackRef.current = deleteNode;
+    }
+  }, [deleteNode, deleteNodeCallbackRef]);
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),

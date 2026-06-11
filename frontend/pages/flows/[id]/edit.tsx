@@ -6,7 +6,7 @@ import { NodeCatalog } from '@/components/flow/NodeCatalog';
 import { ExecutionPanel } from '@/components/flow/ExecutionPanel';
 import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
-import { Save, ArrowLeft, Settings, X } from 'lucide-react';
+import { Save, ArrowLeft, Settings, X, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 const NODE_LABELS: Record<string, string> = {
@@ -29,6 +29,7 @@ export default function FlowEditPage() {
   const [saving, setSaving] = useState(false);
   const addNodeRef = useRef<((type: string, defaultConfig: Record<string, any>) => void) | null>(null);
   const setNodeDataRef = useRef<((nodeId: string, config: Record<string, any>) => void) | null>(null);
+  const deleteNodeRef = useRef<((nodeId: string) => void) | null>(null);
 
   // Selected node for config editing
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -71,6 +72,12 @@ export default function FlowEditPage() {
   const handleNodeClick = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
   }, []);
+
+  const handleDeleteNode = useCallback(() => {
+    if (!selectedNodeId) return;
+    deleteNodeRef.current?.(selectedNodeId);
+    setSelectedNodeId(null);
+  }, [selectedNodeId]);
 
   const handleConfigChange = useCallback((newConfig: Record<string, any>) => {
     if (!selectedNodeId) return;
@@ -155,6 +162,7 @@ export default function FlowEditPage() {
             onEdgesChange={setEdges}
             addNodeCallbackRef={addNodeRef}
             setNodeDataCallbackRef={setNodeDataRef}
+            deleteNodeCallbackRef={deleteNodeRef}
             onNodeClick={handleNodeClick}
           />
         </div>
@@ -166,9 +174,14 @@ export default function FlowEditPage() {
               <h3 className="text-sm font-semibold">
                 {NODE_LABELS[selectedNode.data.type] || selectedNode.data.type}
               </h3>
-              <button onClick={() => setSelectedNodeId(null)} className="p-1 text-gray-400 hover:text-gray-600">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={handleDeleteNode} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete node">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => setSelectedNodeId(null)} className="p-1 text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               {selectedNode.data.type === 'llm-agent' && (
