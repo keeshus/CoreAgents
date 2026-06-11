@@ -18,10 +18,11 @@ interface BaseNodeProps {
   outputs?: number;
   outputLabels?: string[];
   toolInputs?: number;
+  toolOutput?: boolean;
   className?: string;
 }
 
-export function BaseNode({ children, label, nodeType, category = 'processing', selected, inputs = 1, outputs = 1, outputLabels, toolInputs = 0, className }: BaseNodeProps) {
+export function BaseNode({ children, label, nodeType, category = 'processing', selected, inputs = 1, outputs = 1, outputLabels, toolInputs = 0, toolOutput = false, className }: BaseNodeProps) {
   const borderColor = CATEGORY_COLORS[category] || 'border-gray-300';
 
   return (
@@ -40,7 +41,7 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
       <div className="p-3 text-xs">
         {children}
       </div>
-      {/* Tool inputs — MCP tools wire in here */}
+      {/* Tool inputs — MCP/Retriever tools wire in here (LLM Agent) */}
       {Array.from({ length: toolInputs }).map((_, i) => (
         <Handle
           key={`tool-input-${i}`}
@@ -49,9 +50,20 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
           id={`tool-input-${i}`}
           style={{ left: `${((i + 1) / (toolInputs + 1)) * 100}%` }}
           className="!bg-purple-500 !w-3 !h-3"
-          title="Connect MCP Tools here"
+          title="Connect tools here"
         />
       ))}
+      {/* Tool output — MCP/Retriever nodes output to LLM Agent's tools input */}
+      {toolOutput && (
+        <Handle
+          key="tool-output"
+          type="source"
+          position={Position.Top}
+          id="tool-output"
+          className="!bg-purple-500 !w-3 !h-3"
+          title="Connect to LLM Agent's tools input"
+        />
+      )}
       {outputLabels && outputLabels.length > 0 ? (
         outputLabels.map((lbl, i) => (
           <Handle

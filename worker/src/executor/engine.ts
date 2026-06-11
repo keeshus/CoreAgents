@@ -197,7 +197,7 @@ export class FlowExecutor {
         if (context.getMCPServer) {
           // Look for edges where target is this LLM node and targetHandle starts with 'tool-input'
           const toolEdges = context.flowEdges?.filter(
-            (e: any) => e.target === node.id && e.targetHandle?.startsWith('tool-input')
+            (e: any) => e.target === node.id && (e.targetHandle?.startsWith('tool-input') || e.sourceHandle === 'tool-output')
           ) || [];
 
           for (const edge of toolEdges) {
@@ -279,7 +279,7 @@ export class FlowExecutor {
             try {
               // Find the MCP config from the connected tool nodes
               const toolEdges = context.flowEdges?.filter(
-                (e: any) => e.target === node.id && e.targetHandle?.startsWith('tool-input')
+                (e: any) => e.target === node.id && (e.targetHandle?.startsWith('tool-input') || e.sourceHandle === 'tool-output')
               ) || [];
               let toolResult = 'Tool not found';
 
