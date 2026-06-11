@@ -1,24 +1,34 @@
+import { useState } from 'react';
 import { Play, Loader2 } from 'lucide-react';
 
 interface ExecutionPanelProps {
   isRunning: boolean;
-  onRun: () => void;
+  onRun: (input: string) => void;
   events: Array<{ type: string; data: Record<string, any>; timestamp: string }>;
   output: any;
   error: string | null;
 }
 
 export function ExecutionPanel({ isRunning, onRun, events, output, error }: ExecutionPanelProps) {
+  const [input, setInput] = useState('');
   return (
     <div className="w-72 border-l bg-white flex flex-col h-full">
-      <div className="p-3 border-b flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Execution</h3>
+      <div className="p-3 border-b">
+        <h3 className="text-sm font-semibold mb-2">Execution</h3>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder='{"message": "Hello!"}'
+          rows={2}
+          className="w-full text-xs border rounded p-1.5 mb-2 resize-none font-mono"
+          disabled={isRunning}
+        />
         <button
-          onClick={onRun}
+          onClick={() => onRun(input || '{"message":"Hello!"}')}
           disabled={isRunning}
           className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+          {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
           {isRunning ? 'Running' : 'Run'}
         </button>
       </div>

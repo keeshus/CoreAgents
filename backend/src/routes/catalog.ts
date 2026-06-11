@@ -19,7 +19,7 @@ const catalog: NodeCatalogEntry[] = [
     label: 'LLM Agent',
     category: 'processing',
     description: 'Call an LLM with a system prompt. Select from centrally managed endpoints.',
-    defaultConfig: { endpointId: '', model: '', systemPrompt: '', temperature: 0.7, maxTokens: 4096 },
+    defaultConfig: { endpointId: '', model: '', systemPrompt: '', temperature: 0.7, maxTokens: 4096, responseFormat: 'text', outputSchema: '' },
     inputs: 1,
     outputs: 1,
   },

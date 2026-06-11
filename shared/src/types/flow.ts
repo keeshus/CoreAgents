@@ -31,6 +31,8 @@ export interface TriggerNodeData extends BaseNodeData {
   type: 'trigger';
   config: {
     triggerType: 'manual' | 'chat' | 'webhook' | 'schedule';
+    webhookSecret?: string;
+    cronExpression?: string;
   };
 }
 
@@ -42,6 +44,8 @@ export interface LLMAgentNodeData extends BaseNodeData {
     systemPrompt: string;
     temperature: number;
     maxTokens: number;
+    responseFormat: 'text' | 'json_object';
+    outputSchema?: string;
   };
 }
 

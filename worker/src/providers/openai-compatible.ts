@@ -2,13 +2,15 @@ import OpenAI from 'openai';
 
 export interface OpenAICallParams {
   apiKey: string;
-  baseUrl?: string;    // For LiteLLM: set to the LiteLLM proxy URL
+  baseUrl?: string;
   model: string;
   systemPrompt: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   temperature: number;
   maxTokens: number;
   onToken?: (token: string) => void;
+  responseFormat?: 'text' | 'json_object';
+  outputSchema?: string;
 }
 
 export async function callOpenAICompatible(params: OpenAICallParams): Promise<string> {
@@ -21,12 +23,31 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<st
     ? [{ role: 'system' as const, content: params.systemPrompt }]
     : [];
 
+  // Build request params with optional structured output
+  const createParams: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
+    model: params.model,
+    messages: [...systemMessage, ...params.messages.map(m => ({ role: m.role, content: m.content }))],
+    temperature: params.temperature,
+    max_tokens: params.maxTokens,
+  };
+
+  // OpenAI native structured output
+  if (params.responseFormat === 'json_object') {
+    createParams.response_format = params.outputSchema
+      ? {
+          type: 'json_schema',
+          json_schema: {
+            name: 'output',
+            strict: true,
+            schema: (() => { try { return JSON.parse(params.outputSchema!); } catch { return {}; } })(),
+          },
+        }
+      : { type: 'json_object' };
+  }
+
   if (params.onToken) {
     const stream = await client.chat.completions.create({
-      model: params.model,
-      messages: [...systemMessage, ...params.messages.map(m => ({ role: m.role, content: m.content }))],
-      temperature: params.temperature,
-      max_tokens: params.maxTokens,
+      ...createParams,
       stream: true,
     });
 
@@ -41,12 +62,6 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<st
     return fullResponse;
   }
 
-  const response = await client.chat.completions.create({
-    model: params.model,
-    messages: [...systemMessage, ...params.messages.map(m => ({ role: m.role, content: m.content }))],
-    temperature: params.temperature,
-    max_tokens: params.maxTokens,
-  });
-
+  const response = await client.chat.completions.create(createParams);
   return response.choices[0]?.message?.content || '';
 }

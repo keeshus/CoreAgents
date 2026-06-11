@@ -54,6 +54,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
   const [steps, setSteps] = useState<StepInfo[]>([]);
   const [status, setStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
+  const [inputStr, setInputStr] = useState('{"message":"Hello! This is a debug run."}');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [finalOutput, setFinalOutput] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +76,7 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
       const res = await fetch(`${API_URL}/flows/${flowId}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: { message: 'Hello! This is a debug run.' } }),
+        body: JSON.stringify({ input: (() => { try { return JSON.parse(inputStr); } catch { return { message: inputStr }; } })() }),
       });
       if (!res.body) throw new Error('No response body');
 
@@ -169,6 +170,14 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={inputStr}
+            onChange={(e) => setInputStr(e.target.value)}
+            placeholder='{"message":"Hello!"}'
+            className="text-xs border rounded px-2 py-1 w-64 font-mono"
+            disabled={status === 'running'}
+          />
           <button
             onClick={run}
             disabled={status === 'running'}

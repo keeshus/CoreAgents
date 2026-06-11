@@ -7,6 +7,7 @@ import mcpServersRouter from './routes/mcp-servers.js';
 import executionRouter from './routes/execution.js';
 import documentsRouter from './routes/documents.js';
 import chatRouter from './routes/chat.js';
+import webhookRouter from './routes/webhook.js';
 import { asyncHandler } from './utils/async-handler.js';
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api/mcp-servers', mcpServersRouter);
 app.use('/api', executionRouter);  // Handles /api/flows/:flowId/execute and /api/flows/:flowId/executions
 app.use('/api', documentsRouter);  // Handles /api/documents/*
 app.use('/api', chatRouter);       // Handles /api/chat/*
+app.use('/api', webhookRouter);   // Handles /api/webhook/*
 
 // Global error handler (Express 5)
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

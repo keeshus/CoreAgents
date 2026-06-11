@@ -98,17 +98,18 @@ export default function FlowEditPage() {
     ));
   }, [selectedNodeId]);
 
-  const handleRun = async () => {
+  const handleRun = async (inputStr: string) => {
     setEvents([]);
     setOutput(null);
     setError(null);
     setSelectedNodeId(null);
     setIsRunning(true);
 
+    let input: any;
+    try { input = JSON.parse(inputStr); } catch { input = { message: inputStr }; }
+
     try {
-      const eventStream = api.flows.executeStream(flow.id, {
-        message: 'Hello! This is a test execution.',
-      });
+      const eventStream = api.flows.executeStream(flow.id, input);
 
       for await (const event of eventStream) {
         setEvents((prev) => [...prev, event]);
@@ -305,6 +306,44 @@ export default function FlowEditPage() {
                       <option value="schedule">Schedule</option>
                     </select>
                   </label>
+
+                  {selectedNode.data.config.triggerType === 'webhook' && (
+                    <>
+                      <label className="block">
+                        <span className="text-xs font-medium text-gray-700">Webhook Secret</span>
+                        <input
+                          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm font-mono"
+                          value={selectedNode.data.config.webhookSecret || ''}
+                          onChange={(e) => handleConfigChange({ webhookSecret: e.target.value })}
+                          placeholder="Optional secret for verification"
+                        />
+                        <p className="mt-1 text-[10px] text-gray-400">Pass as ?secret=... in the webhook URL</p>
+                      </label>
+                      {flow && (
+                        <div className="bg-gray-50 rounded p-2">
+                          <p className="text-[10px] font-medium text-gray-500 mb-1">Webhook URL</p>
+                          <code className="text-[10px] text-gray-700 break-all">
+                            {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/webhook/{flow.id}{selectedNode.data.config.webhookSecret ? `?secret=${selectedNode.data.config.webhookSecret}` : ''}
+                          </code>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedNode.data.config.triggerType === 'schedule' && (
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">Cron Expression</span>
+                      <input
+                        className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm font-mono"
+                        value={selectedNode.data.config.cronExpression || ''}
+                        onChange={(e) => handleConfigChange({ cronExpression: e.target.value })}
+                        placeholder="*/5 * * * *"
+                      />
+                      <p className="mt-1 text-[10px] text-gray-400">
+                        minute hour day-of-month month day-of-week. E.g. &quot;0 9 * * *&quot; = daily at 9am, &quot;*/15 * * * *&quot; = every 15 min
+                      </p>
+                    </label>
+                  )}
                 </div>
               )}
               {selectedNode.data.type === 'output' && (

@@ -8,18 +8,27 @@ export interface AnthropicCallParams {
   temperature: number;
   maxTokens: number;
   onToken?: (token: string) => void;
+  responseFormat?: 'text' | 'json_object';
+  outputSchema?: string;
 }
 
 export async function callAnthropic(params: AnthropicCallParams): Promise<string> {
   const client = new Anthropic({ apiKey: params.apiKey });
 
-  // Convert system prompt to system message
-  const systemMessages = params.systemPrompt
-    ? [{ type: 'text' as const, text: params.systemPrompt }]
+  // Build system prompt with optional JSON schema
+  let fullSystemPrompt = params.systemPrompt || '';
+  if (params.responseFormat === 'json_object') {
+    fullSystemPrompt += '\n\nYou MUST respond with valid JSON only. No other text.';
+    if (params.outputSchema) {
+      fullSystemPrompt += `\n\nUse this JSON schema:\n${params.outputSchema}`;
+    }
+  }
+
+  const systemMessages = fullSystemPrompt
+    ? [{ type: 'text' as const, text: fullSystemPrompt }]
     : undefined;
 
   if (params.onToken) {
-    // Streaming
     const stream = await client.messages.create({
       model: params.model,
       system: systemMessages,
@@ -39,7 +48,6 @@ export async function callAnthropic(params: AnthropicCallParams): Promise<string
     return fullResponse;
   }
 
-  // Non-streaming
   const response = await client.messages.create({
     model: params.model,
     system: systemMessages,

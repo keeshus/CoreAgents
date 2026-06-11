@@ -9,6 +9,8 @@ export interface LLMCallParams {
   temperature: number;
   maxTokens: number;
   onToken?: (token: string) => void;
+  responseFormat?: 'text' | 'json_object';
+  outputSchema?: string;
 }
 
 // The caller is responsible for looking up endpoint details from the DB
@@ -30,11 +32,11 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         temperature: params.temperature,
         maxTokens: params.maxTokens,
         onToken: params.onToken,
+        responseFormat: params.responseFormat,
+        outputSchema: params.outputSchema,
       });
     case 'openai':
     case 'litellm':
-      // Both OpenAI and LiteLLM (and DeepSeek, Groq, etc.) use the same
-      // OpenAI-compatible API shape — just with different base URLs
       return callOpenAICompatible({
         apiKey: endpoint.apiKey,
         baseUrl: endpoint.baseUrl || undefined,
@@ -44,6 +46,8 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         temperature: params.temperature,
         maxTokens: params.maxTokens,
         onToken: params.onToken,
+        responseFormat: params.responseFormat,
+        outputSchema: params.outputSchema,
       });
     default:
       throw new Error(`Unknown provider type: ${endpoint.providerType}`);

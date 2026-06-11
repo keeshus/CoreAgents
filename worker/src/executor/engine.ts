@@ -212,6 +212,8 @@ export class FlowExecutor {
             temperature: config.temperature ?? 0.7,
             maxTokens: config.maxTokens ?? 4096,
             onToken,
+            responseFormat: config.responseFormat || 'text',
+            outputSchema: config.outputSchema || undefined,
           },
           endpoint,
         );

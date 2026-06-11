@@ -14,6 +14,8 @@ interface LLMAgentConfigProps {
     systemPrompt: string;
     temperature: number;
     maxTokens: number;
+    responseFormat: 'text' | 'json_object';
+    outputSchema?: string;
   };
   onChange: (config: any) => void;
 }
@@ -117,6 +119,34 @@ export function LLMAgentConfig({ config, onChange }: LLMAgentConfigProps) {
           />
         </label>
       </div>
+
+      <label className="block">
+        <span className="text-xs font-medium text-gray-700">Response Format</span>
+        <select
+          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
+          value={config.responseFormat || 'text'}
+          onChange={(e) => onChange({ ...config, responseFormat: e.target.value })}
+        >
+          <option value="text">Plain Text</option>
+          <option value="json_object">JSON</option>
+        </select>
+      </label>
+
+      {config.responseFormat === 'json_object' && (
+        <label className="block">
+          <span className="text-xs font-medium text-gray-700">
+            JSON Schema <span className="text-gray-400">(optional)</span>
+          </span>
+          <textarea
+            className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px] font-mono"
+            value={config.outputSchema || ''}
+            onChange={(e) => onChange({ ...config, outputSchema: e.target.value })}
+            placeholder='{"type":"object","properties":{"summary":{"type":"string"},"sentiment":{"type":"string"}},"required":["summary","sentiment"]}'
+            rows={3}
+          />
+          <p className="mt-1 text-[10px] text-gray-400">JSON Schema for the LLM response. The next node will receive structured JSON it can rely on.</p>
+        </label>
+      )}
     </div>
   );
 }
