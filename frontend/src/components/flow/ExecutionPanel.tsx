@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useState, useRef } from 'react';
 import { Send, Loader2, Square } from 'lucide-react';
 
 interface ExecutionPanelProps {
