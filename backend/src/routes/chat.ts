@@ -3,6 +3,7 @@ import { db } from '../db/connection.js';
 import { chatSessions, chatMessages, flows, llmEndpoints, mcpServers } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { asyncHandler } from '../utils/async-handler.js';
+import { getStore } from '../vector-stores/index.js';
 
 const router = Router();
 
@@ -136,6 +137,11 @@ router.post('/chat/sessions/:sessionId/messages', asyncHandler(async (req, res) 
     },
     flowNodes: flow.nodes as any[],
     flowEdges: flow.edges as any[],
+    searchSimilar: async (collectionName, queryEmbedding, topK, minScore) => {
+      const store = getStore('qdrant') || getStore('pgvector');
+      if (!store) return [];
+      return store.search(collectionName, queryEmbedding, topK, minScore);
+    },
   };
 
   const { FlowExecutor } = await import('../../../worker/src/executor/engine.js');

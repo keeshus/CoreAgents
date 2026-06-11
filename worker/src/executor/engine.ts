@@ -16,6 +16,7 @@ export type EventCallback = (nodeId: string, event: SSEEvent) => void | Promise<
 export interface ExecutionContext {
   getEndpoint: (endpointId: string) => Promise<ResolvedEndpoint | null>;
   getMCPServer?: (serverId: string) => Promise<any>;
+  searchSimilar?: (collectionName: string, queryEmbedding: number[], topK: number, minScore: number) => Promise<Array<{ documentId: string; chunkText: string; chunkIndex: number; similarity: number }>>;
   flowNodes?: Array<{ id: string; type: string; data: any }>;
   flowEdges?: Array<{ id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }>;
 }
@@ -347,8 +348,45 @@ export class FlowExecutor {
       }
 
       case 'retriever': {
-        // Placeholder -- RAG will be wired in Phase 4
-        return { message: 'Retriever execution coming in Phase 4', input };
+        const config = (nodeData as any).config;
+        const collectionName = config?.collectionName || 'default';
+        const topK = config?.topK ?? 5;
+        const minScore = config?.minScore ?? 0.5;
+
+        // Extract query from input
+        const inputObj = input as Record<string, unknown> | undefined;
+        const query = typeof inputObj?.message === 'string'
+          ? inputObj.message
+          : typeof inputObj === 'string'
+            ? inputObj
+            : JSON.stringify(inputObj);
+
+        if (!context.searchSimilar) {
+          return { message: 'Vector search not configured', chunks: [], query };
+        }
+
+        // Generate embedding from query
+        const { generateEmbedding } = await import('../rag/embeddings.js');
+        const embedding = await generateEmbedding(query);
+
+        // Search for similar chunks
+        const results = await context.searchSimilar(collectionName, embedding, topK, minScore);
+
+        // Format as context
+        const chunks = results.map(r => ({
+          text: r.chunkText,
+          similarity: r.similarity,
+          documentId: r.documentId,
+        }));
+
+        const contextText = chunks.map(c => c.text).join('\n\n');
+
+        return {
+          query,
+          chunks,
+          context: contextText,
+          count: chunks.length,
+        };
       }
 
       case 'branch': {

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Cpu, Server, ArrowLeft } from 'lucide-react';
+import { Cpu, Server, BookOpen, ArrowLeft } from 'lucide-react';
 
 export default function SettingsIndex() {
   const sections = [
@@ -14,6 +14,12 @@ export default function SettingsIndex() {
       icon: Server,
       title: 'MCP Servers',
       description: 'Configure Model Context Protocol servers and their available tools',
+    },
+    {
+      href: '/settings/knowledge',
+      icon: BookOpen,
+      title: 'Knowledge Bases',
+      description: 'Upload documents, manage collections, and configure RAG retrieval',
     },
   ];
 

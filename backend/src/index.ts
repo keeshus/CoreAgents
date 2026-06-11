@@ -8,6 +8,8 @@ import executionRouter from './routes/execution.js';
 import documentsRouter from './routes/documents.js';
 import chatRouter from './routes/chat.js';
 import webhookRouter from './routes/webhook.js';
+import knowledgeRouter from './routes/knowledge.js';
+import vectorStoresRouter from './routes/vector-stores.js';
 import { asyncHandler } from './utils/async-handler.js';
 
 const app = express();
@@ -34,6 +36,8 @@ app.use('/api', executionRouter);  // Handles /api/flows/:flowId/execute and /ap
 app.use('/api', documentsRouter);  // Handles /api/documents/*
 app.use('/api', chatRouter);       // Handles /api/chat/*
 app.use('/api', webhookRouter);   // Handles /api/webhook/*
+app.use('/api', knowledgeRouter); // Handles /api/knowledge/*
+app.use('/api', vectorStoresRouter); // Handles /api/vector-stores/*
 
 // Global error handler (Express 5)
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

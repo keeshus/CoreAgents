@@ -7,6 +7,7 @@ import { ExecutionPanel } from '@/components/flow/ExecutionPanel';
 import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
 import { DebugOverlay } from '@/components/flow/DebugOverlay';
+import { CollectionSelector } from '@/components/flow/config/CollectionSelector';
 import { Save, ArrowLeft, Settings, X, Trash2, Bug, History } from 'lucide-react';
 import Link from 'next/link';
 
@@ -260,14 +261,10 @@ export default function FlowEditPage() {
               )}
               {selectedNode.data.type === 'retriever' && (
                 <div className="space-y-3">
-                  <label className="block">
-                    <span className="text-xs font-medium text-gray-700">Collection Name</span>
-                    <input
-                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                      value={selectedNode.data.config.collectionName || 'default'}
-                      onChange={(e) => handleConfigChange({ collectionName: e.target.value })}
-                    />
-                  </label>
+                  <CollectionSelector
+                    value={selectedNode.data.config.collectionName || 'default'}
+                    onChange={(collectionName) => handleConfigChange({ collectionName })}
+                  />
                   <label className="block">
                     <span className="text-xs font-medium text-gray-700">Top-K Results</span>
                     <input

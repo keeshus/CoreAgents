@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { executions, executionSteps, flows, llmEndpoints, mcpServers } from '../db/schema.js';
 import { FlowExecutor } from '../../../worker/src/executor/engine.js';
+import { getStore } from '../vector-stores/index.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
 
@@ -87,6 +88,12 @@ router.post(
       },
       flowNodes: flowDef.nodes as any[],
       flowEdges: flowDef.edges as any[],
+      searchSimilar: async (collectionName, queryEmbedding, topK, minScore) => {
+        // Use pgvector by default, Qdrant if configured
+        const store = getStore('qdrant') || getStore('pgvector');
+        if (!store) return [];
+        return store.search(collectionName, queryEmbedding, topK, minScore);
+      },
     };
 
     const executor = new FlowExecutor();

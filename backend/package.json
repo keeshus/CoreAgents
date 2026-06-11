@@ -10,8 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "cors": "^2.8.6",
+    "@qdrant/js-client-rest": "^1.18.0",
     "core-agents-shared": "*",
+    "cors": "^2.8.6",
     "drizzle-orm": "^0.41.0",
     "express": "^5.2.1",
     "pg": "^8.14.1"
