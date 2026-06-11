@@ -31,7 +31,8 @@ export function MCPToolConfig({ config, onChange }: MCPToolConfigProps) {
           className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
           value={config.serverId}
           onChange={(e) => {
-            onChange({ ...config, serverId: e.target.value, toolName: '' });
+            const srv = servers.find((s: any) => s.id === e.target.value);
+            onChange({ ...config, serverId: e.target.value, serverName: srv?.name || '', toolName: '' });
           }}
         >
           <option value="">Select server...</option>

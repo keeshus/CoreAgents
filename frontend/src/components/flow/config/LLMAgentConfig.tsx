@@ -35,7 +35,7 @@ export function LLMAgentConfig({ config, onChange }: LLMAgentConfigProps) {
 
   const handleEndpointChange = (endpointId: string) => {
     const ep = endpoints.find((e: any) => e.id === endpointId);
-    onChange({ ...config, endpointId, model: ep?.default_model || '' });
+    onChange({ ...config, endpointId, endpointName: ep?.name || '', model: ep?.default_model || '' });
   };
 
   return (
