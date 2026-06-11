@@ -140,7 +140,6 @@ export default function FlowEditPage() {
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
-  };
 
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
 
