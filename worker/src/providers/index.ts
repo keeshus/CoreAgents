@@ -12,6 +12,7 @@ export interface LLMCallParams {
   responseFormat?: 'text' | 'json_object';
   outputSchema?: string;
   tools?: ToolDefinition[];
+  signal?: AbortSignal;
 }
 
 export interface ResolvedEndpoint {
@@ -36,6 +37,7 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         responseFormat: params.responseFormat,
         outputSchema: params.outputSchema,
         tools: params.tools,
+        signal: params.signal,
       });
     case 'openai':
     case 'litellm':
@@ -51,6 +53,7 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         responseFormat: params.responseFormat,
         outputSchema: params.outputSchema,
         tools: params.tools,
+        signal: params.signal,
       });
     default:
       throw new Error(`Unknown provider type: ${endpoint.providerType}`);

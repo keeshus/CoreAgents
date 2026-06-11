@@ -38,6 +38,26 @@ router.post(
       return;
     }
 
+    // Validate input schema if defined
+    const inputSchema = (triggerNode.data as any).config?.inputSchema;
+    if (inputSchema) {
+      try {
+        const schema = typeof inputSchema === 'string' ? JSON.parse(inputSchema) : inputSchema;
+        const errors = validateInput(req.body, schema);
+        if (errors.length > 0) {
+          res.status(400).json({
+            error: 'Input validation failed',
+            details: errors,
+            expectedSchema: schema,
+          });
+          return;
+        }
+      } catch {
+        // Schema parse error — skip validation, log warning
+        console.warn('Webhook: could not parse inputSchema, skipping validation');
+      }
+    }
+
     const input = { ...req.body };
     if (req.headers['content-type']?.includes('text/plain')) {
       input.message = (req as any).body || '';
@@ -117,5 +137,30 @@ router.post(
     }
   }),
 );
+
+// Simple schema validator for webhook input
+// Schema format: { "fieldName": "expectedType" }
+// Supported types: string, number, boolean, array, object
+function validateInput(body: any, schema: Record<string, string>): string[] {
+  const errors: string[] = [];
+
+  for (const [field, expectedType] of Object.entries(schema)) {
+    const value = body[field];
+
+    // Check presence
+    if (value === undefined || value === null) {
+      errors.push(`Missing required field: "${field}" (expected ${expectedType})`);
+      continue;
+    }
+
+    // Check type
+    const actualType = Array.isArray(value) ? 'array' : typeof value;
+    if (actualType !== expectedType) {
+      errors.push(`Field "${field}": expected ${expectedType}, got ${actualType}`);
+    }
+  }
+
+  return errors;
+}
 
 export default router;

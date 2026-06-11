@@ -353,6 +353,34 @@ export default function FlowEditPage() {
                       </p>
                     </label>
                   )}
+
+                  {(selectedNode.data.config.triggerType === 'schedule' || selectedNode.data.config.triggerType === 'manual') && (
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">Input Message</span>
+                      <textarea
+                        className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[40px]"
+                        value={selectedNode.data.config.scheduleInput || ''}
+                        onChange={(e) => handleConfigChange({ scheduleInput: e.target.value })}
+                        placeholder='What is the latest news about AI?'
+                        rows={2}
+                      />
+                      <p className="mt-1 text-[10px] text-gray-400">Sent to the next node each trigger. Plain text becomes the message, JSON objects are passed as structured input.</p>
+                    </label>
+                  )}
+
+                  {selectedNode.data.config.triggerType === 'webhook' && (
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-700">Expected Input Schema</span>
+                      <textarea
+                        className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px] font-mono"
+                        value={selectedNode.data.config.inputSchema || ''}
+                        onChange={(e) => handleConfigChange({ inputSchema: e.target.value })}
+                        placeholder='{"message":"string","userId":"string","priority":"number"}'
+                        rows={3}
+                      />
+                      <p className="mt-1 text-[10px] text-gray-400">Define required fields and types. Incoming POSTs are validated — invalid requests get 400.</p>
+                    </label>
+                  )}
                 </div>
               )}
               {selectedNode.data.type === 'output' && (

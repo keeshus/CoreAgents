@@ -33,6 +33,8 @@ export interface TriggerNodeData extends BaseNodeData {
     triggerType: 'manual' | 'chat' | 'webhook' | 'schedule';
     webhookSecret?: string;
     cronExpression?: string;
+    inputSchema?: string;
+    scheduleInput?: string;
   };
 }
 

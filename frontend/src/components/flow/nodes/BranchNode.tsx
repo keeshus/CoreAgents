@@ -12,6 +12,10 @@ export function BranchNode(props: NodeProps) {
           {config?.condition || 'No condition set'}
         </code>
       </div>
+      <div className="mt-2 pt-2 border-t border-gray-100">
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-yellow-100 text-yellow-700">{'{ verdict, label }'}</span>
+        <span className="text-[9px] text-gray-400 ml-1">→ true/false path</span>
+      </div>
     </BaseNode>
   );
 }

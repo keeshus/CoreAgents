@@ -257,6 +257,7 @@ export class FlowExecutor {
               responseFormat: config.responseFormat || 'text',
               outputSchema: config.outputSchema || undefined,
               tools: toolDefs.length > 0 ? toolDefs : undefined,
+              signal: this.abortController.signal,
             },
             endpoint,
           );
@@ -428,8 +429,38 @@ export class FlowExecutor {
         }
       }
 
-      case 'output':
-        return input; // Pass through -- formatting handled by the caller
+      case 'output': {
+        const fmt = (nodeData as any).config?.format || 'json';
+        const inp = input as Record<string, unknown> | undefined;
+
+        if (fmt === 'text') {
+          // Extract readable content from upstream node
+          if (typeof inp?.content === 'string') return inp.content;
+          if (typeof inp === 'string') return inp;
+          return JSON.stringify(inp);
+        }
+
+        if (fmt === 'markdown') {
+          // If input is raw text (LLM already generated markdown), return as-is
+          if (typeof inp === 'string') return inp;
+          // If input has content field, return that (LLM response text)
+          if (typeof inp?.content === 'string') return inp.content;
+          // If input is structured JSON, format as a markdown table
+          if (inp && typeof inp === 'object' && !Array.isArray(inp)) {
+            const entries = Object.entries(inp).filter(([, v]) => v !== null && v !== undefined);
+            if (entries.length === 0) return '';
+            const rows = entries.map(([k, v]) => {
+              const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
+              return `| ${k} | ${val} |`;
+            });
+            return `| Field | Value |\n|--------|-------|\n${rows.join('\n')}`;
+          }
+          return String(inp);
+        }
+
+        // json: return structured as-is
+        return inp || input;
+      }
 
       default:
         throw new Error(`Unknown node type: ${(nodeData as any).type}`);

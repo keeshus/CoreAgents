@@ -13,6 +13,7 @@ export interface OpenAICallParams {
   responseFormat?: 'text' | 'json_object';
   outputSchema?: string;
   tools?: ToolDefinition[];
+  signal?: AbortSignal;
 }
 
 export { type ToolDefinition, type LLMResponse };

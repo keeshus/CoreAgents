@@ -1,0 +1,100 @@
+# ── Core Agents Helm Values ──────────────────────────────────────
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/kees/core-agents
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# ── PostgreSQL ───────────────────────────────────────────────────
+postgres:
+  enabled: true  # set false to use an external database
+  image: postgres:17-alpine
+  storage: 10Gi
+  storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Connection string (overrides postgres settings if external)
+databaseUrl: ""
+
+dbUser: coreagents
+dbPassword: coreagents
+dbName: coreagents
+
+# ── Qdrant (Vector Database) ─────────────────────────────────────
+qdrant:
+  enabled: true
+  image: qdrant/qdrant:latest
+  storage: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ── API Keys ─────────────────────────────────────────────────────
+anthropicApiKey: ""
+openaiApiKey: ""
+
+# ── Backend ──────────────────────────────────────────────────────
+backend:
+  replicaCount: 1
+  port: 3001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ── Worker ───────────────────────────────────────────────────────
+worker:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ── Frontend ─────────────────────────────────────────────────────
+frontend:
+  replicaCount: 1
+  port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  apiUrl: ""  # external API URL for the frontend to call
+
+# ── Ingress ──────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: core-agents.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ── Service ──────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  backendPort: 3001
+  frontendPort: 3000

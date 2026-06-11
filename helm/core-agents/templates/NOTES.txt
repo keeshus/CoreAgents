@@ -1,0 +1,26 @@
+🎉 Core Agents has been deployed!
+
+{{- if .Values.ingress.enabled }}
+Access the app at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+Access the frontend locally:
+  kubectl port-forward svc/{{ include "core-agents.fullname" . }}-frontend {{ .Values.frontend.port }}:{{ .Values.frontend.port }}
+
+Then open http://localhost:{{ .Values.frontend.port }}
+{{- end }}
+
+Backend health check:
+  kubectl exec deploy/{{ include "core-agents.fullname" . }}-backend -- curl -s http://localhost:{{ .Values.backend.port }}/api/health
+
+Database migrations run automatically via an init container on the backend pod.
+
+{{- if not .Values.postgres.enabled }}
+⚠️  PostgreSQL is disabled. Set postgres.enabled=true or provide an external databaseUrl.
+{{- end }}
+
+{{- if not .Values.anthropicApiKey }}
+⚠️  No Anthropic API key set. LLM endpoints using Anthropic will fail until configured.
+{{- end }}

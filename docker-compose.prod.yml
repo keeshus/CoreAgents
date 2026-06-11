@@ -1,0 +1,89 @@
+# ── Core Agents Production Docker Compose ─────────────────────────
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: core-agents-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-coreagents}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-coreagents}
+      POSTGRES_DB: ${DB_NAME:-coreagents}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-coreagents}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - core-agents
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: core-agents-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - core-agents
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: core-agents-backend:latest
+    container_name: core-agents-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgres://${DB_USER:-coreagents}:${DB_PASSWORD:-coreagents}@postgres:5432/${DB_NAME:-coreagents}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - core-agents
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: core-agents-worker:latest
+    container_name: core-agents-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${DB_USER:-coreagents}:${DB_PASSWORD:-coreagents}@postgres:5432/${DB_NAME:-coreagents}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - core-agents
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: core-agents-frontend:latest
+    container_name: core-agents-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:3001/api}
+    depends_on:
+      - backend
+    networks:
+      - core-agents
+
+volumes:
+  pgdata:
+  qdrant_data:
+
+networks:
+  core-agents:

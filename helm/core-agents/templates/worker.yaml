@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "core-agents.fullname" . }}-worker
+  labels:
+    {{- include "core-agents.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "core-agents.fullname" . }}-worker
+  template:
+    metadata:
+      labels:
+        app: {{ include "core-agents.fullname" . }}-worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}-worker:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ include "core-agents.fullname" . }}-secret
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}

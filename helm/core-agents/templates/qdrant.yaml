@@ -1,0 +1,64 @@
+{{- if .Values.qdrant.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "core-agents.fullname" . }}-qdrant-pvc
+  labels:
+    {{- include "core-agents.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.qdrant.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "core-agents.fullname" . }}-qdrant
+  labels:
+    {{- include "core-agents.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6333
+      targetPort: 6333
+      name: http
+    - port: 6334
+      targetPort: 6334
+      name: grpc
+  selector:
+    app: {{ include "core-agents.fullname" . }}-qdrant
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "core-agents.fullname" . }}-qdrant
+  labels:
+    {{- include "core-agents.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "core-agents.fullname" . }}-qdrant
+  template:
+    metadata:
+      labels:
+        app: {{ include "core-agents.fullname" . }}-qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: {{ .Values.qdrant.image }}
+          ports:
+            - containerPort: 6333
+            - containerPort: 6334
+          volumeMounts:
+            - name: storage
+              mountPath: /qdrant/storage
+          resources:
+            {{- toYaml .Values.qdrant.resources | nindent 12 }}
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ include "core-agents.fullname" . }}-qdrant-pvc
+{{- end }}

@@ -22,6 +22,7 @@ async function main() {
         flowId: string;
         flowName: string;
         cronExpression: string;
+        scheduleInput: string | undefined;
         nodes: any[];
         edges: any[];
       }> = [];
@@ -37,6 +38,7 @@ async function main() {
             flowId: flow.id,
             flowName: flow.name,
             cronExpression: config.cronExpression,
+            scheduleInput: config.scheduleInput || undefined,
             nodes: flow.nodes as any[],
             edges: flow.edges as any[],
           });
@@ -78,7 +80,16 @@ async function main() {
           createdAt: '',
           updatedAt: '',
         },
-        { triggerType: 'schedule', timestamp: new Date().toISOString() },
+        (() => {
+          const raw = scheduledFlow.scheduleInput?.trim();
+          if (!raw) return { triggerType: 'schedule', timestamp: new Date().toISOString() };
+          try {
+            const parsed = JSON.parse(raw);
+            return { triggerType: 'schedule', timestamp: new Date().toISOString(), ...parsed };
+          } catch {
+            return { triggerType: 'schedule', timestamp: new Date().toISOString(), message: raw };
+          }
+        })(),
         async () => {}, // No SSE streaming needed for scheduled runs
         executionContext,
       );

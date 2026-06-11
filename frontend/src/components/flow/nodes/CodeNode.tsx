@@ -15,6 +15,10 @@ export function CodeNode(props: NodeProps) {
           {code ? code.slice(0, 120) + (code.length > 120 ? '...' : '') : 'No code'}
         </code>
       </div>
+      <div className="mt-2 pt-2 border-t border-gray-100">
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-700">any</span>
+        <span className="text-[9px] text-gray-400 ml-1">→ return value</span>
+      </div>
     </BaseNode>
   );
 }

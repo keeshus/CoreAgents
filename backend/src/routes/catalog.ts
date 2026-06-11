@@ -10,7 +10,7 @@ const catalog: NodeCatalogEntry[] = [
     label: 'Trigger',
     category: 'input',
     description: 'Start a flow from a chat message, manual trigger, webhook, or schedule',
-    defaultConfig: { triggerType: 'manual' },
+    defaultConfig: { triggerType: 'manual', inputSchema: '' },
     inputs: 0,
     outputs: 1,
   },

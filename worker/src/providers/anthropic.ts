@@ -17,6 +17,7 @@ export interface AnthropicCallParams {
   responseFormat?: 'text' | 'json_object';
   outputSchema?: string;
   tools?: ToolDefinition[];
+  signal?: AbortSignal;
 }
 
 export interface LLMResponse {
