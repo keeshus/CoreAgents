@@ -7,7 +7,6 @@ import {
   text,
   timestamp,
   uuid,
-  vector,
 } from 'drizzle-orm/pg-core';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -151,6 +150,6 @@ export const embeddings = pgTable('embeddings', {
     .references(() => documents.id),
   chunk_index: integer('chunk_index').notNull(),
   chunk_text: text('chunk_text').notNull(),
-  embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+  embedding: jsonb('embedding').notNull().default('[]'),
   created_at: timestamp('created_at').notNull().defaultNow(),
 });
