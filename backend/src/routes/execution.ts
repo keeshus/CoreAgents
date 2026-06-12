@@ -129,26 +129,9 @@ router.post(
         if (!vs) return null;
         return { name: vs.name, url: vs.url, apiKey: vs.api_key };
       },
-      flowNodes: flowDef.nodes as any[],
-      flowEdges: flowDef.edges as any[],
-      searchSimilar: async (collectionName, queryEmbedding, topK, minScore) => {
-        // Use pgvector by default, Qdrant if configured
-        const store = getStore('qdrant') || getStore('pgvector');
-        if (!store) return [];
-        return store.search(collectionName, queryEmbedding, topK, minScore);
-      },
     };
 
-    const executor = new FlowExecutor();
-    activeExecutors.set(exec.id, executor);
-
-    // Handle client disconnect: abort the executor ----------------
-    req.on('close', () => {
-      executor.abort();
-      activeExecutors.delete(exec.id);
-    });
-
-    // Map Drizzle row (snake_case) to FlowDefinition (camelCase) --
+    // Map Drizzle row (snake_case) to FlowDefinition (camelCase) BEFORE building context
     const flowDef: FlowDefinition = {
       id: flow.id,
       name: flow.name,
@@ -159,6 +142,23 @@ router.post(
       createdAt: flow.created_at?.toISOString() || new Date().toISOString(),
       updatedAt: flow.updated_at?.toISOString() || new Date().toISOString(),
     };
+
+    // Add flowNodes/flowEdges to context now that flowDef exists
+    executionContext.flowNodes = flowDef.nodes as any;
+    executionContext.flowEdges = flowDef.edges as any;
+    executionContext.searchSimilar = async (collectionName, queryEmbedding, topK, minScore) => {
+      const store = getStore('qdrant') || getStore('pgvector');
+      if (!store) return [];
+      return store.search(collectionName, queryEmbedding, topK, minScore);
+    };
+
+    const executor = new FlowExecutor();
+    activeExecutors.set(exec.id, executor);
+
+    req.on('close', () => {
+      executor.abort();
+      activeExecutors.delete(exec.id);
+    });
 
     try {
       const result = await executor.execute(
