@@ -86,7 +86,7 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
       const res = await fetch(`${API_URL}/flows/${flowId}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: (() => { try { return JSON.parse(inputStr); } catch { return { message: inputStr }; } })() }),
+        body: JSON.stringify({ input: { _debug: true, ...(() => { try { return JSON.parse(inputStr); } catch { return { message: inputStr }; } })() } }),
         signal: controller.signal,
       });
       if (!res.body) throw new Error('No response body');
