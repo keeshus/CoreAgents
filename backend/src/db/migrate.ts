@@ -3,7 +3,7 @@ import { db, pool } from './connection.js';
 
 async function main() {
   console.log('Running migrations...');
-  await migrate(db, { migrationsFolder: 'backend/drizzle' });
+  await migrate(db, { migrationsFolder: new URL('../../drizzle', import.meta.url).pathname });
   console.log('Migrations complete.');
   await pool.end();
 }

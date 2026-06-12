@@ -20,8 +20,8 @@
     "frontend:build": "npm run build -w frontend",
     "frontend:start": "npm run start -w frontend -- -H 0.0.0.0",
     "shared:typecheck": "npm run typecheck -w shared",
-    "db:generate": "cd backend && drizzle-kit generate",
-    "db:migrate": "tsx --env-file=.env backend/src/db/migrate.ts",
+    "db:generate": "npm run db:generate -w backend",
+    "db:migrate": "npm run db:migrate -w backend",
     "db:push": "cd backend && drizzle-kit push"
   },
   "devDependencies": {
