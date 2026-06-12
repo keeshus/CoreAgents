@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { executions, executionSteps, flows, llmEndpoints, mcpServers } from '../db/schema.js';
+import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores } from '../db/schema.js';
 import { FlowExecutor } from '../../../worker/src/executor/engine.js';
 import { getStore } from '../vector-stores/index.js';
 import { asyncHandler } from '../utils/async-handler.js';
@@ -118,6 +118,16 @@ router.post(
           tools: server.tools as any[],
           enabled: server.enabled,
         };
+      },
+      getEmbeddingProvider: async (providerId: string) => {
+        const [ep] = await db.select().from(embeddingProviders).where(eq(embeddingProviders.id, providerId));
+        if (!ep) return null;
+        return { providerType: ep.provider_type, apiKey: ep.api_key, baseUrl: ep.base_url, model: ep.model };
+      },
+      getVectorStore: async (storeId: string) => {
+        const [vs] = await db.select().from(vectorStores).where(eq(vectorStores.id, storeId));
+        if (!vs) return null;
+        return { name: vs.name, url: vs.url, apiKey: vs.api_key };
       },
       flowNodes: flowDef.nodes as any[],
       flowEdges: flowDef.edges as any[],

@@ -16,6 +16,8 @@ export type EventCallback = (nodeId: string, event: SSEEvent) => void | Promise<
 export interface ExecutionContext {
   getEndpoint: (endpointId: string) => Promise<ResolvedEndpoint | null>;
   getMCPServer?: (serverId: string) => Promise<any>;
+  getEmbeddingProvider?: (providerId: string) => Promise<{ providerType: string; apiKey: string; baseUrl: string | null; model: string } | null>;
+  getVectorStore?: (storeId: string) => Promise<{ name: string; url: string; apiKey: string | null } | null>;
   searchSimilar?: (collectionName: string, queryEmbedding: number[], topK: number, minScore: number) => Promise<Array<{ documentId: string; chunkText: string; chunkIndex: number; similarity: number }>>;
   flowNodes?: Array<{ id: string; type: string; data: any }>;
   flowEdges?: Array<{ id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }>;
@@ -366,16 +368,23 @@ export class FlowExecutor {
             ? inputObj
             : JSON.stringify(inputObj);
 
-        if (!context.searchSimilar) {
-          return { message: 'Vector search not configured', chunks: [], query };
+        // Generate embedding using the configured provider
+        let embedding: number[] = new Array(1536).fill(0);
+        if (config?.embeddingProviderId && context.getEmbeddingProvider) {
+          const provider = await context.getEmbeddingProvider(config.embeddingProviderId);
+          if (provider) {
+            const OpenAI = (await import('openai')).default;
+            const client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseUrl || undefined });
+            const resp = await client.embeddings.create({ model: provider.model, input: query });
+            embedding = resp.data[0].embedding;
+          }
         }
 
-        // Generate embedding from query
-        const { generateEmbedding } = await import('../rag/embeddings.js');
-        const embedding = await generateEmbedding(query);
-
-        // Search for similar chunks
-        const results = await context.searchSimilar(collectionName, embedding, topK, minScore);
+        // Search vector store
+        let results: Array<{ documentId: string; chunkText: string; chunkIndex: number; similarity: number }> = [];
+        if (context.searchSimilar) {
+          results = await context.searchSimilar(collectionName, embedding, topK, minScore);
+        }
 
         // Format as context
         const chunks = results.map(r => ({

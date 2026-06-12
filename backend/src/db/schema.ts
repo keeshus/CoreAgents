@@ -153,3 +153,24 @@ export const embeddings = pgTable('embeddings', {
   embedding: jsonb('embedding').notNull().default('[]'),
   created_at: timestamp('created_at').notNull().defaultNow(),
 });
+
+export const embeddingProviders = pgTable('embedding_providers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  provider_type: providerTypeEnum('provider_type').notNull(),
+  base_url: text('base_url'),
+  api_key: text('api_key').notNull(),
+  model: text('model').notNull().default('text-embedding-ada-002'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const vectorStores = pgTable('vector_stores', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  store_type: text('store_type').notNull().default('qdrant'),
+  url: text('url').notNull(),
+  api_key: text('api_key'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});

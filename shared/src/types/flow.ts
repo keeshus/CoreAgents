@@ -63,6 +63,8 @@ export interface MCPToolNodeData extends BaseNodeData {
 export interface RetrieverNodeData extends BaseNodeData {
   type: 'retriever';
   config: {
+    embeddingProviderId: string;
+    vectorStoreId: string;
     collectionName: string;
     topK: number;
     minScore: number;

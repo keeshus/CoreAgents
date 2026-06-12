@@ -7,7 +7,7 @@ import { ExecutionPanel } from '@/components/flow/ExecutionPanel';
 import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
 import { DebugOverlay } from '@/components/flow/DebugOverlay';
-import { CollectionSelector } from '@/components/flow/config/CollectionSelector';
+import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
 import { Save, ArrowLeft, Settings, X, Trash2, Bug, History } from 'lucide-react';
 import Link from 'next/link';
 
@@ -272,33 +272,10 @@ export default function FlowEditPage() {
                 </div>
               )}
               {selectedNode.data.type === 'retriever' && (
-                <div className="space-y-3">
-                  <CollectionSelector
-                    value={selectedNode.data.config.collectionName || 'default'}
-                    onChange={(collectionName) => handleConfigChange({ collectionName })}
-                  />
-                  <label className="block">
-                    <span className="text-xs font-medium text-gray-700">Top-K Results</span>
-                    <input
-                      type="number"
-                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                      value={selectedNode.data.config.topK ?? 5}
-                      onChange={(e) => handleConfigChange({ topK: parseInt(e.target.value) || 5 })}
-                      min={1} max={50}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-medium text-gray-700">Min Score</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                      value={selectedNode.data.config.minScore ?? 0.7}
-                      onChange={(e) => handleConfigChange({ minScore: parseFloat(e.target.value) || 0.7 })}
-                      min={0} max={1}
-                    />
-                  </label>
-                </div>
+                <RetrieverConfig
+                  config={selectedNode.data.config}
+                  onChange={handleConfigChange}
+                />
               )}
               {selectedNode.data.type === 'trigger' && (
                 <div className="space-y-3">

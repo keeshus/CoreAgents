@@ -37,7 +37,7 @@ const catalog: NodeCatalogEntry[] = [
     label: 'Retriever',
     category: 'tools',
     description: 'Query a vector store for relevant documents using semantic search',
-    defaultConfig: { collectionName: 'default', topK: 5, minScore: 0.7 },
+    defaultConfig: { embeddingProviderId: '', vectorStoreId: '', collectionName: '', topK: 5, minScore: 0.7 },
     inputs: 1,
     outputs: 1,
   },
