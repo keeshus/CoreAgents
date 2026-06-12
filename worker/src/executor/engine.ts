@@ -55,6 +55,26 @@ export class FlowExecutor {
     for (const node of sorted) {
       if (this.abortController.signal.aborted) break;
 
+      // Check if this node should be skipped based on incoming edge conditions
+      const incomingEdges = flow.edges.filter(e => e.target === node.id);
+      if (incomingEdges.length > 0) {
+        const sourceOutputs = incomingEdges.map(e => nodeOutputs.get(e.source));
+        // If any incoming edge has a condition, check if it matches the source's output
+        const allFiltered = incomingEdges.every((e, i) => {
+          if (!e.condition?.label) return false; // unconditional edge — always passes
+          const src = sourceOutputs[i];
+          // Branch node output has { verdict, label }. Edge condition has { label }.
+          // Follow the edge only if the branch output label matches the edge condition label
+          const branchLabel = (src as any)?.label;
+          return branchLabel !== e.condition.label; // true means "should exclude this edge"
+        });
+
+        if (allFiltered && incomingEdges.some(e => e.condition?.label)) {
+          nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
+          continue;
+        }
+      }
+
       const stepInput = this.prepareInput(node, flow.edges, nodeOutputs);
 
       // Enrich step input with node config for debugging (LLM prompt, model, etc.)
