@@ -28,12 +28,15 @@ export default function FlowsListPage() {
   const handleRun = async (flowId: string) => {
     setRunning((prev) => ({ ...prev, [flowId]: 'running' }));
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
       await api.flows.execute(flowId, { message: 'Hello!' });
+      clearTimeout(timeout);
       setRunning((prev) => ({ ...prev, [flowId]: 'ok' }));
     } catch {
       setRunning((prev) => ({ ...prev, [flowId]: 'error' }));
     }
-    setTimeout(() => setRunning((prev) => ({ ...prev, [flowId]: null })), 3000);
+    setTimeout(() => setRunning((prev) => ({ ...prev, [flowId]: null })), 2000);
   };
 
   return (

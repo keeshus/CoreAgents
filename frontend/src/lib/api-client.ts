@@ -74,16 +74,17 @@ export const api = {
         const err = await res.json().catch(() => ({ message: res.statusText }));
         throw new Error(err.message || `Request failed: ${res.status}`);
       }
-      // Consume first SSE event to confirm execution started, then close
+      // Consume first SSE event to confirm execution started, then cancel
       const reader = res.body?.getReader();
       if (reader) {
         const decoder = new TextDecoder();
         let buffer = '';
-        while (true) {
+        const start = Date.now();
+        while (Date.now() - start < 10000) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          if (buffer.includes('\n\n')) break;
+          if (buffer.includes('\n\n') || buffer.includes('execution')) break;
         }
         reader.cancel();
       }
