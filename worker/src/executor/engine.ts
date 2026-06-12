@@ -324,7 +324,20 @@ export class FlowExecutor {
           }
         }
 
-        return { content: finalContent, streamedContent: finalStreamed || finalContent };
+        // Auto-parse JSON output so downstream nodes get structured fields
+        const result: Record<string, unknown> = {
+          content: finalContent,
+          streamedContent: finalStreamed || finalContent,
+        };
+        if (config?.responseFormat === 'json_object' && finalContent) {
+          try {
+            const parsed = JSON.parse(finalContent);
+            if (typeof parsed === 'object' && parsed !== null) {
+              Object.assign(result, parsed);
+            }
+          } catch { /* not valid JSON, leave as-is */ }
+        }
+        return result;
       }
 
       case 'mcp-tool': {
