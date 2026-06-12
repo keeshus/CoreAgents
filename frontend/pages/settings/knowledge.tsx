@@ -28,12 +28,12 @@ function EmbeddingProviders() {
   const [form, setForm] = useState({ name: '', providerType: 'openai', baseUrl: '', apiKey: '', model: 'text-embedding-ada-002' });
   const [saving, setSaving] = useState(false);
 
-  const fetch = async () => {
+  const loadData = async () => {
     const res = await fetch(`${API_URL}/embedding-providers`);
     setItems(await res.json());
     setLoading(false);
   };
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { loadData(); }, []);
 
   const reset = () => { setForm({ name: '', providerType: 'openai', baseUrl: '', apiKey: '', model: 'text-embedding-ada-002' }); setEditingId(null); setShowForm(false); };
 
@@ -48,7 +48,7 @@ function EmbeddingProviders() {
           const body = { ...form, baseUrl: form.baseUrl || null };
           if (editingId) { await fetch(`${API_URL}/embedding-providers/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
           else { await fetch(`${API_URL}/embedding-providers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
-          setSaving(false); reset(); fetch();
+          setSaving(false); reset(); loadData();
         }} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <label className="block"><span className="text-xs font-medium">Name</span><input required className="mt-1 block w-full rounded border p-2 text-sm" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></label>
@@ -73,7 +73,7 @@ function EmbeddingProviders() {
               </div>
               <div className="flex gap-1">
                 <button onClick={() => { setForm({ name: ep.name, providerType: ep.provider_type, baseUrl: ep.base_url || '', apiKey: '', model: ep.model }); setEditingId(ep.id); setShowForm(true); }} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit3 className="w-3.5 h-3.5" /></button>
-                <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/embedding-providers/${ep.id}`, { method: 'DELETE' }); fetch(); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/embedding-providers/${ep.id}`, { method: 'DELETE' }); loadData(); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           ))}
@@ -90,12 +90,12 @@ function VectorStores() {
   const [form, setForm] = useState({ name: '', url: '', apiKey: '' });
   const [saving, setSaving] = useState(false);
 
-  const fetch = async () => {
+  const loadData = async () => {
     const res = await fetch(`${API_URL}/vector-stores`);
     setItems(await res.json());
     setLoading(false);
   };
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { loadData(); }, []);
 
   const reset = () => { setForm({ name: '', url: '', apiKey: '' }); setShowForm(false); };
 
@@ -108,7 +108,7 @@ function VectorStores() {
       {showForm && (
         <form onSubmit={async e => { e.preventDefault(); setSaving(true);
           await fetch(`${API_URL}/vector-stores`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-          setSaving(false); reset(); fetch();
+          setSaving(false); reset(); loadData();
         }} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <label className="block"><span className="text-xs font-medium">Name</span><input required className="mt-1 block w-full rounded border p-2 text-sm" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></label>
@@ -129,7 +129,7 @@ function VectorStores() {
                 <p className="text-sm font-medium">{vs.name}</p>
                 <p className="text-xs text-gray-500">{vs.store_type} · {vs.url}</p>
               </div>
-              <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); fetch(); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+              <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); loadData(); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
           ))}
         </div>
