@@ -10,8 +10,8 @@ async function main() {
   console.log('Worker starting...');
 
   // Dynamically import DB modules (available at runtime via tsx)
-  const { db } = await import('../../../backend/src/db/connection.js');
-  const { flows, llmEndpoints } = await import('../../../backend/src/db/schema.js');
+  const { db } = await import('../../backend/src/db/connection.js');
+  const { flows, llmEndpoints } = await import('../../backend/src/db/schema.js');
   const { eq } = await import('drizzle-orm');
 
   const scheduler = new Scheduler(
