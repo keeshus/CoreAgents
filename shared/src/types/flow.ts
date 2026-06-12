@@ -10,6 +10,7 @@ export const NODE_TYPES = [
   'branch',
   'code',
   'output',
+  'parallel',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -94,6 +95,14 @@ export interface OutputNodeData extends BaseNodeData {
   };
 }
 
+export interface ParallelNodeData extends BaseNodeData {
+  type: 'parallel';
+  config: {
+    subNodes: FlowNode[];
+    subEdges: FlowEdge[];
+  };
+}
+
 export type NodeData =
   | TriggerNodeData
   | LLMAgentNodeData
@@ -101,7 +110,8 @@ export type NodeData =
   | RetrieverNodeData
   | BranchNodeData
   | CodeNodeData
-  | OutputNodeData;
+  | OutputNodeData
+  | ParallelNodeData;
 
 // ── Edge ─────────────────────────────────────────────────────
 

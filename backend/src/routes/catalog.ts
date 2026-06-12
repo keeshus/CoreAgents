@@ -60,6 +60,15 @@ const catalog: NodeCatalogEntry[] = [
     outputs: 1,
   },
   {
+    type: 'parallel',
+    label: 'Parallel',
+    category: 'processing',
+    description: 'Run multiple sub-nodes concurrently. Each receives the same input, and their outputs are merged.',
+    defaultConfig: { subNodes: [], subEdges: [] },
+    inputs: 1,
+    outputs: 1,
+  },
+  {
     type: 'output',
     label: 'Output',
     category: 'output',

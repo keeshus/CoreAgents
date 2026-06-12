@@ -376,7 +376,23 @@ export default function FlowEditPage() {
                   </label>
                 </div>
               )}
-              {!['llm-agent', 'mcp-tool', 'branch', 'code', 'retriever', 'trigger', 'output'].includes(selectedNode.data.type) && (
+              {selectedNode.data.type === 'parallel' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-600">Sub-nodes run concurrently with the same input. Edit them below as JSON.</p>
+                  <label className="block">
+                    <span className="text-xs font-medium text-gray-700">Sub-nodes (JSON)</span>
+                    <textarea
+                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-xs font-mono resize-y min-h-[100px]"
+                      value={JSON.stringify(selectedNode.data.config.subNodes || [], null, 2)}
+                      onChange={(e) => {
+                        try { handleConfigChange({ subNodes: JSON.parse(e.target.value) }); } catch {}
+                      }}
+                      rows={5}
+                    />
+                  </label>
+                </div>
+              )}
+              {!['llm-agent', 'mcp-tool', 'branch', 'code', 'retriever', 'trigger', 'output', 'parallel'].includes(selectedNode.data.type) && (
                 <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto">{JSON.stringify(selectedNode.data.config, null, 2)}</pre>
               )}
             </div>
