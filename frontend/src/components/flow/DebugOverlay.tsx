@@ -323,11 +323,11 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
                           </div>
                         )}
 
-                        {/* Input */}
-                        {step.input && !isLLM && (
+                        {/* Input — always show for all node types */}
+                        {step.input && (
                           <div>
                             <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Input</h4>
-                            <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+                            <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">
                               {JSON.stringify(step.input, null, 2)}
                             </pre>
                           </div>
@@ -337,7 +337,7 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
                         {isLLM && hasTokens && (
                           <div>
                             <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                              {step.status === 'running' ? 'Streaming Output' : 'Full Response'}
+                              {step.status === 'running' ? 'Streaming Tokens' : 'LLM Response'}
                             </h4>
                             <div className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto text-gray-800">
                               {step.tokens.join('')}
@@ -346,13 +346,11 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
                           </div>
                         )}
 
-                        {/* Structured output */}
-                        {step.output && !isLLM && (
+                        {/* Output — always show raw data for all node types */}
+                        {step.output && (
                           <div>
                             <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Output</h4>
-                            <pre className={`text-xs border rounded p-2 whitespace-pre-wrap break-all max-h-32 overflow-y-auto ${
-                              step.status === 'failed' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white text-gray-700'
-                            }`}>
+                            <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">
                               {JSON.stringify(step.output, null, 2)}
                             </pre>
                           </div>
