@@ -127,6 +127,24 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
+          onNodeDragStop={(_event, node) => {
+            // Auto-parent: if dropped inside a parallel node, set parentId
+            const parallels = nodes.filter(n => n.type === 'parallel');
+            for (const p of parallels) {
+              if (node.id === p.id) continue;
+              const pw = (p.measured?.width || p.width || 300) as number;
+              const ph = (p.measured?.height || p.height || 200) as number;
+              const px = p.position.x;
+              const py = p.position.y;
+              if (
+                node.position.x >= px && node.position.x <= px + pw &&
+                node.position.y >= py && node.position.y <= py + ph
+              ) {
+                setNodes(nds => nds.map(n => n.id === node.id ? { ...n, parentId: p.id } : n));
+                break;
+              }
+            }
+          }}
         >
           <Background />
           <Controls />

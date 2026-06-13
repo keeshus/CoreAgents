@@ -62,9 +62,18 @@ export default function FlowEditPage() {
     if (!flow) return;
     setSaving(true);
     try {
+      // Sync child nodes into parallel node configs
+      const syncedNodes = nodes.map(n => {
+        if (n.type === 'parallel') {
+          const children = nodes.filter(c => c.parentId === n.id);
+          return { ...n, data: { ...n.data, config: { ...n.data.config, subNodes: children } } };
+        }
+        return n;
+      });
+
       const updated = await api.flows.update(flow.id, {
         ...flow,
-        nodes,
+        nodes: syncedNodes,
         edges,
       });
       setFlow(updated);
@@ -378,18 +387,8 @@ export default function FlowEditPage() {
               )}
               {selectedNode.data.type === 'parallel' && (
                 <div className="space-y-3">
-                  <p className="text-xs text-gray-600">Sub-nodes run concurrently with the same input. Edit them below as JSON.</p>
-                  <label className="block">
-                    <span className="text-xs font-medium text-gray-700">Sub-nodes (JSON)</span>
-                    <textarea
-                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-xs font-mono resize-y min-h-[100px]"
-                      value={JSON.stringify(selectedNode.data.config.subNodes || [], null, 2)}
-                      onChange={(e) => {
-                        try { handleConfigChange({ subNodes: JSON.parse(e.target.value) }); } catch {}
-                      }}
-                      rows={5}
-                    />
-                  </label>
+                  <p className="text-xs text-gray-600">Drag nodes from the catalog onto the canvas and drop them inside the Parallel container. They will run concurrently with the same input and their outputs will be merged.</p>
+                  <p className="text-[10px] text-gray-400">Tip: Drag an existing node into the dashed area to add it. Drag it out to remove it.</p>
                 </div>
               )}
               {!['llm-agent', 'mcp-tool', 'branch', 'code', 'retriever', 'trigger', 'output', 'parallel'].includes(selectedNode.data.type) && (
