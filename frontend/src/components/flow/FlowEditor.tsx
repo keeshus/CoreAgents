@@ -62,6 +62,53 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     });
   }, [nodes, edges]);
 
+  // Auto-size parallel nodes + snap children
+  useEffect(() => {
+    setNodes((nds) => {
+      let changed = false;
+      const updated = nds.map(n => {
+        if (n.type === 'parallel') {
+          const children = nds.filter(c => c.parentId === n.id);
+          if (children.length === 0) return n;
+          // Calculate bounding box of children (relative to parent)
+          const minX = Math.min(...children.map(c => c.position.x));
+          const maxY = Math.max(...children.map(c => c.position.y + (c.measured?.height || 80)));
+          const newWidth = Math.max(300, minX + Math.max(...children.map(c => c.position.x + (c.measured?.width || 200))) + 40);
+          const newHeight = Math.max(180, maxY + 60);
+          if (n.style?.width !== newWidth || n.style?.height !== newHeight) {
+            changed = true;
+            return { ...n, style: { ...n.style, width: newWidth, height: newHeight } };
+          }
+        }
+        return n;
+      });
+      return changed ? updated : nds;
+    });
+  }, [nodes]);
+
+  // Snap children inside parallel nodes — left-aligned, stacked vertically
+  useEffect(() => {
+    setNodes((nds) => {
+      let changed = false;
+      const updated = nds.map((n, _i, all) => {
+        if (!n.parentId) return n;
+        const siblings = all
+          .filter(c => c.parentId === n.parentId && c.id !== n.id)
+          .sort((a, b) => a.position.y - b.position.y);
+        // Find this node's index among siblings
+        const idx = siblings.filter(s => s.position.y < n.position.y).length;
+        const targetY = 20 + idx * 100;
+        const targetX = 30;
+        if (n.position.x !== targetX || Math.abs(n.position.y - targetY) > 80) {
+          changed = true;
+          return { ...n, position: { x: targetX, y: targetY } };
+        }
+        return n;
+      });
+      return changed ? updated : nds;
+    });
+  }, [nodes]);
+
   const addNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
     const newNode: Node = {
       id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
