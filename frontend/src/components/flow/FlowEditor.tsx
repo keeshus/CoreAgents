@@ -100,36 +100,38 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     });
   }, [nodes]);
 
-  // Force-snap children inside parallel nodes — left-aligned, stacked vertically
-  useEffect(() => {
-    setNodes((nds) => {
-      let changed = false;
-      // Group children by parent
-      const parentGroups = new Map<string, any[]>();
-      for (const n of nds) {
-        if (!n.parentId) continue;
-        const group = parentGroups.get(n.parentId) || [];
-        group.push(n);
-        parentGroups.set(n.parentId, group);
-      }
-      const updated = nds.map(n => {
-        if (!n.parentId) return n;
-        const group = parentGroups.get(n.parentId) || [];
-        // Sort by ID for stable ordering
-        group.sort((a, b) => a.id.localeCompare(b.id));
-        const idx = group.findIndex(s => s.id === n.id);
-        if (idx < 0) return n;
-        const targetY = 50 + idx * 100;
-        const targetX = 20;
-        if (n.position.x !== targetX || n.position.y !== targetY) {
-          changed = true;
-          return { ...n, position: { x: targetX, y: targetY } };
-        }
-        return n;
-      });
-      return changed ? updated : nds;
+  // Helper: re-layout children inside a parallel node
+  const layoutChildren = useCallback((parentId: string, nds: Node[]) => {
+    const children = nds
+      .filter(n => n.parentId === parentId)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return nds.map(n => {
+      if (n.parentId !== parentId) return n;
+      const idx = children.findIndex(c => c.id === n.id);
+      if (idx < 0) return n;
+      const ty = 50 + idx * 100;
+      if (n.position.x === 20 && n.position.y === ty) return n;
+      return { ...n, position: { x: 20, y: ty } };
     });
-  }, [nodes]);
+  }, []);
+
+  // Re-layout all children once after nodes change
+  const layoutRef = useRef(false);
+  useEffect(() => {
+    if (layoutRef.current) return;
+    layoutRef.current = true;
+    const parallels = nodes.filter(n => n.type === 'parallel');
+    if (parallels.length === 0) return;
+    let result = nodes;
+    for (const p of parallels) {
+      result = layoutChildren(p.id, result);
+    }
+    if (result !== nodes) {
+      setNodes(result);
+    }
+    // Reset after a tick
+    setTimeout(() => { layoutRef.current = false; }, 100);
+  }, [nodes, layoutChildren]);
 
   const addNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
     const newNode: Node = {
@@ -224,9 +226,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
                 const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
                 if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
                   setNodes(nds => {
-                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id } : n);
-                    const pars = updated.filter(n => n.type === 'parallel');
-                    const others = updated.filter(n => n.type !== 'parallel');
+                    const withParent = nds.map(n => n.id === node.id ? { ...n, parentId: p.id } : n);
+                    const laidOut = layoutChildren(p.id, withParent);
+                    const pars = laidOut.filter(n => n.type === 'parallel');
+                    const others = laidOut.filter(n => n.type !== 'parallel');
                     return [...pars, ...others];
                   });
                   break;
