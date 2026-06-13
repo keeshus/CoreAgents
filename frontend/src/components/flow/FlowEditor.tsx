@@ -72,8 +72,8 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
         const hasChildren = children.length > 0;
         // Default size when empty
         if (!hasChildren) {
-          if (n.style?.width !== 300 || n.style?.height !== 200) {
-            return { ...n, style: { ...n.style, width: 300, height: 200 } };
+          if (n.style?.width !== 320 || n.style?.height !== 240) {
+            return { ...n, style: { ...n.style, width: 320, height: 240 } };
           }
           return n;
         }
@@ -86,8 +86,8 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           const ch = c.measured?.height || c.height || 80;
           return (c.position.y || 0) + Number(ch);
         }));
-        const newW = Math.max(300, maxRight + 80);
-        const newH = Math.max(200, maxBottom + 80);
+        const newW = Math.max(320, maxRight + 80);
+        const newH = Math.max(240, maxBottom + 80);
         const oldW = (n.style?.width || n.width) as number || 300;
         const oldH = (n.style?.height || n.height) as number || 200;
         if (Math.abs(Number(oldW) - newW) > 10 || Math.abs(Number(oldH) - newH) > 10) {
@@ -106,14 +106,15 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
       let changed = false;
       const updated = nds.map((n, _i, all) => {
         if (!n.parentId) return n;
+        // Get all siblings including self, sorted by position
         const siblings = all
-          .filter(c => c.parentId === n.parentId && c.id !== n.id)
+          .filter(c => c.parentId === n.parentId)
           .sort((a, b) => a.position.y - b.position.y);
-        // Find this node's index among siblings
-        const idx = siblings.filter(s => s.position.y < n.position.y).length;
-        const targetY = 20 + idx * 100;
-        const targetX = 30;
-        if (n.position.x !== targetX || Math.abs(n.position.y - targetY) > 80) {
+        const idx = siblings.findIndex(s => s.id === n.id);
+        if (idx < 0) return n;
+        const targetY = 50 + idx * 100;
+        const targetX = 20;
+        if (n.position.x !== targetX || Math.abs(n.position.y - targetY) > 40) {
           changed = true;
           return { ...n, position: { x: targetX, y: targetY } };
         }
@@ -216,7 +217,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
                 const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
                 if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
                   setNodes(nds => {
-                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 30, y: 20 } } : n);
+                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 20, y: 50 } } : n);
                     const pars = updated.filter(n => n.type === 'parallel');
                     const others = updated.filter(n => n.type !== 'parallel');
                     return [...pars, ...others];

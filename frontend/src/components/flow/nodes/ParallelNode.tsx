@@ -1,11 +1,15 @@
-import { type NodeProps } from '@xyflow/react';
+import { type NodeProps, useReactFlow, useStore } from '@xyflow/react';
 import { Handle, Position } from '@xyflow/react';
 
 export function ParallelNode(props: NodeProps) {
   const config = props.data?.config as Record<string, any> | undefined;
-  const count = (config?.subNodes || []).length;
-  const w = (props as any).width || (props as any).style?.width || 280;
-  const h = (props as any).height || (props as any).style?.height || 180;
+  // Count children by parentId from the live node store
+  const childCount = useStore((s) =>
+    s.nodes.filter((n: any) => n.parentId === props.id).length
+  );
+  const count = childCount || (config?.subNodes || []).length;
+  const w = (props as any).width || (props as any).style?.width || 320;
+  const h = (props as any).height || (props as any).style?.height || 240;
 
   return (
     <div
@@ -20,18 +24,11 @@ export function ParallelNode(props: NodeProps) {
       <div className="px-3 py-2 border-b border-purple-200 bg-purple-100/50 shrink-0">
         <span className="text-sm font-semibold text-purple-800">Parallel</span>
         <span className="ml-2 text-[10px] text-purple-500">
-          {count > 0 ? `${count} sub-node${count !== 1 ? 's' : ''}` : 'Drop nodes here'}
+          {count > 0 ? `${count} node${count !== 1 ? 's' : ''}` : 'empty'}
         </span>
       </div>
 
-      <div className="flex-1 p-4">
-        {count === 0 && (
-          <p className="text-xs text-purple-400 text-center pt-8">
-            Drag nodes from the catalog into this area.<br />
-            They will run in parallel with the same input.
-          </p>
-        )}
-      </div>
+      <div className="flex-1" />
 
       <div className="px-3 py-1.5 border-t border-purple-200 bg-purple-100/30 shrink-0">
         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-purple-200 text-purple-700">
