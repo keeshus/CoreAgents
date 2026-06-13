@@ -109,7 +109,13 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
       if (n.parentId !== parentId) return n;
       const idx = children.findIndex(c => c.id === n.id);
       if (idx < 0) return n;
-      const ty = 50 + idx * 100;
+      // Calculate Y: start at 50, each previous child contributes its height + 20px gap
+      let ty = 50;
+      for (let i = 0; i < idx; i++) {
+        const prev = children[i];
+        const h = prev.measured?.height || 100;
+        ty += h + 20;
+      }
       if (n.position.x === 20 && n.position.y === ty) return n;
       return { ...n, position: { x: 20, y: ty } };
     });
@@ -226,7 +232,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
                 const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
                 if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
                   setNodes(nds => {
-                    const withParent = nds.map(n => n.id === node.id ? { ...n, parentId: p.id } : n);
+                    const withParent = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 20, y: 50 } } : n);
                     const laidOut = layoutChildren(p.id, withParent);
                     const pars = laidOut.filter(n => n.type === 'parallel');
                     const others = laidOut.filter(n => n.type !== 'parallel');
