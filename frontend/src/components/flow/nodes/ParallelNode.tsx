@@ -28,7 +28,13 @@ export function ParallelNode(props: NodeProps) {
         </span>
       </div>
 
-      <div className="flex-1" />
+      <div className="flex-1">
+        {count === 0 && (
+          <p className="text-xs text-purple-400 text-center pt-16">
+            Drop nodes here
+          </p>
+        )}
+      </div>
 
       <div className="px-3 py-1.5 border-t border-purple-200 bg-purple-100/30 shrink-0">
         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-purple-200 text-purple-700">

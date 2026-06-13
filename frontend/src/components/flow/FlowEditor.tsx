@@ -217,7 +217,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
                 const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
                 if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
                   setNodes(nds => {
-                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 20, y: 50 } } : n);
+                    // Calculate Y based on existing children
+                    const existing = nds.filter(n => n.parentId === p.id && n.id !== node.id).length;
+                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 20, y: 50 + existing * 100 } } : n);
                     const pars = updated.filter(n => n.type === 'parallel');
                     const others = updated.filter(n => n.type !== 'parallel');
                     return [...pars, ...others];
