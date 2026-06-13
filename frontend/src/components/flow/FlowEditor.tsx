@@ -176,9 +176,21 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
 
   // Expose deleteNode to parent via ref
   const deleteNode = useCallback((nodeId: string) => {
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-  }, [setNodes, setEdges]);
+    // Collect all IDs to delete: the node itself + all descendants
+    const toDelete = new Set([nodeId]);
+    const collectChildren = (id: string) => {
+      for (const n of nodes) {
+        if (n.parentId === id && !toDelete.has(n.id)) {
+          toDelete.add(n.id);
+          collectChildren(n.id);
+        }
+      }
+    };
+    collectChildren(nodeId);
+
+    setNodes((nds) => nds.filter(n => !toDelete.has(n.id)));
+    setEdges((eds) => eds.filter(e => !toDelete.has(e.source) && !toDelete.has(e.target)));
+  }, [setNodes, setEdges, nodes]);
 
   useEffect(() => {
     if (deleteNodeCallbackRef) {
