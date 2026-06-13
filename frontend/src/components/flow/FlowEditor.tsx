@@ -100,21 +100,28 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     });
   }, [nodes]);
 
-  // Snap children inside parallel nodes — left-aligned, stacked vertically
+  // Force-snap children inside parallel nodes — left-aligned, stacked vertically
   useEffect(() => {
     setNodes((nds) => {
       let changed = false;
-      const updated = nds.map((n, _i, all) => {
+      // Group children by parent
+      const parentGroups = new Map<string, any[]>();
+      for (const n of nds) {
+        if (!n.parentId) continue;
+        const group = parentGroups.get(n.parentId) || [];
+        group.push(n);
+        parentGroups.set(n.parentId, group);
+      }
+      const updated = nds.map(n => {
         if (!n.parentId) return n;
-        // Get all siblings including self, sorted by position
-        const siblings = all
-          .filter(c => c.parentId === n.parentId)
-          .sort((a, b) => a.position.y - b.position.y);
-        const idx = siblings.findIndex(s => s.id === n.id);
+        const group = parentGroups.get(n.parentId) || [];
+        // Sort by ID for stable ordering
+        group.sort((a, b) => a.id.localeCompare(b.id));
+        const idx = group.findIndex(s => s.id === n.id);
         if (idx < 0) return n;
         const targetY = 50 + idx * 100;
         const targetX = 20;
-        if (n.position.x !== targetX || Math.abs(n.position.y - targetY) > 40) {
+        if (n.position.x !== targetX || n.position.y !== targetY) {
           changed = true;
           return { ...n, position: { x: targetX, y: targetY } };
         }
@@ -217,9 +224,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
                 const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
                 if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
                   setNodes(nds => {
-                    // Calculate Y based on existing children
-                    const existing = nds.filter(n => n.parentId === p.id && n.id !== node.id).length;
-                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 20, y: 50 + existing * 100 } } : n);
+                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id } : n);
                     const pars = updated.filter(n => n.type === 'parallel');
                     const others = updated.filter(n => n.type !== 'parallel');
                     return [...pars, ...others];
