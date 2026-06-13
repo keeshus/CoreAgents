@@ -62,23 +62,37 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     });
   }, [nodes, edges]);
 
-  // Auto-size parallel nodes + snap children
+  // Auto-size parallel nodes based on children
   useEffect(() => {
     setNodes((nds) => {
       let changed = false;
       const updated = nds.map(n => {
-        if (n.type === 'parallel') {
-          const children = nds.filter(c => c.parentId === n.id);
-          if (children.length === 0) return n;
-          // Calculate bounding box of children (relative to parent)
-          const minX = Math.min(...children.map(c => c.position.x));
-          const maxY = Math.max(...children.map(c => c.position.y + (c.measured?.height || 80)));
-          const newWidth = Math.max(300, minX + Math.max(...children.map(c => c.position.x + (c.measured?.width || 200))) + 40);
-          const newHeight = Math.max(180, maxY + 60);
-          if (n.style?.width !== newWidth || n.style?.height !== newHeight) {
-            changed = true;
-            return { ...n, style: { ...n.style, width: newWidth, height: newHeight } };
+        if (n.type !== 'parallel') return n;
+        const children = nds.filter(c => c.parentId === n.id);
+        const hasChildren = children.length > 0;
+        // Default size when empty
+        if (!hasChildren) {
+          if (n.style?.width !== 300 || n.style?.height !== 200) {
+            return { ...n, style: { ...n.style, width: 300, height: 200 } };
           }
+          return n;
+        }
+        // Calculate required size from children's relative positions
+        const maxRight = Math.max(...children.map(c => {
+          const cw = c.measured?.width || c.width || 200;
+          return (c.position.x || 0) + Number(cw);
+        }));
+        const maxBottom = Math.max(...children.map(c => {
+          const ch = c.measured?.height || c.height || 80;
+          return (c.position.y || 0) + Number(ch);
+        }));
+        const newW = Math.max(300, maxRight + 80);
+        const newH = Math.max(200, maxBottom + 80);
+        const oldW = (n.style?.width || n.width) as number || 300;
+        const oldH = (n.style?.height || n.height) as number || 200;
+        if (Math.abs(Number(oldW) - newW) > 10 || Math.abs(Number(oldH) - newH) > 10) {
+          changed = true;
+          return { ...n, style: { ...n.style, width: newW, height: newH } };
         }
         return n;
       });
@@ -175,24 +189,40 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           deleteKeyCode={['Backspace', 'Delete']}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
           onNodeDragStop={(_event, node) => {
-            const parallels = nodes.filter(n => n.type === 'parallel' && n.id !== node.id);
-            for (const p of parallels) {
-              const pw = (p.measured?.width || 300) as number;
-              const ph = (p.measured?.height || 200) as number;
-              const px = p.position.x;
-              const py = p.position.y;
-              // Check if the node's CENTER is inside the parallel bounds
-              const cx = node.position.x + ((node.measured?.width || 200) as number) / 2;
-              const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
-              if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
-                setNodes(nds => {
-                  // Ensure parallel nodes come first in array
-                  const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, extent: 'parent' as any } : n);
-                  const parallels = updated.filter(n => n.type === 'parallel');
-                  const children = updated.filter(n => n.type !== 'parallel');
-                  return [...parallels, ...children];
-                });
-                break;
+            if (node.parentId) {
+              // Check if dragged outside parent bounds — if so, detach
+              const parent = nodes.find(n => n.id === node.parentId);
+              if (parent) {
+                const pw = (parent.style?.width || parent.width || 300) as number;
+                const ph = (parent.style?.height || parent.height || 200) as number;
+                // Node position is relative to parent, so check against (0,0) to (pw,ph)
+                if (node.position.x < -50 || node.position.x > pw + 50 || node.position.y < -50 || node.position.y > ph + 50) {
+                  setNodes(nds => nds.map(n => n.id === node.id
+                    ? { ...n, parentId: undefined, position: { x: parent.position.x + 50, y: parent.position.y + Number(ph) + 40 } }
+                    : n
+                  ));
+                  return;
+                }
+              }
+            } else {
+              // Check if dropped inside a parallel node
+              const parallels = nodes.filter(n => n.type === 'parallel' && n.id !== node.id);
+              for (const p of parallels) {
+                const pw = (p.style?.width || p.width || 300) as number;
+                const ph = (p.style?.height || p.height || 200) as number;
+                const px = p.position.x;
+                const py = p.position.y;
+                const cx = node.position.x + ((node.measured?.width || 200) as number) / 2;
+                const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
+                if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
+                  setNodes(nds => {
+                    const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 30, y: 20 } } : n);
+                    const pars = updated.filter(n => n.type === 'parallel');
+                    const others = updated.filter(n => n.type !== 'parallel');
+                    return [...pars, ...others];
+                  });
+                  break;
+                }
               }
             }
           }}
