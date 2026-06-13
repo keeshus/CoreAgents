@@ -47,7 +47,10 @@ export default function FlowEditPage() {
     if (id) {
       api.flows.get(id as string).then((f) => {
         setFlow(f);
-        setNodes(f.nodes || []);
+        // Sort: parallel nodes first (parent before children)
+        const raw = f.nodes || [];
+        const ordered = [...raw.filter((n: any) => n.type === 'parallel'), ...raw.filter((n: any) => n.type !== 'parallel')];
+        setNodes(ordered);
         setEdges(f.edges || []);
       }).finally(() => setLoading(false));
     }
@@ -62,7 +65,7 @@ export default function FlowEditPage() {
     if (!flow) return;
     setSaving(true);
     try {
-      // Sync child nodes into parallel node configs
+      // Sync child nodes into parallel node configs, ensure parent nodes come first
       const syncedNodes = nodes.map(n => {
         if (n.type === 'parallel') {
           const children = nodes.filter(c => c.parentId === n.id);
@@ -70,10 +73,12 @@ export default function FlowEditPage() {
         }
         return n;
       });
+      // Sort: parallel nodes first, then children, then others
+      const ordered = [...syncedNodes.filter(n => n.type === 'parallel'), ...syncedNodes.filter(n => n.type !== 'parallel')];
 
       const updated = await api.flows.update(flow.id, {
         ...flow,
-        nodes: syncedNodes,
+        nodes: ordered,
         edges,
       });
       setFlow(updated);
@@ -228,6 +233,26 @@ export default function FlowEditPage() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
+              {/* Parent selector for parallel grouping */}
+              {selectedNode.data.type !== 'parallel' && nodes.some((n: any) => n.type === 'parallel') && (
+                <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                  <label className="block">
+                    <span className="text-xs font-medium text-purple-700">Assign to Parallel Group</span>
+                    <select
+                      className="mt-1 block w-full rounded border border-purple-300 p-2 text-sm bg-white"
+                      value={nodes.find((n: any) => n.id === selectedNode.id)?.parentId || ''}
+                      onChange={(e) => {
+                        setNodes((prev: any[]) => prev.map((n: any) => n.id === selectedNode.id ? { ...n, parentId: e.target.value || undefined } : n));
+                      }}
+                    >
+                      <option value="">None (runs sequentially)</option>
+                      {nodes.filter((n: any) => n.type === 'parallel').map((p: any) => (
+                        <option key={p.id} value={p.id}>{p.data.label || 'Parallel'} ({p.id.slice(0, 8)})</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
               {selectedNode.data.type === 'llm-agent' && (
                 <LLMAgentConfig
                   config={selectedNode.data.config}

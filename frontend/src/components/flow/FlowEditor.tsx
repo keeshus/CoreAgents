@@ -128,19 +128,23 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           deleteKeyCode={['Backspace', 'Delete']}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
           onNodeDragStop={(_event, node) => {
-            // Auto-parent: if dropped inside a parallel node, set parentId
-            const parallels = nodes.filter(n => n.type === 'parallel');
+            const parallels = nodes.filter(n => n.type === 'parallel' && n.id !== node.id);
             for (const p of parallels) {
-              if (node.id === p.id) continue;
-              const pw = (p.measured?.width || p.width || 300) as number;
-              const ph = (p.measured?.height || p.height || 200) as number;
+              const pw = (p.measured?.width || 300) as number;
+              const ph = (p.measured?.height || 200) as number;
               const px = p.position.x;
               const py = p.position.y;
-              if (
-                node.position.x >= px && node.position.x <= px + pw &&
-                node.position.y >= py && node.position.y <= py + ph
-              ) {
-                setNodes(nds => nds.map(n => n.id === node.id ? { ...n, parentId: p.id } : n));
+              // Check if the node's CENTER is inside the parallel bounds
+              const cx = node.position.x + ((node.measured?.width || 200) as number) / 2;
+              const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
+              if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
+                setNodes(nds => {
+                  // Ensure parallel nodes come first in array
+                  const updated = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, extent: 'parent' as any } : n);
+                  const parallels = updated.filter(n => n.type === 'parallel');
+                  const children = updated.filter(n => n.type !== 'parallel');
+                  return [...parallels, ...children];
+                });
                 break;
               }
             }
