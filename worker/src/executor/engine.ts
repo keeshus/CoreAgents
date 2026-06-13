@@ -484,36 +484,25 @@ export class FlowExecutor {
         const subNodes = (config?.subNodes || []) as FlowNode[];
         if (subNodes.length === 0) return { merged: {}, note: 'no sub-nodes' };
 
-        // Run all sub-nodes in parallel with the same input
+        // Run all sub-nodes in parallel — any failure stops the entire flow
         const results = await Promise.all(
           subNodes.map(async (subNode) => {
-            try {
-              const output = await this.executeNode(subNode, input, context, onEvent);
-              await onEvent(node.id, {
-                type: 'log',
-                executionId: '',
-                nodeId: node.id,
-                data: { nodeId: node.id, subNodeId: subNode.id, subNodeType: subNode.data.type, status: 'completed' },
-                timestamp: new Date().toISOString(),
-              });
-              return { id: subNode.id, type: subNode.data.type, output };
-            } catch (err) {
-              await onEvent(node.id, {
-                type: 'log',
-                executionId: '',
-                nodeId: node.id,
-                data: { nodeId: node.id, subNodeId: subNode.id, subNodeType: subNode.data.type, status: 'failed', error: err instanceof Error ? err.message : String(err) },
-                timestamp: new Date().toISOString(),
-              });
-              return { id: subNode.id, type: subNode.data.type, error: err instanceof Error ? err.message : String(err) };
-            }
+            const output = await this.executeNode(subNode, input, context, onEvent);
+            await onEvent(node.id, {
+              type: 'log',
+              executionId: '',
+              nodeId: node.id,
+              data: { nodeId: node.id, subNodeId: subNode.id, subNodeType: subNode.data.type, status: 'completed', output },
+              timestamp: new Date().toISOString(),
+            });
+            return { id: subNode.id, type: subNode.data.type, output };
           }),
         );
 
-        // Merge: key by sub-node type, also include all raw outputs
+        // Merge all outputs by node ID
         const merged: Record<string, unknown> = {};
         for (const r of results) {
-          merged[r.id] = r.error ? { error: r.error } : r.output;
+          merged[r.id] = r.output;
         }
         return { merged, results };
       }
