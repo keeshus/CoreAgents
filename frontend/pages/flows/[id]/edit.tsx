@@ -216,6 +216,7 @@ export default function FlowEditPage() {
           </button>
         </div>
       </div>
+      </div>
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
@@ -255,7 +256,6 @@ export default function FlowEditPage() {
                 onChange={(e) => handleLabelChange(e.target.value)}
                 placeholder="Node name..."
               />
-            </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               {selectedNode.data.type === 'llm-agent' && (
