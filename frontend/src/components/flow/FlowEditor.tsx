@@ -21,6 +21,7 @@ import { BranchNode } from './nodes/BranchNode';
 import { CodeNode } from './nodes/CodeNode';
 import { OutputNode } from './nodes/OutputNode';
 import { ParallelNode } from './nodes/ParallelNode';
+import { HITLNode } from './nodes/HITLNode';
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -31,6 +32,7 @@ const nodeTypes = {
   code: CodeNode,
   output: OutputNode,
   parallel: ParallelNode,
+  hitl: HITLNode,
 };
 
 interface FlowEditorProps {

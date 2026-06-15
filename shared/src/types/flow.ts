@@ -11,6 +11,7 @@ export const NODE_TYPES = [
   'code',
   'output',
   'parallel',
+  'hitl',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -103,6 +104,14 @@ export interface ParallelNodeData extends BaseNodeData {
   };
 }
 
+export interface HitlNodeData extends BaseNodeData {
+  type: 'hitl';
+  config: {
+    prompt: string;
+    inputFields: string[];
+  };
+}
+
 export type NodeData =
   | TriggerNodeData
   | LLMAgentNodeData
@@ -111,7 +120,8 @@ export type NodeData =
   | BranchNodeData
   | CodeNodeData
   | OutputNodeData
-  | ParallelNodeData;
+  | ParallelNodeData
+  | HitlNodeData;
 
 // ── Edge ─────────────────────────────────────────────────────
 

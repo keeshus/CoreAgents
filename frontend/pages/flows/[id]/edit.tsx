@@ -19,6 +19,8 @@ const NODE_LABELS: Record<string, string> = {
   branch: 'Condition',
   code: 'Code',
   output: 'Output',
+  parallel: 'Parallel',
+  hitl: 'Human in the Loop',
 };
 
 export default function FlowEditPage() {
@@ -396,7 +398,22 @@ export default function FlowEditPage() {
                   <p className="text-[10px] text-gray-400">Tip: Drag an existing node into the dashed area to add it. Drag it out to remove it.</p>
                 </div>
               )}
-              {!['llm-agent', 'mcp-tool', 'branch', 'code', 'retriever', 'trigger', 'output', 'parallel'].includes(selectedNode.data.type) && (
+              {selectedNode.data.type === 'hitl' && (
+                <div className="space-y-3">
+                  <label className="block">
+                    <span className="text-xs font-medium text-gray-700">Prompt for the User</span>
+                    <textarea
+                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px]"
+                      value={selectedNode.data.config.prompt || ''}
+                      onChange={(e) => handleConfigChange({ prompt: e.target.value })}
+                      placeholder="Please review the generated content before proceeding..."
+                      rows={3}
+                    />
+                    <p className="mt-1 text-[10px] text-gray-400">Shown to the human reviewer when the flow pauses.</p>
+                  </label>
+                </div>
+              )}
+              {!['llm-agent', 'mcp-tool', 'branch', 'code', 'retriever', 'trigger', 'output', 'parallel', 'hitl'].includes(selectedNode.data.type) && (
                 <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto">{JSON.stringify(selectedNode.data.config, null, 2)}</pre>
               )}
             </div>

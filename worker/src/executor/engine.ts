@@ -10,6 +10,17 @@ import type {
 import { topologicalSort } from './dag.js';
 import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
 
+export class HitlPauseError extends Error {
+  public nodeId: string;
+  public savedOutputs: Record<string, unknown>;
+  constructor(nodeId: string, savedOutputs: Record<string, unknown>) {
+    super(`HITL: waiting for human input at node ${nodeId}`);
+    this.name = 'HitlPauseError';
+    this.nodeId = nodeId;
+    this.savedOutputs = savedOutputs;
+  }
+}
+
 export type EventCallback = (nodeId: string, event: SSEEvent) => void | Promise<void>;
 
 // Database lookups the executor needs at runtime
@@ -39,6 +50,7 @@ export class FlowExecutor {
     input: Record<string, unknown>,
     onEvent: EventCallback,
     context: ExecutionContext,
+    options?: { replayFrom?: string; replayOutputs?: Record<string, unknown>; inputOverride?: Record<string, unknown> },
   ): Promise<{ output: Record<string, unknown>; steps: ExecutionStep[] }> {
     const { sorted, cycles } = topologicalSort(flow.nodes, flow.edges);
 
@@ -47,13 +59,27 @@ export class FlowExecutor {
     }
 
     const nodeOutputs = new Map<string, unknown>();
-    // Store the initial input at a special key
-    nodeOutputs.set('__input__', input);
+    nodeOutputs.set('__input__', options?.inputOverride || input);
+
+    // If replaying: pre-load saved outputs from previous run, skip nodes before HITL
+    const replayFrom = options?.replayFrom;
+    const replayOutputs = options?.replayOutputs || {};
+    let beforeHitl = !!replayFrom;
 
     const steps: ExecutionStep[] = [];
 
     for (const node of sorted) {
       if (this.abortController.signal.aborted) break;
+
+      // Skip nodes before the HITL node when replaying
+      if (beforeHitl) {
+        if (node.id === replayFrom) {
+          beforeHitl = false;
+        } else if (replayOutputs[node.id] !== undefined) {
+          nodeOutputs.set(node.id, replayOutputs[node.id]);
+          continue; // skip already-completed nodes
+        }
+      }
 
       // Skip MCP Tool / Retriever nodes — they only run when called by an LLM Agent
       if (node.data.type === 'mcp-tool' || node.data.type === 'retriever') {
@@ -135,6 +161,14 @@ export class FlowExecutor {
           completedAt: null,
         });
       } catch (err) {
+        // If HITL node paused, populate saved outputs before re-throwing
+        if (err instanceof HitlPauseError) {
+          const saved: Record<string, unknown> = {};
+          for (const [k, v] of nodeOutputs) {
+            if (k !== '__input__') saved[k] = v;
+          }
+          throw new HitlPauseError(err.nodeId, saved);
+        }
         const error = err instanceof Error ? err.message : String(err);
         await onEvent(node.id, {
           type: 'step.failed',
@@ -513,6 +547,13 @@ export class FlowExecutor {
           merged[r.id] = r.output;
         }
         return { merged, results };
+      }
+
+      case 'hitl': {
+        // This is called from within execute's loop — we need access to nodeOutputs
+        // We throw a special error that the execute loop catches
+        // The execute loop catches this and adds saved outputs before re-throwing
+        throw new HitlPauseError(node.id, {}); // filled by execute loop
       }
 
       case 'output': {

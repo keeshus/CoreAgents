@@ -69,6 +69,15 @@ const catalog: NodeCatalogEntry[] = [
     outputs: 1,
   },
   {
+    type: 'hitl',
+    label: 'Human in the Loop',
+    category: 'processing',
+    description: 'Pause the flow for human approval. Shows upstream output and waits for approve/reject.',
+    defaultConfig: { prompt: 'Please review the following before continuing:', inputFields: [] },
+    inputs: 1,
+    outputs: 1,
+  },
+  {
     type: 'output',
     label: 'Output',
     category: 'output',

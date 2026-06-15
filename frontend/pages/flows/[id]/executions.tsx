@@ -28,6 +28,7 @@ const statusConfig: Record<string, { icon: any; color: string; bg: string; label
   running: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', label: 'Running' },
   pending: { icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', label: 'Pending' },
   cancelled: { icon: XCircle, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200', label: 'Cancelled' },
+  awaiting_approval: { icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', label: 'Awaiting Approval' },
 };
 
 const fmtTime = (t: string | null) => t ? new Date(t).toLocaleTimeString() : '—';
@@ -109,6 +110,12 @@ export default function ExecutionHistoryPage() {
                   {exec.error && <p className="text-xs text-red-500 mt-1 truncate font-mono">{trunc(exec.error, 80)}</p>}
                 </div>
                 <div className="flex items-center gap-2">
+                  {exec.status === 'awaiting_approval' && (
+                    <>
+                      <button onClick={async (e) => { e.stopPropagation(); await fetch(`${API_URL}/executions/${exec.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feedback: '' }) }); window.location.reload(); }} className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 shrink-0"><CheckCircle className="w-3 h-3" />Approve</button>
+                      <button onClick={async (e) => { e.stopPropagation(); await fetch(`${API_URL}/executions/${exec.id}/reject`, { method: 'POST' }); window.location.reload(); }} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 shrink-0"><XCircle className="w-3 h-3" />Reject</button>
+                    </>
+                  )}
                   {exec.status === 'running' && (
                     <button onClick={(e) => cancel(exec.id, e)} disabled={cancelling === exec.id} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 disabled:opacity-50 shrink-0"><StopCircle className="w-3 h-3" />{cancelling === exec.id ? '...' : 'Stop'}</button>
                   )}

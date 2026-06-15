@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores } from '../db/schema.js';
-import { FlowExecutor } from '../../../worker/src/executor/engine.js';
+import { FlowExecutor, HitlPauseError } from '../../../worker/src/executor/engine.js';
 import { getStore } from '../vector-stores/index.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
@@ -240,6 +240,24 @@ router.post(
         timestamp: new Date().toISOString(),
       });
     } catch (err: unknown) {
+      // Handle HITL pause — save partial outputs and await approval
+      if (err instanceof HitlPauseError) {
+        activeExecutors.delete(exec.id);
+        await db
+          .update(executions)
+          .set({ status: 'awaiting_approval', output: err.savedOutputs as any })
+          .where(eq(executions.id, exec.id));
+
+        emitSSE({
+          type: 'execution.paused',
+          executionId: exec.id,
+          data: { nodeId: err.nodeId, savedOutputs: err.savedOutputs, message: 'Waiting for human approval' },
+          timestamp: new Date().toISOString(),
+        });
+        res.end();
+        return;
+      }
+
       const error = err instanceof Error ? err.message : String(err);
       console.error('Flow execution failed:', error);
       activeExecutors.delete(exec.id);
@@ -264,6 +282,98 @@ router.post(
     res.end();
   }),
 );
+
+// ── POST /api/executions/:executionId/approve — approve HITL and resume flow ──
+
+router.post('/executions/:executionId/approve', asyncHandler(async (req, res) => {
+  const executionId = req.params.executionId as string;
+  const { feedback = '', data: userData = {} } = req.body || {};
+
+  const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));
+  if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
+  if (exec.status !== 'awaiting_approval') { res.status(400).json({ error: 'Not awaiting approval' }); return; }
+
+  // Load the flow
+  const [flow] = await db.select().from(flows).where(eq(flows.id, exec.flow_id));
+  if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+
+  // Find the HITL node
+  const nodes = (flow.nodes || []) as any[];
+  const hitlNode = nodes.find((n: any) => n.data?.type === 'hitl');
+  if (!hitlNode) { res.status(400).json({ error: 'No HITL node in flow' }); return; }
+
+  // Replay from the HITL node with user input merged
+  const flowDef: FlowDefinition = {
+    id: flow.id, name: flow.name, description: flow.description || '',
+    nodes: flow.nodes as any, edges: flow.edges as any, version: flow.version,
+    createdAt: flow.created_at?.toISOString() || '', updatedAt: flow.updated_at?.toISOString() || '',
+  };
+
+  const executionContext = {
+    getEndpoint: async (endpointId: string) => {
+      const [ep] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, endpointId));
+      if (!ep) return null;
+      return { providerType: ep.provider_type as 'anthropic' | 'openai' | 'litellm', apiKey: ep.api_key, baseUrl: ep.base_url };
+    },
+    getEmbeddingProvider: async (providerId: string) => {
+      const [ep] = await db.select().from(embeddingProviders).where(eq(embeddingProviders.id, providerId));
+      if (!ep) return null;
+      return { providerType: ep.provider_type, apiKey: ep.api_key, baseUrl: ep.base_url, model: ep.model };
+    },
+    getVectorStore: async (storeId: string) => {
+      const [vs] = await db.select().from(vectorStores).where(eq(vectorStores.id, storeId));
+      if (!vs) return null;
+      return { name: vs.name, url: vs.url, apiKey: vs.api_key };
+    },
+    flowNodes: flowDef.nodes as any,
+    flowEdges: flowDef.edges as any,
+  };
+
+  const executor = new FlowExecutor();
+  const savedOutputs = (exec.output || {}) as Record<string, unknown>;
+  const mergedInput = { ...(exec.input || {}), _approved: true, _feedback: feedback, ...userData };
+
+  try {
+    const result = await executor.execute(
+      flowDef,
+      mergedInput,
+      async () => {}, // no SSE needed for replay
+      executionContext,
+      { replayFrom: hitlNode.id, replayOutputs: savedOutputs, inputOverride: mergedInput },
+    );
+
+    // Save as a new execution for history
+    const [newExec] = await db.insert(executions).values({
+      flow_id: exec.flow_id,
+      status: 'completed',
+      input: mergedInput,
+      output: result.output as any,
+      started_at: new Date(),
+      completed_at: new Date(),
+    }).returning();
+
+    res.json({ status: 'completed', executionId: newExec.id, output: result.output });
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ status: 'failed', error });
+  }
+}));
+
+// ── POST /api/executions/:executionId/reject — reject HITL ──────────────────────
+
+router.post('/executions/:executionId/reject', asyncHandler(async (req, res) => {
+  const executionId = req.params.executionId as string;
+
+  const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));
+  if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
+  if (exec.status !== 'awaiting_approval') { res.status(400).json({ error: 'Not awaiting approval' }); return; }
+
+  await db.update(executions)
+    .set({ status: 'cancelled', error: 'Rejected by user', completed_at: new Date() })
+    .where(eq(executions.id, executionId));
+
+  res.json({ status: 'rejected' });
+}));
 
 // ── GET /api/flows/:flowId/executions — list past executions ───────────────────
 
