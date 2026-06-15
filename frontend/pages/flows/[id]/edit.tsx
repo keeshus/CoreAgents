@@ -170,25 +170,24 @@ export default function FlowEditPage() {
   return (
     <div className="h-screen flex flex-col">
       {/* Toolbar */}
-      <div className="border-b bg-white px-4 py-2 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-4 h-4" /></Link>
-            <div>
-              <input
-                className="text-sm font-semibold border-none outline-none bg-transparent block"
-                value={flow.name}
-                onChange={(e) => setFlow({ ...flow, name: e.target.value })}
-                placeholder="Flow name"
-              />
-              <input
-                className="text-xs text-gray-500 border-none outline-none bg-transparent block mt-0.5 w-64"
-                value={flow.description || ''}
-                onChange={(e) => setFlow({ ...flow, description: e.target.value })}
-                placeholder="Add a description..."
-              />
-            </div>
+      <div className="h-12 border-b bg-white flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-4 h-4" /></Link>
+          <div>
+            <input
+              className="text-sm font-semibold border-none outline-none bg-transparent block"
+              value={flow.name}
+              onChange={(e) => setFlow({ ...flow, name: e.target.value })}
+              placeholder="Flow name"
+            />
+            <input
+              className="text-xs text-gray-500 border-none outline-none bg-transparent block mt-0.5 w-64"
+              value={flow.description || ''}
+              onChange={(e) => setFlow({ ...flow, description: e.target.value })}
+              placeholder="Add a description..."
+            />
           </div>
+        </div>
         <div className="flex items-center gap-2">
           <Link href="/settings" className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors" title="Manage LLM endpoints & MCP servers">
             <Settings className="w-4 h-4" />
@@ -215,7 +214,6 @@ export default function FlowEditPage() {
             <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
-      </div>
       </div>
 
       {/* Main content */}
