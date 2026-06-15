@@ -11,6 +11,8 @@ import {
   type OnConnect,
   ReactFlowProvider,
   type Node,
+  type OnConnectEnd,
+  type OnConnectStart,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { TriggerNode } from './nodes/TriggerNode';
@@ -43,10 +45,11 @@ interface FlowEditorProps {
   addNodeCallbackRef?: React.MutableRefObject<((type: string, defaultConfig: Record<string, any>) => void) | null>;
   setNodeDataCallbackRef?: React.MutableRefObject<((nodeId: string, config: Record<string, any>) => void) | null>;
   deleteNodeCallbackRef?: React.MutableRefObject<((nodeId: string) => void) | null>;
+  setNodeLabelRef?: React.MutableRefObject<((nodeId: string, label: string) => void) | null>;
   onNodeClick?: (nodeId: string, nodeData: any) => void;
 }
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef, setNodeDataCallbackRef, deleteNodeCallbackRef, onNodeClick }: FlowEditorProps) {
+export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef, setNodeDataCallbackRef, deleteNodeCallbackRef, setNodeLabelRef, onNodeClick }: FlowEditorProps) {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
   const onNodesChangeRef = useRef(onNodesChange);
@@ -176,6 +179,19 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     }
   }, [setNodeData, setNodeDataCallbackRef]);
 
+  // Expose setNodeLabel to parent via ref
+  const setNodeLabel = useCallback((nodeId: string, label: string) => {
+    setNodes((nds) => nds.map((n) =>
+      n.id === nodeId ? { ...n, data: { ...n.data, label } } : n
+    ));
+  }, [setNodes]);
+
+  useEffect(() => {
+    if (setNodeLabelRef) {
+      setNodeLabelRef.current = setNodeLabel;
+    }
+  }, [setNodeLabel, setNodeLabelRef]);
+
   // Expose deleteNode to parent via ref
   const deleteNode = useCallback((nodeId: string) => {
     // Collect all IDs to delete: the node itself + all descendants
@@ -205,6 +221,19 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     [setEdges]
   );
 
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      // Tool input handles can have multiple connections
+      if (connection.targetHandle?.startsWith('tool-input')) return true;
+      // Check if target already has an incoming connection on this handle
+      const existing = edges.find(
+        e => e.target === connection.target && e.targetHandle === connection.targetHandle
+      );
+      return !existing;
+    },
+    [edges]
+  );
+
   return (
     <ReactFlowProvider>
       <div className="w-full h-full">
@@ -214,6 +243,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           onNodesChange={onNodesChangeInternal}
           onEdgesChange={onEdgesChangeInternal}
           onConnect={onConnect}
+          isValidConnection={isValidConnection}
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}

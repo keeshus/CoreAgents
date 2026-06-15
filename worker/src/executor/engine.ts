@@ -13,11 +13,15 @@ import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
 export class HitlPauseError extends Error {
   public nodeId: string;
   public savedOutputs: Record<string, unknown>;
-  constructor(nodeId: string, savedOutputs: Record<string, unknown>) {
+  public buttons: Array<{ label: string; value: string }>;
+  public prompt: string;
+  constructor(nodeId: string, savedOutputs: Record<string, unknown>, buttons?: Array<{ label: string; value: string }>, prompt?: string) {
     super(`HITL: waiting for human input at node ${nodeId}`);
     this.name = 'HitlPauseError';
     this.nodeId = nodeId;
     this.savedOutputs = savedOutputs;
+    this.buttons = buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }];
+    this.prompt = prompt || '';
   }
 }
 
@@ -137,7 +141,25 @@ export class FlowExecutor {
       });
 
       try {
-        const output = await this.executeNode(node, stepInput, context, onEvent);
+        // For HITL replay: separate what was displayed vs what gets forwarded
+        let nodeInput = stepInput;
+        if (node.data.type === 'hitl' && replayFrom && node.id === replayFrom) {
+          const cfg = (node.data as any)?.config || {};
+          const displayFields: string[] = cfg.displayFields || [];
+          const forwardFields: string[] = cfg.forwardFields || [];
+          const raw = stepInput as Record<string, unknown> | undefined || {};
+          const displayed: Record<string, unknown> = {};
+          const forwarded: Record<string, unknown> = {};
+          if (displayFields.length > 0) {
+            for (const f of displayFields) { if (raw[f] !== undefined) displayed[f] = raw[f]; }
+          } else { Object.assign(displayed, raw); }
+          if (forwardFields.length > 0) {
+            for (const f of forwardFields) { if (raw[f] !== undefined) forwarded[f] = raw[f]; }
+          } else { Object.assign(forwarded, raw); }
+          // Store displayed for UI, pass forwarded to next node
+          nodeInput = { ...(stepInput as any), _reviewedContent: forwarded };
+        }
+        const output = await this.executeNode(node, nodeInput, context, onEvent);
         nodeOutputs.set(node.id, output);
 
         await onEvent(node.id, {
@@ -167,7 +189,8 @@ export class FlowExecutor {
           for (const [k, v] of nodeOutputs) {
             if (k !== '__input__') saved[k] = v;
           }
-          throw new HitlPauseError(err.nodeId, saved);
+          const hitlConfig = (node.data as any)?.config || {};
+          throw new HitlPauseError(err.nodeId, saved, hitlConfig.buttons, hitlConfig.prompt);
         }
         const error = err instanceof Error ? err.message : String(err);
         await onEvent(node.id, {
@@ -387,7 +410,9 @@ export class FlowExecutor {
         }
 
         // Auto-parse JSON output so downstream nodes get structured fields
+        // Preserve input data so information flows through
         const result: Record<string, unknown> = {
+          ...(input as Record<string, unknown>) || {},
           content: finalContent,
           streamedContent: finalStreamed || finalContent,
         };
@@ -425,8 +450,8 @@ export class FlowExecutor {
           await mcpHub.connect(server);
         }
 
-        const result = await mcpHub.callTool(server.id, config.toolName, config.parameters || {});
-        return { result, toolName: config.toolName, serverName: server.name };
+        const toolResult = await mcpHub.callTool(server.id, config.toolName, config.parameters || {});
+        return { ...(input as Record<string, unknown>) || {}, result: toolResult, toolName: config.toolName, serverName: server.name };
       }
 
       case 'retriever': {
@@ -470,12 +495,7 @@ export class FlowExecutor {
 
         const contextText = chunks.map(c => c.text).join('\n\n');
 
-        return {
-          query,
-          chunks,
-          context: contextText,
-          count: chunks.length,
-        };
+        return { ...(input as Record<string, unknown>) || {}, query, chunks, context: contextText, count: chunks.length };
       }
 
       case 'branch': {
@@ -498,7 +518,7 @@ export class FlowExecutor {
           verdict = false;
         }
 
-        return { verdict, label: verdict ? labels[0] : labels[1] };
+        return { ...(input as Record<string, unknown>) || {}, verdict, label: verdict ? labels[0] : labels[1] };
       }
 
       case 'code': {
@@ -516,7 +536,7 @@ export class FlowExecutor {
       case 'parallel': {
         const config = (nodeData as any).config;
         const subNodes = (config?.subNodes || []) as FlowNode[];
-        if (subNodes.length === 0) return { merged: {}, note: 'no sub-nodes' };
+        if (subNodes.length === 0) return { ...(input as Record<string, unknown>) || {}, merged: {}, note: 'no sub-nodes' };
 
         // Run all sub-nodes in parallel — any failure aborts all siblings
         const parallelAbort = new AbortController();
@@ -546,13 +566,16 @@ export class FlowExecutor {
         for (const r of results) {
           merged[r.id] = r.output;
         }
-        return { merged, results };
+        return { ...(input as Record<string, unknown>) || {}, merged, results };
       }
 
       case 'hitl': {
-        // This is called from within execute's loop — we need access to nodeOutputs
-        // We throw a special error that the execute loop catches
-        // The execute loop catches this and adds saved outputs before re-throwing
+        // If replaying (user already approved), pass through the decision
+        const inp = input as Record<string, unknown> | undefined;
+        if (inp?._approved) {
+          return { decision: inp._decision || 'approved', feedback: inp._feedback || '', reviewedContent: inp._reviewedContent || inp };
+        }
+        // First run: pause for human input
         throw new HitlPauseError(node.id, {}); // filled by execute loop
       }
 

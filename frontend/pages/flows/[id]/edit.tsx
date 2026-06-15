@@ -8,6 +8,7 @@ import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
 import { DebugOverlay } from '@/components/flow/DebugOverlay';
 import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
+import { InputPreview } from '@/components/flow/config/InputPreview';
 import { Save, ArrowLeft, Settings, X, Trash2, Bug, History } from 'lucide-react';
 import Link from 'next/link';
 
@@ -34,6 +35,7 @@ export default function FlowEditPage() {
   const addNodeRef = useRef<((type: string, defaultConfig: Record<string, any>) => void) | null>(null);
   const setNodeDataRef = useRef<((nodeId: string, config: Record<string, any>) => void) | null>(null);
   const deleteNodeRef = useRef<((nodeId: string) => void) | null>(null);
+  const setNodeLabelRef = useRef<((nodeId: string, label: string) => void) | null>(null);
   const [showDebug, setShowDebug] = useState(false);
 
   // Selected node for config editing
@@ -105,7 +107,9 @@ export default function FlowEditPage() {
 
   const handleConfigChange = useCallback((newConfig: Record<string, any>) => {
     if (!selectedNodeId) return;
+    // Apply immediately to FlowEditor via ref
     setNodeDataRef.current?.(selectedNodeId, newConfig);
+    // Also update parent state for save
     setNodes((prev) => prev.map((n) =>
       n.id === selectedNodeId
         ? { ...n, data: { ...n.data, config: { ...n.data.config, ...newConfig } } }
@@ -115,7 +119,8 @@ export default function FlowEditPage() {
 
   const handleLabelChange = useCallback((label: string) => {
     if (!selectedNodeId) return;
-    setNodes((prev) => prev.map((n) =>
+    setNodeLabelRef.current?.(selectedNodeId, label);
+    setNodes((prev: any[]) => prev.map((n: any) =>
       n.id === selectedNodeId ? { ...n, data: { ...n.data, label } } : n
     ));
   }, [selectedNodeId]);
@@ -174,18 +179,8 @@ export default function FlowEditPage() {
         <div className="flex items-center gap-3">
           <Link href="/" className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-4 h-4" /></Link>
           <div>
-            <input
-              className="text-sm font-semibold border-none outline-none bg-transparent block"
-              value={flow.name}
-              onChange={(e) => setFlow({ ...flow, name: e.target.value })}
-              placeholder="Flow name"
-            />
-            <input
-              className="text-xs text-gray-500 border-none outline-none bg-transparent block mt-0.5 w-64"
-              value={flow.description || ''}
-              onChange={(e) => setFlow({ ...flow, description: e.target.value })}
-              placeholder="Add a description..."
-            />
+            <input className="text-sm font-semibold border-none outline-none bg-transparent block" value={flow.name} onChange={(e) => setFlow({ ...flow, name: e.target.value })} placeholder="Flow name" />
+            <input className="text-xs text-gray-500 border-none outline-none bg-transparent block mt-0.5 w-64" value={flow.description || ''} onChange={(e) => setFlow({ ...flow, description: e.target.value })} placeholder="Add a description..." />
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -228,13 +223,14 @@ export default function FlowEditPage() {
             addNodeCallbackRef={addNodeRef}
             setNodeDataCallbackRef={setNodeDataRef}
             deleteNodeCallbackRef={deleteNodeRef}
+            setNodeLabelRef={setNodeLabelRef}
             onNodeClick={handleNodeClick}
           />
         </div>
 
         {/* Right panel: config or execution */}
         {selectedNode ? (
-          <div className="w-80 border-l bg-white flex flex-col h-full">
+          <div className="w-96 border-l bg-white flex flex-col h-full">
             <div className="p-3 border-b shrink-0">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] text-gray-400 uppercase">{NODE_LABELS[selectedNode.data.type] || selectedNode.data.type}</span>
@@ -247,13 +243,10 @@ export default function FlowEditPage() {
                 </button>
               </div>
             </div>
-            <div className="mb-3">
-              <input
-                className="w-full text-sm font-semibold border border-gray-200 rounded px-2 py-1 focus:border-blue-400 focus:outline-none"
-                value={selectedNode.data.label || ''}
-                onChange={(e) => handleLabelChange(e.target.value)}
-                placeholder="Node name..."
-              />
+            <div className="px-3 pb-2">
+              <input className="w-full text-sm font-semibold border border-gray-200 rounded px-2 py-1" value={selectedNode.data.label || ''} onChange={(e) => handleLabelChange(e.target.value)} placeholder="Node name..." />
+            </div>
+            <InputPreview edges={edges} nodes={nodes} selectedNodeId={selectedNode.id} />
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               {selectedNode.data.type === 'llm-agent' && (
@@ -305,6 +298,17 @@ export default function FlowEditPage() {
                       rows={6}
                     />
                     <p className="mt-1 text-[10px] text-gray-400">Return the transformed value from this function.</p>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-gray-700">Output Structure (documentation)</span>
+                    <textarea
+                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[40px] font-mono"
+                      value={selectedNode.data.config.outputSchema || ''}
+                      onChange={(e) => handleConfigChange({ outputSchema: e.target.value })}
+                      placeholder='{"type":"object","properties":{"result":{"type":"string"}}}'
+                      rows={2}
+                    />
+                    <p className="mt-1 text-[10px] text-gray-400">Optional. Documents what this node outputs so downstream nodes can reference the structure.</p>
                   </label>
                 </div>
               )}
@@ -423,14 +427,28 @@ export default function FlowEditPage() {
                 <div className="space-y-3">
                   <label className="block">
                     <span className="text-xs font-medium text-gray-700">Prompt for the User</span>
-                    <textarea
-                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px]"
-                      value={selectedNode.data.config.prompt || ''}
-                      onChange={(e) => handleConfigChange({ prompt: e.target.value })}
-                      placeholder="Please review the generated content before proceeding..."
-                      rows={3}
-                    />
-                    <p className="mt-1 text-[10px] text-gray-400">Shown to the human reviewer when the flow pauses.</p>
+                    <textarea className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px]" value={selectedNode.data.config.prompt || ''} onChange={(e) => handleConfigChange({ prompt: e.target.value })} placeholder="Please review the generated content before proceeding..." rows={3} />
+                  </label>
+                  <div className="bg-gray-50 rounded-lg border p-2 space-y-1.5">
+                    <span className="text-xs font-semibold text-gray-700 block">Buttons</span>
+                    {(selectedNode.data.config.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }]).map((btn: any, i: number) => (
+                      <div key={i} className="flex items-center gap-0.5">
+                        <input className="w-28 rounded border border-gray-300 px-1.5 py-1.5 text-[11px]" value={btn.label} onChange={(e) => { const btns = [...(selectedNode.data.config.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }])]; btns[i] = { ...btns[i], label: e.target.value }; handleConfigChange({ buttons: btns }); }} placeholder="Label" />
+                        <input className="w-28 rounded border border-gray-300 px-1.5 py-1.5 text-[11px] font-mono" value={btn.value} onChange={(e) => { const btns = [...(selectedNode.data.config.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }])]; btns[i] = { ...btns[i], value: e.target.value }; handleConfigChange({ buttons: btns }); }} placeholder="val" />
+                        <button onClick={() => { const btns = [...(selectedNode.data.config.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }])]; btns.splice(i, 1); handleConfigChange({ buttons: btns.length > 0 ? btns : [{ label: 'Approve', value: 'approved' }] }); }} className="w-6 h-6 flex items-center justify-center text-xs bg-red-200 text-red-800 rounded hover:bg-red-300 shrink-0 font-bold" title="Remove">✕</button>
+                      </div>
+                    ))}
+                    <button onClick={() => { const btns = [...(selectedNode.data.config.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }])]; handleConfigChange({ buttons: [...btns, { label: '', value: '' }] }); }} className="text-[11px] text-blue-600 hover:underline mt-1 block">+ Add</button>
+                  </div>
+                  <label className="block">
+                    <span className="text-xs font-medium text-gray-700">Fields to Display (what the user sees)</span>
+                    <input className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm" value={(selectedNode.data.config.displayFields || []).join(', ')} onChange={(e) => handleConfigChange({ displayFields: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) })} placeholder="transactions, summary" />
+                    <p className="mt-1 text-[10px] text-gray-400">Only these fields are shown to the reviewer. Empty = show all.</p>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-gray-700">Fields to Forward (what passes to the next node)</span>
+                    <input className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm" value={(selectedNode.data.config.forwardFields || []).join(', ')} onChange={(e) => handleConfigChange({ forwardFields: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) })} placeholder="transactions" />
+                    <p className="mt-1 text-[10px] text-gray-400">Only these fields from the reviewed content are passed downstream. Empty = forward everything.</p>
                   </label>
                 </div>
               )}

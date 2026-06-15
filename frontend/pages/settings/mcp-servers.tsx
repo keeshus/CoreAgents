@@ -326,7 +326,7 @@ export default function MCPServersPage() {
                         Available Tools
                       </p>
                       <div className="space-y-1">
-                        {srv.tools.map((tool) => (
+                        {srv.tools.map((tool: any) => (
                           <div
                             key={tool.name}
                             className="bg-white rounded border px-3 py-2"

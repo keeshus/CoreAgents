@@ -243,15 +243,24 @@ router.post(
       // Handle HITL pause — save partial outputs and await approval
       if (err instanceof HitlPauseError) {
         activeExecutors.delete(exec.id);
+        // Extract what the user should see (displayFields)
+        const hitlCfg = (flow.nodes as any[])?.find((n: any) => n.id === err.nodeId)?.data?.config || {};
+        const displayFields: string[] = hitlCfg.displayFields || [];
+        const lastOutput = Object.values(err.savedOutputs).pop() as Record<string, unknown> | undefined || {};
+        const displayedContent: Record<string, unknown> = {};
+        if (displayFields.length > 0) {
+          for (const f of displayFields) { if (lastOutput[f] !== undefined) displayedContent[f] = lastOutput[f]; }
+        } else { Object.assign(displayedContent, lastOutput); }
+
         await db
           .update(executions)
-          .set({ status: 'awaiting_approval', output: err.savedOutputs as any })
+          .set({ status: 'awaiting_approval', output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlDisplayed: displayedContent } as any })
           .where(eq(executions.id, exec.id));
 
         emitSSE({
           type: 'execution.paused',
           executionId: exec.id,
-          data: { nodeId: err.nodeId, savedOutputs: err.savedOutputs, message: 'Waiting for human approval' },
+          data: { nodeId: err.nodeId, savedOutputs: err.savedOutputs, buttons: err.buttons, prompt: err.prompt, message: 'Waiting for human approval' },
           timestamp: new Date().toISOString(),
         });
         res.end();
@@ -287,7 +296,7 @@ router.post(
 
 router.post('/executions/:executionId/approve', asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
-  const { feedback = '', data: userData = {} } = req.body || {};
+  const { feedback = '', decision = 'approved', data: userData = {} } = req.body || {};
 
   const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));
   if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
@@ -331,7 +340,7 @@ router.post('/executions/:executionId/approve', asyncHandler(async (req, res) =>
 
   const executor = new FlowExecutor();
   const savedOutputs = (exec.output || {}) as Record<string, unknown>;
-  const mergedInput = { ...(exec.input || {}), _approved: true, _feedback: feedback, ...userData };
+  const mergedInput = { ...(exec.input || {}), _approved: true, _feedback: feedback, _decision: decision, ...userData };
 
   try {
     const result = await executor.execute(

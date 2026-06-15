@@ -112,8 +112,21 @@ export default function ExecutionHistoryPage() {
                 <div className="flex items-center gap-2">
                   {exec.status === 'awaiting_approval' && (
                     <>
-                      <button onClick={async (e) => { e.stopPropagation(); await fetch(`${API_URL}/executions/${exec.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feedback: '' }) }); window.location.reload(); }} className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 shrink-0"><CheckCircle className="w-3 h-3" />Approve</button>
-                      <button onClick={async (e) => { e.stopPropagation(); await fetch(`${API_URL}/executions/${exec.id}/reject`, { method: 'POST' }); window.location.reload(); }} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 shrink-0"><XCircle className="w-3 h-3" />Reject</button>
+                      {(exec.output?._hitlButtons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }]).map((btn: any) => (
+                        <button key={btn.value} onClick={async (e) => {
+                          e.stopPropagation();
+                          if (btn.value === 'rejected') {
+                            await fetch(`${API_URL}/executions/${exec.id}/reject`, { method: 'POST' });
+                          } else {
+                            await fetch(`${API_URL}/executions/${exec.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: btn.value, feedback: '' }) });
+                          }
+                          window.location.reload();
+                        }} className={`flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0 ${
+                          btn.value === 'rejected' ? 'bg-red-100 text-red-700 hover:bg-red-200' :
+                          btn.value === 'approved' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
+                          'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                        }`}><CheckCircle className="w-3 h-3" />{btn.label}</button>
+                      ))}
                     </>
                   )}
                   {exec.status === 'running' && (

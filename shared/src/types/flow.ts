@@ -86,6 +86,7 @@ export interface CodeNodeData extends BaseNodeData {
   config: {
     language: 'javascript' | 'python';
     code: string;
+    outputSchema?: string;
   };
 }
 
@@ -108,7 +109,9 @@ export interface HitlNodeData extends BaseNodeData {
   type: 'hitl';
   config: {
     prompt: string;
-    inputFields: string[];
+    displayFields: string[];
+    forwardFields: string[];
+    buttons: Array<{ label: string; value: string }>;
   };
 }
 
