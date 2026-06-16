@@ -263,18 +263,36 @@ export default function EndpointsPage() {
               </label>
             </div>
 
-            <label className="block">
-              <span className="text-xs font-medium text-gray-700">
-                Models <span className="text-gray-400">(comma-separated)</span>
-              </span>
-              <textarea
-                className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px]"
-                value={form.models}
-                onChange={(e) => setForm((f) => ({ ...f, models: e.target.value }))}
-                placeholder="claude-sonnet-4-20250514, claude-haiku-3-20250313"
-                rows={2}
-              />
-            </label>
+            <div className="col-span-2">
+              <span className="text-xs font-medium text-gray-700 block mb-1">Models</span>
+              <div className="space-y-1.5">
+                {(form.models ? form.models.split(',').map(s => s.trim()).filter(Boolean) : []).map((model, i) => (
+                  <div key={i} className="flex items-center gap-1">
+                    <input
+                      className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs"
+                      value={model}
+                      onChange={(e) => {
+                        const list = form.models.split(',').map(s => s.trim()).filter(Boolean);
+                        list[i] = e.target.value;
+                        setForm((f) => ({ ...f, models: list.join(', ') }));
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const list = form.models.split(',').map(s => s.trim()).filter(Boolean);
+                        list.splice(i, 1);
+                        setForm((f) => ({ ...f, models: list.join(', ') }));
+                      }}
+                      className="px-1.5 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 shrink-0 font-bold"
+                    >✕</button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setForm((f) => ({ ...f, models: f.models ? f.models + ', ' : '' }))}
+                  className="text-[11px] text-blue-600 hover:underline"
+                >+ Add model</button>
+              </div>
+            </div>
 
             <div className="flex items-center gap-2 justify-end">
               <button
