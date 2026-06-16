@@ -1,5 +1,5 @@
 name: Dependabot Auto-Merge
-on: pull_request
+on: pull_request_target
 
 permissions:
   contents: write
@@ -16,8 +16,14 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Enable auto-merge for non-major updates
-        # Only auto-merge if it's NOT a major version bump
+      - name: Auto-approve patch and minor updates
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{github.event.pull_request.html_url}}
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+      - name: Enable auto-merge for patch and minor updates
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
