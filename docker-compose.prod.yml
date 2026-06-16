@@ -28,6 +28,13 @@ services:
     networks:
       - core-agents
 
+  valkey:
+    image: valkey/valkey:7-alpine
+    container_name: core-agents-valkey
+    restart: unless-stopped
+    networks:
+      - core-agents
+
   backend:
     build:
       context: .
@@ -59,7 +66,10 @@ services:
       DATABASE_URL: postgres://${DB_USER:-coreagents}:${DB_PASSWORD:-coreagents}@postgres:5432/${DB_NAME:-coreagents}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      VALKEY_HOST: valkey
     depends_on:
+      valkey:
+        condition: service_started
       postgres:
         condition: service_healthy
     networks:

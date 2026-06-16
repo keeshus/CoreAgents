@@ -41,12 +41,23 @@ services:
       - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
     restart: always
 
+  valkey:
+    image: valkey/valkey:7-alpine
+    container_name: core-agents-valkey
+    ports:
+      - "6379:6379"
+    restart: always
+
   worker:
     container_name: core-agents-worker
     build:
       context: ./worker
       dockerfile: Dockerfile
     restart: always
+    environment:
+      - VALKEY_HOST=valkey
+    depends_on:
+      - valkey
 
   frontend:
     container_name: core-agents-frontend
