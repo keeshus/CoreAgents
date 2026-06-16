@@ -250,16 +250,32 @@ export default function EndpointsPage() {
 
               <label className="block">
                 <span className="text-xs font-medium text-gray-700">Default Model</span>
-                <input
-                  type="text"
-                  required
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                  value={form.defaultModel}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, defaultModel: e.target.value }))
+                {(() => {
+                  const parsed = form.models.split(',').map(s => s.trim()).filter(Boolean);
+                  if (parsed.length > 0) {
+                    return (
+                      <select
+                        required
+                        className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
+                        value={form.defaultModel}
+                        onChange={(e) => setForm((f) => ({ ...f, defaultModel: e.target.value }))}
+                      >
+                        <option value="">Select default...</option>
+                        {parsed.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    );
                   }
-                  placeholder="claude-sonnet-4-20250514"
-                />
+                  return (
+                    <input
+                      type="text"
+                      required
+                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
+                      value={form.defaultModel}
+                      onChange={(e) => setForm((f) => ({ ...f, defaultModel: e.target.value }))}
+                      placeholder="claude-sonnet-4-20250514"
+                    />
+                  );
+                })()}
               </label>
             </div>
 
