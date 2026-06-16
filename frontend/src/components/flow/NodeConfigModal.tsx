@@ -485,35 +485,48 @@ export function NodeConfigModal({
                   + Add Button
                 </button>
               </div>
-              <label className="block">
-                <span className="text-sm font-medium text-gray-700">Fields to Display (what the user sees)</span>
-                <div className="mt-1 space-y-1.5">
-                  {(node.data.config.displayFields || []).map((f: string, i: number) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input className="flex-1 rounded border border-gray-300 p-2 text-sm" value={f} onChange={(e) => { const list = [...(node.data.config.displayFields || [])]; list[i] = e.target.value; onConfigChange({ displayFields: list }); }} placeholder="Field name" />
-                      <button type="button" onClick={() => { const list = [...(node.data.config.displayFields || [])]; list.splice(i, 1); onConfigChange({ displayFields: list }); }} className="px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 shrink-0 font-bold">✕</button>
-                    </div>
-                  ))}
-                  <button type="button" onClick={() => onConfigChange({ displayFields: [...(node.data.config.displayFields || []), ''] })} className="text-sm text-blue-600 hover:underline block">+ Add field</button>
+              <div className="space-y-3">
+                <div>
+                  <span className="text-sm font-medium text-gray-700 block mb-1">Fields to Display (what the user sees)</span>
+                  <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                    {upstreamFieldNames.length === 0 && <p className="text-xs text-gray-400">No upstream data available yet.</p>}
+                    {upstreamFieldNames.map((f) => {
+                      const selected = (node.data.config.displayFields || []).includes(f);
+                      return (
+                        <label key={f} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
+                          <input type="checkbox" checked={selected || (node.data.config.displayFields || []).length === 0} onChange={() => {
+                            const list = [...(node.data.config.displayFields || [])];
+                            if (selected) onConfigChange({ displayFields: list.filter(x => x !== f) });
+                            else onConfigChange({ displayFields: [...list, f] });
+                          }} className="rounded" />
+                          <span>{f}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Checked fields are shown to the reviewer. Empty = show all.</p>
                 </div>
-                <p className="mt-1 text-xs text-gray-400">Empty = show all fields.</p>
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-gray-700">Fields to Forward (what passes to the next node)</span>
-                <div className="mt-1 space-y-1.5">
-                  {(node.data.config.forwardFields || []).map((f: string, i: number) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input className="flex-1 rounded border border-gray-300 p-2 text-sm" value={f} onChange={(e) => { const list = [...(node.data.config.forwardFields || [])]; list[i] = e.target.value; onConfigChange({ forwardFields: list }); }} placeholder="Field name" />
-                      <button type="button" onClick={() => { const list = [...(node.data.config.forwardFields || [])]; list.splice(i, 1); onConfigChange({ forwardFields: list }); }} className="px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 shrink-0 font-bold">✕</button>
-                    </div>
-                  ))}
-                  <button type="button" onClick={() => onConfigChange({ forwardFields: [...(node.data.config.forwardFields || []), ''] })} className="text-sm text-blue-600 hover:underline block">+ Add field</button>
+                <div>
+                  <span className="text-sm font-medium text-gray-700 block mb-1">Fields to Forward (to the next node)</span>
+                  <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                    {upstreamFieldNames.length === 0 && <p className="text-xs text-gray-400">No upstream data available yet.</p>}
+                    {upstreamFieldNames.map((f) => {
+                      const selected = (node.data.config.forwardFields || []).includes(f);
+                      return (
+                        <label key={f} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
+                          <input type="checkbox" checked={selected || (node.data.config.forwardFields || []).length === 0} onChange={() => {
+                            const list = [...(node.data.config.forwardFields || [])];
+                            if (selected) onConfigChange({ forwardFields: list.filter(x => x !== f) });
+                            else onConfigChange({ forwardFields: [...list, f] });
+                          }} className="rounded" />
+                          <span>{f}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Checked fields are passed to the next node. Empty = forward all.</p>
                 </div>
-                <p className="mt-1 text-xs text-gray-400">Empty = forward all fields.</p>
-              </label>
-                  everything.
-                </p>
-              </label>
+              </div>
             </div>
           )}
 
