@@ -174,3 +174,10 @@ export const vectorStores = pgTable('vector_stores', {
   created_at: timestamp('created_at').notNull().defaultNow(),
   updated_at: timestamp('updated_at').notNull().defaultNow(),
 });
+
+export const agentStore = pgTable('agent_store', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull().default('null'),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});

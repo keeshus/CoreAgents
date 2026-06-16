@@ -115,11 +115,23 @@ export class FlowExecutor {
 
       const stepInput = this.prepareInput(node, flow.edges, nodeOutputs);
 
+      // If node has inputFields set, filter stepInput to only those fields
+      const nodeConfig = (node.data as any)?.config || {};
+      const inputFields = nodeConfig.inputFields as string[] | undefined;
+      const filteredInput = inputFields && inputFields.length > 0 && stepInput && typeof stepInput === 'object'
+        ? Object.fromEntries(
+            inputFields
+              .map(f => [f, (stepInput as Record<string, unknown>)[f]])
+              .filter(([, v]) => v !== undefined)
+          )
+        : stepInput;
+
       // Enrich step input with node config for debugging (LLM prompt, model, etc.)
       const enrichedInput: Record<string, unknown> = {
-        ...(stepInput as Record<string, unknown> || {}),
+        ...(filteredInput as Record<string, unknown> || {}),
         _nodeType: node.data.type,
         _nodeLabel: node.data.label || node.data.type,
+        _rawInput: filteredInput !== stepInput ? stepInput : undefined,
       };
       if (node.data.type === 'llm-agent') {
         const cfg = (node.data as any).config || {};
@@ -142,7 +154,7 @@ export class FlowExecutor {
 
       try {
         // For HITL replay: separate what was displayed vs what gets forwarded
-        let nodeInput = stepInput;
+        let nodeInput = filteredInput;
         if (node.data.type === 'hitl' && replayFrom && node.id === replayFrom) {
           const cfg = (node.data as any)?.config || {};
           const displayFields: string[] = cfg.displayFields || [];
@@ -157,7 +169,7 @@ export class FlowExecutor {
             for (const f of forwardFields) { if (raw[f] !== undefined) forwarded[f] = raw[f]; }
           } else { Object.assign(forwarded, raw); }
           // Store displayed for UI, pass forwarded to next node
-          nodeInput = { ...(stepInput as any), _reviewedContent: forwarded };
+          nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
         }
         const output = await this.executeNode(node, nodeInput, context, onEvent);
         nodeOutputs.set(node.id, output);
@@ -309,6 +321,21 @@ export class FlowExecutor {
             } catch { /* skip unavailable servers */ }
           }
         }
+
+        // Auto-inject built-in tools so the LLM can use store, file, utility tools
+        toolDefs.push(
+          { name: 'store.get', description: 'Read a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
+          { name: 'store.set', description: 'Persist a value by key (upserts)', input_schema: { type: 'object', properties: { key: { type: 'string' }, value: { type: 'string', description: 'Any JSON-serializable value' } }, required: ['key', 'value'] } },
+          { name: 'store.delete', description: 'Remove a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
+          { name: 'store.list', description: 'List all stored keys', input_schema: { type: 'object', properties: {} } },
+          { name: 'file.read', description: 'Read a file from the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+          { name: 'file.write', description: 'Write content to a file in the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
+          { name: 'file.list', description: 'List files in a directory', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+          { name: 'now', description: 'Get the current UTC date and time', input_schema: { type: 'object', properties: {} } },
+          { name: 'uuid', description: 'Generate a UUID', input_schema: { type: 'object', properties: {} } },
+          { name: 'log', description: 'Write a log entry (info/warn/error)', input_schema: { type: 'object', properties: { level: { type: 'string' }, message: { type: 'string' } }, required: ['message'] } },
+          { name: 'fetch', description: 'Perform an HTTP GET request', input_schema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
+        );
 
         // Token streaming callback
         let streamedContent = '';
@@ -566,7 +593,8 @@ export class FlowExecutor {
         for (const r of results) {
           merged[r.id] = r.output;
         }
-        return { ...(input as Record<string, unknown>) || {}, merged, results };
+        // Flatten child outputs into the result for easy downstream access
+        return { ...(input as Record<string, unknown>) || {}, ...merged };
       }
 
       case 'hitl': {

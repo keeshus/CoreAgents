@@ -57,8 +57,14 @@ backend:
       cpu: 500m
       memory: 512Mi
 
-# ── Worker ───────────────────────────────────────────────────────
-worker:
+# ── Valkey (Redis-compatible queue backend) ──────────────────────
+valkey:
+  enabled: true
+  image: valkey/valkey:7-alpine
+  storage: 1Gi
+
+# ── Scheduler ────────────────────────────────────────────────────
+scheduler:
   replicaCount: 1
   resources:
     requests:
@@ -66,7 +72,23 @@ worker:
       memory: 128Mi
     limits:
       cpu: 500m
+      memory: 256Mi
+
+# ── Worker ───────────────────────────────────────────────────────
+worker:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetQueueDepth: 10
+  resources:
+    requests:
+      cpu: 500m
       memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
 
 # ── Frontend ─────────────────────────────────────────────────────
 frontend:

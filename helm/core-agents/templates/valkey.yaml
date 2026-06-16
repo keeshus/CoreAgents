@@ -1,0 +1,51 @@
+{{- if .Values.valkey.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "core-agents.fullname" . }}-valkey
+  labels:
+    {{- include "core-agents.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "core-agents.fullname" . }}-valkey
+  template:
+    metadata:
+      labels:
+        app: {{ include "core-agents.fullname" . }}-valkey
+    spec:
+      containers:
+        - name: valkey
+          image: {{ .Values.valkey.image }}
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "core-agents.fullname" . }}-valkey-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "core-agents.fullname" . }}-valkey-pvc
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.valkey.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "core-agents.fullname" . }}-valkey
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+  selector:
+    app: {{ include "core-agents.fullname" . }}-valkey
+{{- end }}

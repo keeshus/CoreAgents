@@ -50,6 +50,7 @@ export interface LLMAgentNodeData extends BaseNodeData {
     maxTokens: number;
     responseFormat: 'text' | 'json_object';
     outputSchema?: string;
+    inputFields?: string[];
   };
 }
 
@@ -78,6 +79,7 @@ export interface BranchNodeData extends BaseNodeData {
   config: {
     condition: string;
     outputLabels: string[];
+    inputFields?: string[];
   };
 }
 
@@ -87,6 +89,7 @@ export interface CodeNodeData extends BaseNodeData {
     language: 'javascript' | 'python';
     code: string;
     outputSchema?: string;
+    inputFields?: string[];
   };
 }
 

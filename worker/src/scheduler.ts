@@ -1,13 +1,14 @@
 /**
  * Scheduler for cron-based flow triggers.
- * Runs in the worker process. Checks for scheduled flows every 30 seconds.
+ * Checks for scheduled flows every 30 seconds and pushes them to the BullMQ queue.
  */
-import { FlowExecutor } from './executor/engine.js';
+import { enqueueExecution } from './queue.js';
 
 interface ScheduledFlow {
   flowId: string;
   flowName: string;
   cronExpression: string;
+  scheduleInput?: string;
   nodes: any[];
   edges: any[];
 }
@@ -79,14 +80,9 @@ export class Scheduler {
   private schedules = new Map<string, ScheduleEntry>();
   private interval: NodeJS.Timeout | null = null;
   private loadFn: () => Promise<ScheduledFlow[]>;
-  private executeFn: (flow: ScheduledFlow) => Promise<void>;
 
-  constructor(
-    loadFn: () => Promise<ScheduledFlow[]>,
-    executeFn: (flow: ScheduledFlow) => Promise<void>,
-  ) {
+  constructor(loadFn: () => Promise<ScheduledFlow[]>) {
     this.loadFn = loadFn;
-    this.executeFn = executeFn;
   }
 
   async start(): Promise<void> {
@@ -149,9 +145,33 @@ export class Scheduler {
 
       console.log(`Scheduler: triggering flow "${flow.flowName}" (${flow.flowId})`);
 
-      // Fire and forget — don't block the scheduler
-      this.executeFn(flow).catch(err => {
-        console.error(`Scheduler: flow "${flow.flowName}" failed:`, err.message);
+      // Build a FlowDefinition from the scheduled flow data
+      const flowDef = {
+        id: flow.flowId,
+        name: flow.flowName,
+        description: '',
+        nodes: flow.nodes,
+        edges: flow.edges,
+        version: 1,
+        createdAt: '',
+        updatedAt: '',
+      };
+
+      // Build input payload
+      const input: Record<string, unknown> = (() => {
+        const raw = flow.scheduleInput?.trim();
+        if (!raw) return { triggerType: 'schedule', timestamp: new Date().toISOString() };
+        try {
+          const parsed = JSON.parse(raw);
+          return { triggerType: 'schedule', timestamp: new Date().toISOString(), ...parsed };
+        } catch {
+          return { triggerType: 'schedule', timestamp: new Date().toISOString(), message: raw };
+        }
+      })();
+
+      // Enqueue rather than executing inline
+      enqueueExecution(flowDef, input).catch(err => {
+        console.error(`Scheduler: failed to enqueue flow "${flow.flowName}":`, err.message);
       });
     }
   }

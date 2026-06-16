@@ -1,23 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "core-agents.fullname" . }}-worker
+  name: {{ include "core-agents.fullname" . }}-scheduler
   labels:
     {{- include "core-agents.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.worker.replicaCount }}
+  replicas: {{ .Values.scheduler.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "core-agents.fullname" . }}-worker
+      app: {{ include "core-agents.fullname" . }}-scheduler
   template:
     metadata:
       labels:
-        app: {{ include "core-agents.fullname" . }}-worker
+        app: {{ include "core-agents.fullname" . }}-scheduler
     spec:
       containers:
-        - name: worker
+        - name: scheduler
           image: "{{ .Values.image.repository }}-worker:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["node", "worker/dist/scheduler-run.js"]
           env:
             - name: VALKEY_HOST
               value: {{ include "core-agents.fullname" . }}-valkey
@@ -25,4 +26,4 @@ spec:
             - secretRef:
                 name: {{ include "core-agents.fullname" . }}-secret
           resources:
-            {{- toYaml .Values.worker.resources | nindent 12 }}
+            {{- toYaml .Values.scheduler.resources | nindent 12 }}
