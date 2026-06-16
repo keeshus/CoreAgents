@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { X, Trash2 } from 'lucide-react';
-import { InputPreview, getUpstreamNodeIds, getNodeFields } from '@/components/flow/config/InputPreview';
+import { getUpstreamNodeIds, getNodeFields } from '@/components/flow/config/InputPreview';
 import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
 import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
@@ -138,15 +138,6 @@ export function NodeConfigModal({
 
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* Incoming Data Shape (read-only preview with checkbox indicators) */}
-          <InputPreview
-            edges={edges}
-            nodes={nodes}
-            selectedNodeId={node.id}
-            inputFields={configInputFields}
-            filteredFields={filteredFields}
-          />
-
           {/* ── Input Field Selection ── */}
           {upstreamFieldNames.length > 0 && (
             <div className="mb-4">
