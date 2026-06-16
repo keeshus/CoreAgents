@@ -294,6 +294,7 @@ export default function EndpointsPage() {
                       }}
                     />
                     <button
+                      type="button"
                       onClick={() => {
                         const list = form.models.split(',').map(s => s.trim()).filter(Boolean);
                         list.splice(i, 1);
@@ -304,6 +305,7 @@ export default function EndpointsPage() {
                   </div>
                 ))}
                 <button
+                  type="button"
                   onClick={() => setForm((f) => ({ ...f, models: f.models ? f.models + ', ' : '' }))}
                   className="text-[11px] text-blue-600 hover:underline"
                 >+ Add model</button>
