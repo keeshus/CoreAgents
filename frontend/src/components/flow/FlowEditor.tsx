@@ -67,35 +67,52 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     });
   }, [nodes, edges]);
 
-  // Auto-size parallel nodes based on children
+  // Auto-size parallel nodes based on children + snap children to grid
   useEffect(() => {
     setNodes((nds) => {
       let changed = false;
       const updated = nds.map(n => {
+        // Make children undraggable and snap them to grid positions
+        if (n.parentId) {
+          const parent = nds.find(p => p.id === n.parentId);
+          if (!parent || parent.type !== 'parallel') return n;
+          const siblings = nds
+            .filter(c => c.parentId === n.parentId)
+            .sort((a, b) => a.id.localeCompare(b.id));
+          const idx = siblings.findIndex(c => c.id === n.id);
+          if (idx < 0) return n;
+          let ty = 50;
+          for (let i = 0; i < idx; i++) {
+            const prev = siblings[i];
+            const h = prev.measured?.height || 100;
+            ty += h + 20;
+          }
+          if (n.position.x !== 20 || n.position.y !== ty) {
+            changed = true;
+            return { ...n, position: { x: 20, y: ty }, draggable: false } as any;
+          }
+          return { ...n, draggable: false } as any;
+        }
+
+        // Auto-size parallel containers
         if (n.type !== 'parallel') return n;
         const children = nds.filter(c => c.parentId === n.id);
-        const hasChildren = children.length > 0;
-        // Default size when empty
-        if (!hasChildren) {
+        if (children.length === 0) {
           if (n.style?.width !== 320 || n.style?.height !== 240) {
-            return { ...n, style: { ...n.style, width: 320, height: 240 } };
+            return { ...n, style: { ...n.style, width: 340, height: 260 } };
           }
           return n;
         }
-        // Calculate required size from children's relative positions
-        const maxRight = Math.max(...children.map(c => {
-          const cw = c.measured?.width || c.width || 200;
-          return (c.position.x || 0) + Number(cw);
+        const widestChild = Math.max(...children.map(c => {
+          const cw = Number(c.measured?.width || c.width) || 200;
+          return cw;
         }));
-        const maxBottom = Math.max(...children.map(c => {
-          const ch = c.measured?.height || c.height || 80;
-          return (c.position.y || 0) + Number(ch);
-        }));
-        const newW = Math.max(320, maxRight + 80);
-        const newH = Math.max(240, maxBottom + 80);
-        const oldW = (n.style?.width || n.width) as number || 300;
-        const oldH = (n.style?.height || n.height) as number || 200;
-        if (Math.abs(Number(oldW) - newW) > 10 || Math.abs(Number(oldH) - newH) > 10) {
+        const totalHeight = children.reduce((sum, c) => {
+          return sum + Number(c.measured?.height || c.height || 100) + 20;
+        }, 30); // 30px initial offset
+        const newW = Math.max(340, widestChild + 60);
+        const newH = Math.max(240, totalHeight + 60);
+        if (Math.abs(Number(n.style?.width || n.width || 340) - newW) > 5 || Math.abs(Number(n.style?.height || n.height || 240) - newH) > 5) {
           changed = true;
           return { ...n, style: { ...n.style, width: newW, height: newH } };
         }
@@ -105,7 +122,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     });
   }, [nodes]);
 
-  // Helper: re-layout children inside a parallel node
+  // Helper: re-layout children inside a parallel node (used by drag-stop handler)
   const layoutChildren = useCallback((parentId: string, nds: Node[]) => {
     const children = nds
       .filter(n => n.parentId === parentId)
@@ -114,7 +131,6 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
       if (n.parentId !== parentId) return n;
       const idx = children.findIndex(c => c.id === n.id);
       if (idx < 0) return n;
-      // Calculate Y: start at 50, each previous child contributes its height + 20px gap
       let ty = 50;
       for (let i = 0; i < idx; i++) {
         const prev = children[i];
