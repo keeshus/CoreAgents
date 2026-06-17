@@ -189,7 +189,8 @@ export class FlowExecutor {
           nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
         }
         const output = await this.executeNode(node, nodeInput, context, onEvent);
-        nodeOutputs.set(node.data.label || node.id, output);
+        const outputKey = (node.data.label || node.id).replace(/\s+/g, '_');
+        nodeOutputs.set(outputKey, output);
 
         await onEvent(node.id, {
           type: 'step.completed',
