@@ -226,12 +226,48 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
       <div className="flex-1 overflow-hidden flex">
         {/* Step trace panel */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-          {status === 'idle' && steps.length === 0 && (
+          {steps.length === 0 && status === 'idle' && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <Bot className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500 font-medium">Ready to debug</p>
                 <p className="text-sm text-gray-400 mt-1">Click &quot;Start Debug Run&quot; to trace your flow step by step</p>
+              </div>
+            </div>
+          )}
+
+          {steps.length === 0 && status === 'running' && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <Loader2 className="w-10 h-10 text-blue-500 animate-spin mx-auto mb-4" />
+                <p className="text-gray-500 font-medium">Executing flow...</p>
+              </div>
+            </div>
+          )}
+
+          {steps.length === 0 && (status === 'completed' || status === 'failed') && (
+            <div className="max-w-3xl mx-auto mt-8">
+              <div className="bg-white rounded-lg border p-6 text-center">
+                {status === 'completed' ? (
+                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                ) : (
+                  <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+                )}
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  {status === 'completed' ? 'Execution Completed' : 'Execution Failed'}
+                </h3>
+                {error && <p className="text-sm text-red-600 font-mono mt-2">{error}</p>}
+                {finalOutput && (
+                  <pre className="text-xs bg-gray-50 p-3 rounded mt-4 text-left overflow-auto max-h-64">
+                    {JSON.stringify(finalOutput, null, 2)}
+                  </pre>
+                )}
+                {!error && !finalOutput && (
+                  <p className="text-sm text-gray-500">No output data was returned.</p>
+                )}
+                <button onClick={run} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+                  Run Again
+                </button>
               </div>
             </div>
           )}
