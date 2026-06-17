@@ -72,10 +72,7 @@ export function getNodeFields(node: any): FieldEntry[] {
           /* ignore parse errors */
         }
       }
-      return [
-        { name: 'message', type: 'any', required: true },
-        { name: '...input', type: 'any', required: true },
-      ];
+      return [{ name: 'message', type: 'any', required: true }];
     }
 
     case 'llm-agent': {
