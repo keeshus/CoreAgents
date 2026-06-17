@@ -38,13 +38,13 @@ export interface BuiltInToolInfo {
 }
 
 export const BUILT_IN_TOOLS: BuiltInToolInfo[] = [
-  { name: 'store.get', description: 'Read a persisted value by key from the agent store' },
-  { name: 'store.set', description: 'Persist a value by key (upserts)' },
-  { name: 'store.delete', description: 'Remove a persisted value by key' },
-  { name: 'store.list', description: 'List all stored keys' },
-  { name: 'file.read', description: 'Read a file from the shared workspace' },
-  { name: 'file.write', description: 'Write content to a file in the shared workspace' },
-  { name: 'file.list', description: 'List directory contents in the shared workspace' },
+  { name: 'store_get', description: 'Read a persisted value by key from the agent store' },
+  { name: 'store_set', description: 'Persist a value by key (upserts)' },
+  { name: 'store_delete', description: 'Remove a persisted value by key' },
+  { name: 'store_list', description: 'List all stored keys' },
+  { name: 'file_read', description: 'Read a file from the shared workspace' },
+  { name: 'file_write', description: 'Write content to a file in the shared workspace' },
+  { name: 'file_list', description: 'List directory contents in the shared workspace' },
   { name: 'now', description: 'Get the current UTC date and time' },
   { name: 'uuid', description: 'Generate a version 4 UUID' },
   { name: 'log', description: 'Write a log entry (info/warn/error)' },
@@ -150,7 +150,7 @@ export async function startBuiltInMCPServer(options: BuiltInMCPServerOptions): P
     try {
       switch (name) {
         // ── Store tools ─────────────────────────────────────────────────────
-        case 'store.get': {
+        case 'store_get': {
           const result = await db.execute(`SELECT value FROM agent_store WHERE key = $1`, [args?.key]);
           const row = result.rows?.[0] ?? result[0]; // handle both drizzle + raw pg
           return {
@@ -158,7 +158,7 @@ export async function startBuiltInMCPServer(options: BuiltInMCPServerOptions): P
           };
         }
 
-        case 'store.set': {
+        case 'store_set': {
           await db.execute(
             `INSERT INTO agent_store (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
             [args?.key, JSON.stringify(args?.value)],
@@ -166,12 +166,12 @@ export async function startBuiltInMCPServer(options: BuiltInMCPServerOptions): P
           return { content: [{ type: 'text' as const, text: JSON.stringify({ stored: true }) }] };
         }
 
-        case 'store.delete': {
+        case 'store_delete': {
           await db.execute(`DELETE FROM agent_store WHERE key = $1`, [args?.key]);
           return { content: [{ type: 'text' as const, text: JSON.stringify({ deleted: true }) }] };
         }
 
-        case 'store.list': {
+        case 'store_list': {
           const result = await db.execute(`SELECT key FROM agent_store ORDER BY key`);
           const rows = result.rows ?? result;
           const keys = Array.isArray(rows) ? rows.map((r: any) => r.key) : [];
@@ -179,7 +179,7 @@ export async function startBuiltInMCPServer(options: BuiltInMCPServerOptions): P
         }
 
         // ── File tools ─────────────────────────────────────────────────────
-        case 'file.read': {
+        case 'file_read': {
           const safePath = resolveSafePath(workspacePath, args?.path ?? '');
           const content = await readFile(safePath, 'utf-8');
           return {
@@ -187,7 +187,7 @@ export async function startBuiltInMCPServer(options: BuiltInMCPServerOptions): P
           };
         }
 
-        case 'file.write': {
+        case 'file_write': {
           const safePath = resolveSafePath(workspacePath, args?.path ?? '');
           await mkdir(dirname(safePath), { recursive: true });
           await writeFile(safePath, args?.content ?? '', 'utf-8');
@@ -196,7 +196,7 @@ export async function startBuiltInMCPServer(options: BuiltInMCPServerOptions): P
           };
         }
 
-        case 'file.list': {
+        case 'file_list': {
           const safePath = resolveSafePath(workspacePath, args?.path ?? '');
           const entries = await readdir(safePath, { withFileTypes: true });
           const mapped = entries.map((e) => ({

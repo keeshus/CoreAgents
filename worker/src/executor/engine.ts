@@ -336,13 +336,13 @@ export class FlowExecutor {
 
         // Auto-inject built-in tools so the LLM can use store, file, utility tools
         toolDefs.push(
-          { name: 'store.get', description: 'Read a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
-          { name: 'store.set', description: 'Persist a value by key (upserts)', input_schema: { type: 'object', properties: { key: { type: 'string' }, value: { type: 'string', description: 'Any JSON-serializable value' } }, required: ['key', 'value'] } },
-          { name: 'store.delete', description: 'Remove a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
-          { name: 'store.list', description: 'List all stored keys', input_schema: { type: 'object', properties: {} } },
-          { name: 'file.read', description: 'Read a file from the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
-          { name: 'file.write', description: 'Write content to a file in the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
-          { name: 'file.list', description: 'List files in a directory', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+          { name: 'store_get', description: 'Read a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
+          { name: 'store_set', description: 'Persist a value by key (upserts)', input_schema: { type: 'object', properties: { key: { type: 'string' }, value: { type: 'string', description: 'Any JSON-serializable value' } }, required: ['key', 'value'] } },
+          { name: 'store_delete', description: 'Remove a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
+          { name: 'store_list', description: 'List all stored keys', input_schema: { type: 'object', properties: {} } },
+          { name: 'file_read', description: 'Read a file from the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+          { name: 'file_write', description: 'Write content to a file in the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
+          { name: 'file_list', description: 'List files in a directory', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
           { name: 'now', description: 'Get the current UTC date and time', input_schema: { type: 'object', properties: {} } },
           { name: 'uuid', description: 'Generate a UUID', input_schema: { type: 'object', properties: {} } },
           { name: 'log', description: 'Write a log entry (info/warn/error)', input_schema: { type: 'object', properties: { level: { type: 'string' }, message: { type: 'string' } }, required: ['message'] } },
