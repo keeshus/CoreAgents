@@ -128,26 +128,40 @@ export function NodeConfigModal({
           {upstreamLabels.length > 0 && (
             <div className="mb-4">
               <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Select Input Fields
+                Select Input Nodes
               </h4>
               <div className="bg-white border border-gray-200 rounded p-2 space-y-1">
-                {upstreamLabels.map((fieldName) => (
-                  <label
-                    key={fieldName}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={configInputFields.includes(fieldName)}
-                      onChange={() => toggleField(fieldName)}
-                      className="w-3 h-3 accent-blue-500"
-                    />
-                    <span className="text-xs font-mono text-gray-700">{fieldName}</span>
-                  </label>
-                ))}
+                {upstreamLabels.map((label) => {
+                  const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
+                  const fields = upNode ? getNodeFields(upNode) : [];
+                  return (
+                    <div key={label}>
+                      <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={configInputFields.includes(label)}
+                          onChange={() => toggleField(label)}
+                          className="w-3 h-3 accent-blue-500"
+                        />
+                        <span className="text-xs font-semibold text-gray-800">{label}</span>
+                      </label>
+                      {fields.length > 0 && (
+                        <div className="ml-5 pl-3 border-l border-gray-200 space-y-0.5 mb-1">
+                          {fields.map((f) => (
+                            <div key={f.name} className="text-[10px] font-mono text-gray-400 flex items-center gap-1">
+                              <span className="text-gray-300">└─</span>
+                              <span>{f.name}</span>
+                              <span className="text-gray-300">: {f.type}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {configInputFields.length === 0 && upstreamLabels.length > 0 && (
                   <p className="text-[10px] text-gray-400 italic pt-1 border-t border-gray-100 mt-1">
-                    None selected = all fields pass through
+                    None selected = all data passes through
                   </p>
                 )}
               </div>
