@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/run.js",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "core-agents-shared": "*",
