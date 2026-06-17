@@ -81,7 +81,6 @@ export function getNodeFields(node: any): FieldEntry[] {
     case 'llm-agent': {
       const fields: FieldEntry[] = [
         { name: 'content', type: 'string', required: true },
-        { name: 'streamedContent', type: 'string', required: true },
       ];
       if (config?.responseFormat === 'json_object' && config?.outputSchema) {
         try {

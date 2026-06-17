@@ -159,8 +159,6 @@ router.post('/chat/sessions/:sessionId/messages', asyncHandler(async (req, res) 
 
   req.on('close', () => executor.abort());
 
-  let fullResponse = '';
-
   try {
     const result = await executor.execute(
       {
@@ -179,7 +177,6 @@ router.post('/chat/sessions/:sessionId/messages', asyncHandler(async (req, res) 
         if (event.type === 'stream.token') {
           const token = event.data?.token as string;
           if (token) {
-            fullResponse += token;
             res.write(`data: ${JSON.stringify({ type: 'token', data: { token } })}\n\n`);
           }
         }
@@ -187,8 +184,11 @@ router.post('/chat/sessions/:sessionId/messages', asyncHandler(async (req, res) 
       executionContext,
     );
 
-    // Save assistant message
-    const assistantContent = fullResponse || (result.output as any)?.content || JSON.stringify(result.output);
+    // Save assistant message using the output node's result
+    const assistantContent = typeof result.output === 'object'
+      ? JSON.stringify(result.output)
+      : String(result.output);
+
     const [assistantMsg] = await db.insert(chatMessages).values({
       session_id: sessionId,
       role: 'assistant',

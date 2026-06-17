@@ -102,7 +102,7 @@ export class FlowExecutor {
         const sourceOutputs = incomingEdges.map(e => nodeOutputs.get(e.source));
         const allFiltered = incomingEdges.every((e, i) => {
           if (!e.condition?.label) return false;
-          const src = sourceOutputs[i];
+          const src = sourceOutputs[i] as Record<string, unknown> | undefined;
           const branchLabel = (src as any)?.label;
           return branchLabel !== e.condition.label;
         });
@@ -172,7 +172,7 @@ export class FlowExecutor {
           nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
         }
         const output = await this.executeNode(node, nodeInput, context, onEvent);
-        nodeOutputs.set(node.id, output);
+        nodeOutputs.set(node.data.label || node.id, output);
 
         await onEvent(node.id, {
           type: 'step.completed',
@@ -233,26 +233,19 @@ export class FlowExecutor {
   }
 
   private prepareInput(node: FlowNode, edges: FlowEdge[], nodeOutputs: Map<string, unknown>): unknown {
-    const incomingEdges = edges.filter(e => e.target === node.id);
-
-    if (incomingEdges.length === 0) {
-      // No incoming edges: use the flow input
-      return nodeOutputs.get('__input__');
+    const accumulated: Record<string, unknown> = {};
+    // First, spread __input__ fields so flags like _approved are accessible
+    const flowInput = nodeOutputs.get('__input__') as Record<string, unknown> | undefined;
+    if (flowInput && typeof flowInput === 'object') {
+      Object.assign(accumulated, flowInput);
     }
-
-    if (incomingEdges.length === 1) {
-      return nodeOutputs.get(incomingEdges[0].source);
-    }
-
-    // Multiple incoming: merge all
-    const merged: Record<string, unknown> = {};
-    for (const e of incomingEdges) {
-      const sourceOutput = nodeOutputs.get(e.source);
-      if (sourceOutput !== undefined) {
-        merged[e.source] = sourceOutput;
+    // Then add all node outputs (overwrite __input__ keys with same name)
+    for (const [key, value] of nodeOutputs) {
+      if (key !== '__input__') {
+        accumulated[key] = value;
       }
     }
-    return merged;
+    return accumulated;
   }
 
   private async executeNode(
@@ -264,8 +257,9 @@ export class FlowExecutor {
     const nodeData = node.data as NodeData;
 
     switch (nodeData.type) {
-      case 'trigger':
-        return input; // Pass through
+      case 'trigger': {
+        return input;
+      }
 
       case 'llm-agent': {
         const config = (nodeData as any).config;
@@ -338,9 +332,7 @@ export class FlowExecutor {
         );
 
         // Token streaming callback
-        let streamedContent = '';
         const onToken = (token: string) => {
-          streamedContent += token;
           onEvent(node.id, {
             type: 'stream.token',
             executionId: '',
@@ -354,7 +346,6 @@ export class FlowExecutor {
         const MAX_TOOL_ROUNDS = 5;
         const conversation = [...messages];
         let finalContent = '';
-        let finalStreamed = '';
 
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           if (this.abortController.signal.aborted) break;
@@ -380,7 +371,6 @@ export class FlowExecutor {
 
           if (response.text) {
             finalContent = response.text;
-            finalStreamed = streamedContent || response.text;
           }
 
           // If no tool calls, we're done
@@ -436,20 +426,13 @@ export class FlowExecutor {
           }
         }
 
-        // Auto-parse JSON output so downstream nodes get structured fields
-        // Preserve input data so information flows through
-        const result: Record<string, unknown> = {
-          ...(input as Record<string, unknown>) || {},
-          content: finalContent,
-          streamedContent: finalStreamed || finalContent,
-        };
+        
+        const result: Record<string, unknown> = { content: finalContent };
         if (config?.responseFormat === 'json_object' && finalContent) {
           try {
             const parsed = JSON.parse(finalContent);
-            if (typeof parsed === 'object' && parsed !== null) {
-              Object.assign(result, parsed);
-            }
-          } catch { /* not valid JSON, leave as-is */ }
+            if (typeof parsed === 'object' && parsed !== null) Object.assign(result, parsed);
+          } catch {}
         }
         return result;
       }
@@ -478,7 +461,8 @@ export class FlowExecutor {
         }
 
         const toolResult = await mcpHub.callTool(server.id, config.toolName, config.parameters || {});
-        return { ...(input as Record<string, unknown>) || {}, result: toolResult, toolName: config.toolName, serverName: server.name };
+        
+        return { result: toolResult, toolName: config.toolName, serverName: server.name };
       }
 
       case 'retriever': {
@@ -522,7 +506,8 @@ export class FlowExecutor {
 
         const contextText = chunks.map(c => c.text).join('\n\n');
 
-        return { ...(input as Record<string, unknown>) || {}, query, chunks, context: contextText, count: chunks.length };
+        
+        return { query, chunks, context: contextText, count: chunks.length };
       }
 
       case 'branch': {
@@ -545,7 +530,8 @@ export class FlowExecutor {
           verdict = false;
         }
 
-        return { ...(input as Record<string, unknown>) || {}, verdict, label: verdict ? labels[0] : labels[1] };
+        
+        return { verdict, label: verdict ? labels[0] : labels[1] };
       }
 
       case 'code': {
@@ -554,6 +540,7 @@ export class FlowExecutor {
 
         try {
           const fn = new Function('payload', code);
+          
           return fn(input);
         } catch (err) {
           throw new Error(`Code node execution failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -563,7 +550,7 @@ export class FlowExecutor {
       case 'parallel': {
         const config = (nodeData as any).config;
         const subNodes = (config?.subNodes || []) as FlowNode[];
-        if (subNodes.length === 0) return { ...(input as Record<string, unknown>) || {}, merged: {}, note: 'no sub-nodes' };
+        if (subNodes.length === 0) return { merged: {}, note: 'no sub-nodes' };
 
         // Run all sub-nodes in parallel — any failure aborts all siblings
         const parallelAbort = new AbortController();
@@ -593,14 +580,15 @@ export class FlowExecutor {
         for (const r of results) {
           merged[r.id] = r.output;
         }
-        // Flatten child outputs into the result for easy downstream access
-        return { ...(input as Record<string, unknown>) || {}, ...merged };
+        
+        return merged;
       }
 
       case 'hitl': {
         // If replaying (user already approved), pass through the decision
         const inp = input as Record<string, unknown> | undefined;
         if (inp?._approved) {
+          
           return { decision: inp._decision || 'approved', feedback: inp._feedback || '', reviewedContent: inp._reviewedContent || inp };
         }
         // First run: pause for human input
@@ -608,35 +596,9 @@ export class FlowExecutor {
       }
 
       case 'output': {
-        const fmt = (nodeData as any).config?.format || 'json';
         const inp = input as Record<string, unknown> | undefined;
 
-        if (fmt === 'text') {
-          // Extract readable content from upstream node
-          if (typeof inp?.content === 'string') return inp.content;
-          if (typeof inp === 'string') return inp;
-          return JSON.stringify(inp);
-        }
-
-        if (fmt === 'markdown') {
-          // If input is raw text (LLM already generated markdown), return as-is
-          if (typeof inp === 'string') return inp;
-          // If input has content field, return that (LLM response text)
-          if (typeof inp?.content === 'string') return inp.content;
-          // If input is structured JSON, format as a markdown table
-          if (inp && typeof inp === 'object' && !Array.isArray(inp)) {
-            const entries = Object.entries(inp).filter(([, v]) => v !== null && v !== undefined);
-            if (entries.length === 0) return '';
-            const rows = entries.map(([k, v]) => {
-              const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
-              return `| ${k} | ${val} |`;
-            });
-            return `| Field | Value |\n|--------|-------|\n${rows.join('\n')}`;
-          }
-          return String(inp);
-        }
-
-        // json: return structured as-is
+        // text and json: return accumulated data as-is
         return inp || input;
       }
 
