@@ -364,6 +364,9 @@ export class FlowExecutor {
         const conversation = [...messages];
         let finalContent = '';
 
+        // Resolve {{input.path.to.field}} template variables in system prompt
+        const resolvedPrompt = resolveTemplate(config.systemPrompt || '', input);
+
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           if (this.abortController.signal.aborted) break;
 
@@ -371,7 +374,7 @@ export class FlowExecutor {
             {
               endpointId: config.endpointId,
               model: config.model || endpoint.providerType,
-              systemPrompt: config.systemPrompt || '',
+              systemPrompt: resolvedPrompt,
               messages: conversation,
               temperature: config.temperature ?? 0.7,
               maxTokens: config.maxTokens ?? 4096,
@@ -623,4 +626,22 @@ export class FlowExecutor {
         throw new Error(`Unknown node type: ${(nodeData as any).type}`);
     }
   }
+}
+
+// Resolve {{input.path.to.field}} template variables in system prompts.
+// Looks up dot-notation paths in the input data.
+function resolveTemplate(template: string, data: unknown): string {
+  return template.replace(/\{\{input\.([^}]+)\}\}/g, (match, path: string) => {
+    const parts = path.trim().split('.');
+    let current: unknown = data;
+    for (const part of parts) {
+      if (current && typeof current === 'object' && part in (current as Record<string, unknown>)) {
+        current = (current as Record<string, unknown>)[part];
+      } else {
+        return match; // keep original if not found
+      }
+    }
+    if (typeof current === 'object') return JSON.stringify(current);
+    return String(current);
+  });
 }
