@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { getUpstreamNodeIds, getNodeFields } from './InputPreview';
+import { validateTemplates } from '@/lib/validateTemplates';
 
 interface TemplateAutocompleteProps {
   value: string;
@@ -54,6 +55,25 @@ export function TemplateAutocomplete({
     }
     setAllSuggestions(result);
   }, [nodeId, nodes, edges]);
+
+  // Compute upstream labels for validation
+  const upstreamLabels = useMemo(() => {
+    if (!nodeId || nodes.length === 0) return [];
+    const upstreamIds = getUpstreamNodeIds(nodeId, edges);
+    const names = new Set<string>();
+    for (const upId of upstreamIds) {
+      const upNode = nodes.find((n: any) => n.id === upId);
+      if (!upNode) continue;
+      names.add(upNode.data?.label || upNode.data?.type || upId);
+    }
+    return Array.from(names);
+  }, [nodeId, nodes, edges]);
+
+  // Validate templates in the current value
+  const validationErrors = useMemo(() => {
+    if (!value.includes('{{')) return [];
+    return validateTemplates(value, upstreamLabels, nodes);
+  }, [value, upstreamLabels, nodes]);
 
   const getCursorPos = useCallback((textarea: HTMLTextAreaElement, text: string) => {
     const pos = textarea.selectionStart || 0;
@@ -149,6 +169,21 @@ export function TemplateAutocomplete({
         rows={rows}
         className={`mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y font-mono ${className}`}
       />
+      {validationErrors.length > 0 && (
+        <div className="mt-1 space-y-0.5">
+          {validationErrors.map((err, i) => (
+            <p key={i} className="text-[10px] text-red-600 flex items-start gap-1">
+              <span className="mt-0.5 shrink-0">⚠️</span>
+              <span>
+                <code className="font-mono text-red-700">{err.match}</code> — {err.message}
+                {err.suggestions.length > 0 && (
+                  <span className="text-gray-500"> Did you mean <code className="font-mono text-blue-600">{err.suggestions[0]}</code>?</span>
+                )}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
       {showDropdown && filtered.length > 0 && (
         <div
           className="absolute z-50 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto"
