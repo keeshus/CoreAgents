@@ -605,14 +605,15 @@ export class FlowExecutor {
       }
 
       case 'hitl': {
-        // If replaying (user already approved), pass through the decision
         const inp = input as Record<string, unknown> | undefined;
         if (inp?._approved) {
-          
           return { decision: inp._decision || 'approved', feedback: inp._feedback || '', reviewedContent: inp._reviewedContent || inp };
         }
-        // First run: pause for human input
-        throw new HitlPauseError(node.id, {}); // filled by execute loop
+        // First run: pause for human input with resolved prompt
+        const hitlCfg = (nodeData as any).config || {};
+        const resolvedPrompt = resolveTemplate(hitlCfg.prompt || '', input);
+        const buttons = hitlCfg.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }];
+        throw new HitlPauseError(node.id, {}, buttons, resolvedPrompt);
       }
 
       case 'output': {

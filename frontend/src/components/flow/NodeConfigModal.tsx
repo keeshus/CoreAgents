@@ -198,7 +198,7 @@ export function NodeConfigModal({
 
           {/* ── Node-specific config form ── */}
           {node.data.type === 'llm-agent' && (
-            <LLMAgentConfig config={node.data.config} onChange={onConfigChange} />
+            <LLMAgentConfig config={node.data.config} onChange={onConfigChange} suggestions={{ upstreamLabels, nodes, edges }} />
           )}
 
           {node.data.type === 'mcp-tool' && (
@@ -209,15 +209,18 @@ export function NodeConfigModal({
             <div className="space-y-3">
               <label className="block">
                 <span className="text-xs font-medium text-gray-700">Condition Expression</span>
-                <textarea
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[80px] font-mono"
+                <TemplateAutocomplete
                   value={node.data.config.condition || ''}
-                  onChange={(e) => onConfigChange({ condition: e.target.value })}
+                  onChange={(v) => onConfigChange({ condition: v })}
                   placeholder="input.score > 0.5"
                   rows={3}
+                  nodeId={node.id}
+                  nodes={nodes}
+                  edges={edges}
+                  className="min-h-[60px]"
                 />
                 <p className="mt-1 text-[10px] text-gray-400">
-                  JavaScript expression. Use &apos;input&apos; to access the node input.
+                  JavaScript expression. Use {{'{'}}{{'{'}}input.Label.field{{'}'}}{{'}'}} to reference data. Type ({{'{'}}{{'{'}}} for suggestions.
                 </p>
               </label>
               <label className="block">
@@ -428,12 +431,14 @@ export function NodeConfigModal({
             <div className="space-y-3">
               <label className="block">
                 <span className="text-xs font-medium text-gray-700">Prompt for the User</span>
-                <textarea
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px]"
+                <TemplateAutocomplete
                   value={node.data.config.prompt || ''}
-                  onChange={(e) => onConfigChange({ prompt: e.target.value })}
-                  placeholder="Please review the generated content before proceeding..."
+                  onChange={(v) => onConfigChange({ prompt: v })}
+                  placeholder="Please review the generated content before proceeding... Type {{ for field suggestions"
                   rows={3}
+                  nodeId={node.id}
+                  nodes={nodes}
+                  edges={edges}
                 />
               </label>
               <div className="space-y-2">

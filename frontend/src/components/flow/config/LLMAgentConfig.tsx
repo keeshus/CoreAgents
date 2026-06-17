@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
+import { TemplateAutocomplete } from './TemplateAutocomplete';
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'Anthropic',
@@ -18,9 +19,10 @@ interface LLMAgentConfigProps {
     outputSchema?: string;
   };
   onChange: (config: any) => void;
+  suggestions?: { upstreamLabels: string[]; nodes: any[]; edges: any[] };
 }
 
-export function LLMAgentConfig({ config, onChange }: LLMAgentConfigProps) {
+export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfigProps) {
   const [endpoints, setEndpoints] = useState<any[]>([]);
   const [selectedEndpoint, setSelectedEndpoint] = useState<any>(null);
 
@@ -86,13 +88,17 @@ export function LLMAgentConfig({ config, onChange }: LLMAgentConfigProps) {
 
       <label className="block">
         <span className="text-xs font-medium text-gray-700">System Prompt</span>
-        <textarea
-          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[80px]"
+        <TemplateAutocomplete
           value={config.systemPrompt}
-          onChange={(e) => onChange({ ...config, systemPrompt: e.target.value })}
-          placeholder="You are a helpful assistant..."
+          onChange={(v) => onChange({ ...config, systemPrompt: v })}
+          placeholder="You are a helpful assistant... Type {{ for field suggestions"
           rows={4}
+          nodeId={suggestions ? undefined : undefined}
+          nodes={suggestions?.nodes || []}
+          edges={suggestions?.edges || []}
+          suggestions={suggestions?.upstreamLabels?.length ? suggestions.upstreamLabels.map(l => `input.${l}`) : undefined}
         />
+        <p className="mt-1 text-[10px] text-gray-400">Use {'{{'}input.Label.field{'}}'} to reference upstream data.</p>
       </label>
 
       <div className="grid grid-cols-2 gap-3">
