@@ -69,31 +69,18 @@ export function NodeConfigModal({
   }, [node.id, edges, nodes]);
 
   const configInputFields: string[] = node.data.config?.inputFields || [];
-  const allFields = configInputFields.length === 0;
-
-  // Fields that are currently filtered out (unchecked) — derived for InputPreview display
-  const filteredFields = useMemo(() => {
-    if (allFields) return [];
-    return upstreamFieldNames.filter((f) => !configInputFields.includes(f));
-  }, [allFields, upstreamFieldNames, configInputFields]);
 
   // Toggle a single input field
   const toggleField = useCallback(
     (fieldName: string) => {
       const current: string[] = node.data.config?.inputFields || [];
-      let updated: string[];
       if (current.includes(fieldName)) {
-        updated = current.filter((f) => f !== fieldName);
+        onConfigChange({ inputFields: current.filter((f) => f !== fieldName) });
       } else {
-        updated = [...current, fieldName];
+        onConfigChange({ inputFields: [...current, fieldName] });
       }
-      // If all upstream fields are checked, normalize to empty array (means "all fields")
-      if (updated.length === upstreamFieldNames.length) {
-        updated = [];
-      }
-      onConfigChange({ inputFields: updated });
     },
-    [node.data.config?.inputFields, upstreamFieldNames, onConfigChange],
+    [node.data.config?.inputFields, onConfigChange],
   );
 
   return (
@@ -145,26 +132,23 @@ export function NodeConfigModal({
                 Select Input Fields
               </h4>
               <div className="bg-white border border-gray-200 rounded p-2 space-y-1">
-                {upstreamFieldNames.map((fieldName) => {
-                  const isChecked = allFields || configInputFields.includes(fieldName);
-                  return (
-                    <label
-                      key={fieldName}
-                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleField(fieldName)}
-                        className="w-3 h-3 accent-blue-500"
-                      />
-                      <span className="text-xs font-mono text-gray-700">{fieldName}</span>
-                    </label>
-                  );
-                })}
-                {allFields && upstreamFieldNames.length > 0 && (
+                {upstreamFieldNames.map((fieldName) => (
+                  <label
+                    key={fieldName}
+                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={configInputFields.includes(fieldName)}
+                      onChange={() => toggleField(fieldName)}
+                      className="w-3 h-3 accent-blue-500"
+                    />
+                    <span className="text-xs font-mono text-gray-700">{fieldName}</span>
+                  </label>
+                ))}
+                {configInputFields.length === 0 && upstreamFieldNames.length > 0 && (
                   <p className="text-[10px] text-gray-400 italic pt-1 border-t border-gray-100 mt-1">
-                    All fields passed through
+                    None selected = all fields pass through
                   </p>
                 )}
               </div>
