@@ -96,6 +96,7 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
           nodeId={suggestions?.nodeId}
           nodes={suggestions?.nodes || []}
           edges={suggestions?.edges || []}
+          selectedFields={(config as any).inputFields}
         />
         <p className="mt-1 text-[10px] text-gray-400">Use {'{{'}input.Label.field{'}}'} to reference upstream data.</p>
       </label>

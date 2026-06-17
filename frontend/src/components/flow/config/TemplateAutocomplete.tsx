@@ -10,6 +10,8 @@ interface TemplateAutocompleteProps {
   nodeId?: string;
   nodes?: any[];
   edges?: any[];
+  /** Currently selected input fields for this node. Empty = all fields pass through. */
+  selectedFields?: string[];
 }
 
 interface Suggestion {
@@ -26,6 +28,7 @@ export function TemplateAutocomplete({
   nodeId,
   nodes = [],
   edges = [],
+  selectedFields,
 }: TemplateAutocompleteProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -104,9 +107,17 @@ export function TemplateAutocomplete({
     }, 0);
   }, [value, onChange]);
 
-  const filtered = filter
+  // Filter by search text and by selectedFields
+  const filtered = (filter
     ? allSuggestions.filter(s => s.label.toLowerCase().includes(filter))
-    : allSuggestions;
+    : allSuggestions
+  ).filter(s => {
+    if (!selectedFields || selectedFields.length === 0) return true; // all pass through
+    // Extract label name from suggestion path (e.g., "input.Trigger.message" → "Trigger")
+    const label = s.path.split('.')[1];
+    // Show if the label is selected as a whole, or if the specific field path is selected
+    return selectedFields.includes(label) || selectedFields.includes(s.path.replace('input.', ''));
+  });
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!showDropdown) return;

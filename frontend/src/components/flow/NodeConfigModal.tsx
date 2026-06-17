@@ -217,6 +217,7 @@ export function NodeConfigModal({
                   nodeId={node.id}
                   nodes={nodes}
                   edges={edges}
+                  selectedFields={node.data.config?.inputFields}
                   className="min-h-[60px]"
                 />
                 <p className="mt-1 text-[10px] text-gray-400">
@@ -439,6 +440,7 @@ export function NodeConfigModal({
                   nodeId={node.id}
                   nodes={nodes}
                   edges={edges}
+                  selectedFields={node.data.config?.inputFields}
                 />
               </label>
               <div className="space-y-2">
