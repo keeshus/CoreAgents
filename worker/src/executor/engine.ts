@@ -587,7 +587,8 @@ export class FlowExecutor {
                 data: { nodeId: node.id, subNodeId: subNode.id, subNodeType: subNode.data.type, status: 'completed', output },
                 timestamp: new Date().toISOString(),
               });
-              return { id: subNode.id, type: subNode.data.type, output };
+              const subLabel = subNode.data?.label || subNode.data?.type || subNode.id;
+              return { id: subLabel, type: subNode.data.type, output };
             } catch (err) {
               parallelAbort.abort(); // Kill all other siblings
               throw err;
