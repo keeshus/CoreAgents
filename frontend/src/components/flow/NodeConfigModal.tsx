@@ -55,15 +55,14 @@ export function NodeConfigModal({
     [onClose],
   );
 
-  // Compute accumulated upstream field names for the input selection UI
-  const upstreamFieldNames = useMemo(() => {
+  // Compute upstream node labels for the input selection UI
+  const upstreamLabels = useMemo(() => {
     const upstreamIds = getUpstreamNodeIds(node.id, edges);
     const names = new Set<string>();
     for (const upId of upstreamIds) {
       const upNode = nodes.find((n) => n.id === upId);
       if (!upNode) continue;
-      const fields = getNodeFields(upNode);
-      for (const f of fields) names.add(f.name);
+      names.add(upNode.data?.label || upNode.data?.type || upId);
     }
     return Array.from(names);
   }, [node.id, edges, nodes]);
@@ -126,13 +125,13 @@ export function NodeConfigModal({
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* ── Input Field Selection ── */}
-          {upstreamFieldNames.length > 0 && (
+          {upstreamLabels.length > 0 && (
             <div className="mb-4">
               <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
                 Select Input Fields
               </h4>
               <div className="bg-white border border-gray-200 rounded p-2 space-y-1">
-                {upstreamFieldNames.map((fieldName) => (
+                {upstreamLabels.map((fieldName) => (
                   <label
                     key={fieldName}
                     className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5"
@@ -146,7 +145,7 @@ export function NodeConfigModal({
                     <span className="text-xs font-mono text-gray-700">{fieldName}</span>
                   </label>
                 ))}
-                {configInputFields.length === 0 && upstreamFieldNames.length > 0 && (
+                {configInputFields.length === 0 && upstreamLabels.length > 0 && (
                   <p className="text-[10px] text-gray-400 italic pt-1 border-t border-gray-100 mt-1">
                     None selected = all fields pass through
                   </p>
@@ -365,7 +364,6 @@ export function NodeConfigModal({
                 >
                   <option value="json">JSON</option>
                   <option value="text">Text</option>
-                  <option value="markdown">Markdown</option>
                 </select>
               </label>
             </div>
@@ -464,8 +462,8 @@ export function NodeConfigModal({
                 // Only show fields that are selected as input (or all if no input selection)
                 const inputFields: string[] = node.data.config?.inputFields || [];
                 const available = inputFields.length > 0
-                  ? upstreamFieldNames.filter(f => inputFields.includes(f))
-                  : upstreamFieldNames;
+                  ? upstreamLabels.filter(f => inputFields.includes(f))
+                  : upstreamLabels;
                 const displayList: string[] = node.data.config?.displayFields || [];
                 const forwardList: string[] = node.data.config?.forwardFields || [];
                 return (
