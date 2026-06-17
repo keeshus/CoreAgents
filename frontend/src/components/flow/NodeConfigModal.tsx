@@ -4,6 +4,7 @@ import { getUpstreamNodeIds, getNodeFields } from '@/components/flow/config/Inpu
 import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
 import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
+import { TemplateAutocomplete } from '@/components/flow/config/TemplateAutocomplete';
 
 const NODE_LABELS: Record<string, string> = {
   trigger: 'Trigger',
