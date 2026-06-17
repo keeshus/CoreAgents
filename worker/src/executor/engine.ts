@@ -636,10 +636,25 @@ function resolveTemplate(template: string, data: unknown): string {
     const parts = path.trim().split('.');
     let current: unknown = data;
     for (const part of parts) {
-      if (current && typeof current === 'object' && part in (current as Record<string, unknown>)) {
+      const bracketMatch = part.match(/^(\w+)\[(\d+)\]$/);
+      if (bracketMatch) {
+        // Bracket indexing: items[0] → items then index 0
+        const key = bracketMatch[1];
+        const idx = parseInt(bracketMatch[2]);
+        if (current && typeof current === 'object' && key in (current as Record<string, unknown>)) {
+          const arr = (current as Record<string, unknown>)[key];
+          if (Array.isArray(arr) && idx < arr.length) {
+            current = arr[idx];
+          } else {
+            return match;
+          }
+        } else {
+          return match;
+        }
+      } else if (current && typeof current === 'object' && part in (current as Record<string, unknown>)) {
         current = (current as Record<string, unknown>)[part];
       } else {
-        return match; // keep original if not found
+        return match;
       }
     }
     if (typeof current === 'object') return JSON.stringify(current);
