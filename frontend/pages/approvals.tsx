@@ -39,11 +39,9 @@ export default function ApprovalsPage() {
     setLoading(true);
     setError('');
     try {
-      // Get all executions with awaiting_approval status
-      const res = await fetch(`${API_URL}/executions`, { credentials: 'include' });
+      const res = await fetch(`${API_URL}/executions/pending`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch');
-      const all = await res.json();
-      const pending = (all || []).filter((e: any) => e.status === 'awaiting_approval');
+      const pending = await res.json();
 
       // Enrich with flow names
       const enriched = await Promise.all(pending.map(async (e: any) => {

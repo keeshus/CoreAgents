@@ -13,7 +13,17 @@ const router = Router();
 // In-memory registry of active executors for cancellation
 const activeExecutors = new Map<string, FlowExecutor>();
 
-// GET /api/executions — global list of all executions across all flows
+// GET /api/executions/pending — list executions awaiting approval (for approvals page)
+router.get('/executions/pending', requirePermission('execution:approve'), asyncHandler(async (_req, res) => {
+  const result = await db
+    .select()
+    .from(executions)
+    .where(eq(executions.status, 'awaiting_approval'))
+    .orderBy(desc(executions.created_at));
+  res.json(result);
+}));
+
+// GET /api/executions — global list of all executions across all flows (admin only)
 router.get('/executions', requirePermission('admin'), asyncHandler(async (_req, res) => {
   const result = await db
     .select()
