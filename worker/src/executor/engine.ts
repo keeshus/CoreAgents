@@ -231,7 +231,7 @@ export class FlowExecutor {
             if (k !== '__input__') saved[k] = v;
           }
           const hitlConfig = (node.data as any)?.config || {};
-          throw new HitlPauseError(err.nodeId, saved, hitlConfig.buttons, hitlConfig.prompt);
+          throw new HitlPauseError(err.nodeId, saved, hitlConfig.buttons, err.prompt);
         }
         const error = err instanceof Error ? err.message : String(err);
         await onEvent(node.id, {
