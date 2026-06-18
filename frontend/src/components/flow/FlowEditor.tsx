@@ -177,13 +177,24 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
   }, [nodes, layoutChildren]);
 
   const addNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
-    // Place node at center of visible viewport
+    // Place node at center of visible viewport (accounting for pan/zoom)
     let centerX = 300, centerY = 200;
-    const vp = document.querySelector('.react-flow__viewport');
+    const vp = document.querySelector('.react-flow__viewport') as HTMLElement | null;
     if (vp) {
       const rect = vp.getBoundingClientRect();
-      centerX = rect.width / 2 - 75;
-      centerY = rect.height / 2;
+      // Parse CSS transform: translate(Xpx, Ypx) scale(Z)
+      const transform = vp.style.transform;
+      const match = transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/);
+      if (match) {
+        const panX = parseFloat(match[1]);
+        const panY = parseFloat(match[2]);
+        const zoom = parseFloat(match[3]);
+        centerX = (rect.width / 2 - panX) / zoom - 75;
+        centerY = (rect.height / 2 - panY) / zoom;
+      } else {
+        centerX = rect.width / 2 - 75;
+        centerY = rect.height / 2;
+      }
     }
     const newNode: Node = {
       id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
