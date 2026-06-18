@@ -128,22 +128,6 @@ export default function FlowsListPage() {
           <div className="text-center py-16 bg-white rounded-xl border max-w-lg mx-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Welcome to Core Agents</h2>
             <p className="text-sm text-gray-500 mb-6">Build and manage your LLM agent workflows with a visual drag-and-drop editor.</p>
-            <div className="flex items-center justify-center gap-3">
-              {authConfig?.sso ? (
-                <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/auth/sso/login`} className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
-                  Sign in with {authConfig.sso.name}
-                </a>
-              ) : (
-                <>
-                  <Link href="/login" className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
-                    <LogIn className="w-4 h-4" /> Sign In
-                  </Link>
-                  <Link href="/register" className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">
-                    <UserPlus className="w-4 h-4" /> Create Account
-                  </Link>
-                </>
-              )}
-            </div>
           </div>
         ) : loading ? (
           <p className="text-gray-500 text-sm">Loading...</p>
