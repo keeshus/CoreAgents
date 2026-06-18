@@ -18,24 +18,24 @@ describe('BUILT_IN_TOOLS', () => {
   });
 
   it('contains all expected store tools', () => {
-    const storeTools = BUILT_IN_TOOLS.filter(t => t.name.startsWith('store.'));
+    const storeTools = BUILT_IN_TOOLS.filter(t => t.name.startsWith('store_'));
     expect(storeTools).toHaveLength(4);
 
     const names = storeTools.map(t => t.name).sort();
-    expect(names).toEqual(['store.delete', 'store.get', 'store.list', 'store.set']);
+    expect(names).toEqual(['store_delete', 'store_get', 'store_list', 'store_set']);
   });
 
   it('contains all expected file tools', () => {
-    const fileTools = BUILT_IN_TOOLS.filter(t => t.name.startsWith('file.'));
+    const fileTools = BUILT_IN_TOOLS.filter(t => t.name.startsWith('file_'));
     expect(fileTools).toHaveLength(3);
 
     const names = fileTools.map(t => t.name).sort();
-    expect(names).toEqual(['file.list', 'file.read', 'file.write']);
+    expect(names).toEqual(['file_list', 'file_read', 'file_write']);
   });
 
   it('contains all expected utility tools (now, uuid, log, fetch)', () => {
     const utilityTools = BUILT_IN_TOOLS.filter(
-      t => !t.name.startsWith('store.') && !t.name.startsWith('file.'),
+      t => !t.name.startsWith('store_') && !t.name.startsWith('file_'),
     );
     expect(utilityTools).toHaveLength(4);
 

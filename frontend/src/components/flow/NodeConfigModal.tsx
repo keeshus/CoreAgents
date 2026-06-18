@@ -272,11 +272,11 @@ export function NodeConfigModal({
                   className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[120px] font-mono"
                   value={node.data.config.code || ''}
                   onChange={(e) => onConfigChange({ code: e.target.value })}
-                  placeholder="// Transform the input payload&#10;return payload;"
+                  placeholder="// input contains all upstream data&#10;return input;"
                   rows={6}
                 />
                 <p className="mt-1 text-[10px] text-gray-400">
-                  Return the transformed value from this function.
+                  Use <code className="font-mono">input</code> to access upstream data. Return the transformed value.
                 </p>
               </label>
               <label className="block">

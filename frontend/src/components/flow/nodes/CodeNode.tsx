@@ -15,9 +15,12 @@ export function CodeNode(props: NodeProps) {
           {code ? code.slice(0, 120) + (code.length > 120 ? '...' : '') : 'No code'}
         </code>
       </div>
-      <div className="mt-2 pt-2 border-t border-gray-100">
+      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1">
         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-700">any</span>
-        <span className="text-[9px] text-gray-400 ml-1">→ return value</span>
+        {!config?.outputSchema && (
+          <span className="text-[9px] text-orange-500 font-medium" title="No output schema set. Add an Output Structure to help downstream nodes.">⚠ no schema</span>
+        )}
+        <span className="text-[9px] text-gray-400 ml-auto">→ return value</span>
       </div>
     </BaseNode>
   );

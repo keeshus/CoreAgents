@@ -557,11 +557,10 @@ export class FlowExecutor {
 
       case 'code': {
         const config = (nodeData as any).config;
-        const code = config.code || 'return payload;';
+        const code = config.code || 'return input;';
 
         try {
-          const fn = new Function('payload', code);
-          
+          const fn = new Function('input', code);
           return fn(input);
         } catch (err) {
           throw new Error(`Code node execution failed: ${err instanceof Error ? err.message : String(err)}`);

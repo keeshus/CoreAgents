@@ -66,7 +66,7 @@ describe('FlowExecutor', () => {
     const flow = makeFlow(
       [
         makeNode('trigger', 'trigger'),
-        makeNode('mycode', 'code', { config: { code: 'return payload;' } }),
+        makeNode('mycode', 'code', { config: { code: 'return input;' } }),
       ],
       [makeEdge('e1', 'trigger', 'mycode')],
     );
@@ -112,7 +112,7 @@ describe('FlowExecutor', () => {
         makeNode('code', 'code', {
           config: {
             inputFields: ['message'],
-            code: 'return Object.keys(payload);',
+            code: 'return Object.keys(input);',
           },
         }),
       ],
@@ -250,8 +250,8 @@ describe('FlowExecutor', () => {
     const flow = makeFlow(
       [
         makeNode('a', 'trigger'),
-        makeNode('b', 'code', { config: { code: 'return payload;' } }),
-        makeNode('c', 'code', { config: { code: 'return payload;' } }),
+        makeNode('b', 'code', { config: { code: 'return input;' } }),
+        makeNode('c', 'code', { config: { code: 'return input;' } }),
       ],
       [
         makeEdge('e1', 'a', 'b'),
