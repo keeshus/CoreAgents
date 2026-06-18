@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/connection.js';
 import { chatSessions, chatMessages, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
+import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { getStore } from '../vector-stores/index.js';
 
@@ -52,7 +53,7 @@ router.get('/chat/sessions/:sessionId', asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/chat/sessions/:sessionId
-router.delete('/chat/sessions/:sessionId', asyncHandler(async (req, res) => {
+router.delete('/chat/sessions/:sessionId', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const sessionId = req.params.sessionId as string;
   await db.delete(chatMessages).where(eq(chatMessages.session_id, sessionId));
   await db.delete(chatSessions).where(eq(chatSessions.id, sessionId));

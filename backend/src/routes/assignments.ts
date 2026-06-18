@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { userAssignments, executions } from '../db/schema.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
 const router = Router();
@@ -41,7 +41,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/assignments/:id/decide — approve/reject an assignment
-router.post('/:id/decide', asyncHandler(async (req, res) => {
+router.post('/:id/decide', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const { status: decision, feedback } = req.body || {};
   const userId = req.user!.userId;
@@ -63,6 +63,12 @@ router.post('/:id/decide', asyncHandler(async (req, res) => {
 
   if (assignment.status !== 'pending') {
     res.status(400).json({ error: 'Assignment already decided' });
+    return;
+  }
+
+  // Verify the user is the intended approver if the assignment targets a specific user
+  if (assignment.assigned_to_user_id && assignment.assigned_to_user_id !== userId) {
+    res.status(403).json({ error: 'This assignment is not intended for you' });
     return;
   }
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/connection.js';
 import { documents, embeddings } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { requirePermission } from '../middleware/auth.js';
 // Inline embedding call to avoid cross-workspace TS rootDir issues.
 // At runtime, tsx resolves this fine; the worker module is available.
 async function generateEmbedding(text: string): Promise<number[]> {
@@ -20,7 +21,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 const router = Router();
 
 // POST /api/documents/upload — Upload a document, chunk it, generate embeddings
-router.post('/documents/upload', asyncHandler(async (req, res) => {
+router.post('/documents/upload', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const { name, content, collectionName = 'default', metadata = {} } = req.body;
 
   if (!name || !content) {
@@ -62,7 +63,7 @@ router.get('/documents', asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/documents/:id — Delete document and its embeddings
-router.delete('/documents/:id', asyncHandler(async (req, res) => {
+router.delete('/documents/:id', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const docId = req.params.id as string;
   await db.delete(embeddings).where(eq(embeddings.document_id, docId));
   await db.delete(documents).where(eq(documents.id, docId));

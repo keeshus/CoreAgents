@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Cpu, Server, BookOpen, ArrowLeft } from 'lucide-react';
+import { Cpu, Server, BookOpen, Shield, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 export default function SettingsIndex() {
@@ -25,6 +25,12 @@ export default function SettingsIndex() {
       title: 'Knowledge Bases',
       description: 'Upload documents, manage collections, and configure RAG retrieval',
     },
+    ...(can('admin') ? [{
+      href: '/settings/users',
+      icon: Shield,
+      title: 'Users',
+      description: 'Manage user accounts and roles',
+    }] : []),
   ];
 
   return (

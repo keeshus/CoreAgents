@@ -4,6 +4,7 @@ import { db } from '../db/connection.js';
 import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores } from '../db/schema.js';
 import { FlowExecutor, HitlPauseError, FlowStopError } from '../../../worker/src/executor/engine.js';
 import { getStore } from '../vector-stores/index.js';
+import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
 
@@ -13,7 +14,7 @@ const router = Router();
 const activeExecutors = new Map<string, FlowExecutor>();
 
 // GET /api/executions — global list of all executions across all flows
-router.get('/executions', asyncHandler(async (_req, res) => {
+router.get('/executions', requirePermission('admin'), asyncHandler(async (_req, res) => {
   const result = await db
     .select()
     .from(executions)
@@ -23,7 +24,7 @@ router.get('/executions', asyncHandler(async (_req, res) => {
 }));
 
 // POST /api/executions/:executionId/cancel — cancel a running execution
-router.post('/executions/:executionId/cancel', asyncHandler(async (req, res) => {
+router.post('/executions/:executionId/cancel', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
 
   // Abort in-process if available
@@ -46,6 +47,7 @@ router.post('/executions/:executionId/cancel', asyncHandler(async (req, res) => 
 
 router.post(
   '/flows/:flowId/execute',
+  requirePermission('flow:create'),
   asyncHandler(async (req, res) => {
     const flowId = req.params.flowId as string;
     const { input = {} } = req.body;
@@ -313,7 +315,7 @@ router.post(
 
 // ── POST /api/executions/:executionId/approve — approve HITL and resume flow ──
 
-router.post('/executions/:executionId/approve', asyncHandler(async (req, res) => {
+router.post('/executions/:executionId/approve', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
   const { feedback = '', decision = 'approved', data: userData = {}, hitlNodeId } = req.body || {};
 
@@ -423,7 +425,7 @@ router.post('/executions/:executionId/approve', asyncHandler(async (req, res) =>
 
 // ── POST /api/executions/:executionId/reject — reject HITL ──────────────────────
 
-router.post('/executions/:executionId/reject', asyncHandler(async (req, res) => {
+router.post('/executions/:executionId/reject', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
 
   const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));

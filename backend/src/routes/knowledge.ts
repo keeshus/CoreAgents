@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { documents, embeddings, llmEndpoints } from '../db/schema.js';
+import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
 const router = Router();
@@ -29,7 +30,7 @@ router.get('/knowledge/collections/:name', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/knowledge/upload — upload document to a collection
-router.post('/knowledge/upload', asyncHandler(async (req, res) => {
+router.post('/knowledge/upload', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const { name, content, collectionName = 'default', embeddingEndpointId, embeddingModel } = req.body;
   if (!name || !content) {
     res.status(400).json({ error: 'name and content are required' });
@@ -88,7 +89,7 @@ router.post('/knowledge/upload', asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/knowledge/collections/:name — delete entire collection
-router.delete('/knowledge/collections/:name', asyncHandler(async (req, res) => {
+router.delete('/knowledge/collections/:name', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const name = req.params.name as string;
   const docs = await db.select({ id: documents.id }).from(documents).where(eq(documents.collection_name, name));
   for (const d of docs) {
@@ -99,7 +100,7 @@ router.delete('/knowledge/collections/:name', asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/knowledge/documents/:id — delete single document
-router.delete('/knowledge/documents/:id', asyncHandler(async (req, res) => {
+router.delete('/knowledge/documents/:id', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   await db.delete(embeddings).where(eq(embeddings.document_id, id));
   await db.delete(documents).where(eq(documents.id, id));
