@@ -245,6 +245,8 @@ router.post('/register', asyncHandler(async (req, res) => {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
 
+  await db.update(users).set({ last_login_at: new Date() }).where(eq(users.id, user.id));
+
   res.status(201).json({
     user: { id: user.id, email: user.email, name: user.name, role: viewerRole?.name || 'viewer', permissions },
     token,
