@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eq, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions } from '../db/schema.js';
+import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions, userAssignments } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
@@ -99,6 +99,7 @@ router.delete(
       const execs = await tx.select({ id: executions.id }).from(executions).where(eq(executions.flow_id, id));
       for (const e of execs) {
         await tx.delete(executionSteps).where(eq(executionSteps.execution_id, e.id));
+        await tx.delete(userAssignments).where(eq(userAssignments.execution_id, e.id));
       }
       await tx.delete(executions).where(eq(executions.flow_id, id));
 
