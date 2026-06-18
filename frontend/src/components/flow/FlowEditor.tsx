@@ -177,12 +177,20 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
   }, [nodes, layoutChildren]);
 
   const addNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
+    // Place node at center of visible viewport
+    let centerX = 300, centerY = 200;
+    const vp = document.querySelector('.react-flow__viewport');
+    if (vp) {
+      const rect = vp.getBoundingClientRect();
+      centerX = rect.width / 2 - 75;
+      centerY = rect.height / 2;
+    }
     const newNode: Node = {
       id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       type,
       position: {
-        x: 150 + Math.random() * 300,
-        y: 100 + Math.random() * 200,
+        x: centerX + Math.random() * 40,
+        y: centerY + Math.random() * 40,
       },
       data: { label: type, type, config: { ...defaultConfig } },
     };
