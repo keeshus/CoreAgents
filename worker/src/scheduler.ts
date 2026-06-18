@@ -8,7 +8,7 @@ interface ScheduledFlow {
   flowId: string;
   flowName: string;
   cronExpression: string;
-  scheduleInput?: string;
+  inputMessage?: string;
   nodes: any[];
   edges: any[];
 }
@@ -159,7 +159,7 @@ export class Scheduler {
 
       // Build input payload
       const input: Record<string, unknown> = (() => {
-        const raw = flow.scheduleInput?.trim();
+        const raw = flow.inputMessage?.trim();
         if (!raw) return { triggerType: 'schedule', timestamp: new Date().toISOString() };
         try {
           const parsed = JSON.parse(raw);

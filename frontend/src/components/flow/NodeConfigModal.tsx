@@ -366,8 +366,8 @@ export function NodeConfigModal({
                   <span className="text-xs font-medium text-gray-700">Input Message</span>
                   <textarea
                     className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[40px]"
-                    value={node.data.config.scheduleInput || ''}
-                    onChange={(e) => onConfigChange({ scheduleInput: e.target.value })}
+                    value={node.data.config.inputMessage || ''}
+                    onChange={(e) => onConfigChange({ inputMessage: e.target.value })}
                     placeholder="What is the latest news about AI?"
                     rows={2}
                   />

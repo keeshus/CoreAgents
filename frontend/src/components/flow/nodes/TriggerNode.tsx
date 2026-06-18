@@ -25,8 +25,8 @@ export function TriggerNode(props: NodeProps) {
         {triggerType === 'schedule' && config?.cronExpression && (
           <code className="block text-[9px] bg-gray-100 p-1 rounded mt-1">{config.cronExpression}</code>
         )}
-        {(triggerType === 'schedule' || triggerType === 'manual') && config?.scheduleInput && (
-          <p className="text-[9px] text-gray-500 mt-1 truncate">Input: {config.scheduleInput.slice(0, 60)}</p>
+        {(triggerType === 'schedule' || triggerType === 'manual') && config?.inputMessage && (
+          <p className="text-[9px] text-gray-500 mt-1 truncate">Input: {config.inputMessage.slice(0, 60)}</p>
         )}
         {triggerType === 'webhook' && config?.inputSchema && (
           <code className="block text-[9px] bg-purple-50 border border-purple-100 p-1 rounded mt-1 break-all">{config.inputSchema}</code>

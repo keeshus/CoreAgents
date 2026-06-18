@@ -51,7 +51,7 @@ function validateInput(
 }
 
 /**
- * Parse a scheduleInput JSON string, merging with a default payload.
+ * Parse a inputMessage JSON string, merging with a default payload.
  * Returns the merged input object.
  */
 function parseScheduleInput(raw: string | undefined): Record<string, unknown> {
@@ -194,16 +194,16 @@ describe('validateInput (field→type validation)', () => {
   });
 });
 
-// ── scheduleInput parsing tests ──────────────────────────────
+// ── inputMessage parsing tests ──────────────────────────────
 
 describe('parseScheduleInput (schedule payload parser)', () => {
-  it('returns default payload when scheduleInput is empty', () => {
+  it('returns default payload when inputMessage is empty', () => {
     const result = parseScheduleInput(undefined);
     expect(result.triggerType).toBe('schedule');
     expect(result.timestamp).toEqual(expect.any(String));
   });
 
-  it('returns default payload when scheduleInput is whitespace', () => {
+  it('returns default payload when inputMessage is whitespace', () => {
     const result = parseScheduleInput('   ');
     expect(result.triggerType).toBe('schedule');
   });
@@ -215,7 +215,7 @@ describe('parseScheduleInput (schedule payload parser)', () => {
     expect(result.count).toBe(5);
   });
 
-  it('wraps non-JSON scheduleInput as a message field', () => {
+  it('wraps non-JSON inputMessage as a message field', () => {
     const result = parseScheduleInput('plain text input');
     expect(result.triggerType).toBe('schedule');
     expect(result.message).toBe('plain text input');

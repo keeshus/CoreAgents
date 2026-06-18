@@ -37,7 +37,7 @@ export interface TriggerNodeData extends BaseNodeData {
     webhookSecret?: string;
     cronExpression?: string;
     inputSchema?: string;
-    scheduleInput?: string;
+    inputMessage?: string;
   };
 }
 

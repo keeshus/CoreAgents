@@ -18,7 +18,7 @@ async function main() {
       flowId: string;
       flowName: string;
       cronExpression: string;
-      scheduleInput: string | undefined;
+      inputMessage: string | undefined;
       nodes: any[];
       edges: any[];
     }> = [];
@@ -34,7 +34,7 @@ async function main() {
           flowId: flow.id,
           flowName: flow.name,
           cronExpression: config.cronExpression,
-          scheduleInput: config.scheduleInput || undefined,
+          inputMessage: config.inputMessage || undefined,
           nodes: flow.nodes as any[],
           edges: flow.edges as any[],
         });
