@@ -18,10 +18,16 @@ export default function FlowsListPage() {
 
   // Readers go straight to the approvals page
   useEffect(() => {
-    if (!authLoading && isReader) {
-      router.replace('/approvals');
+    if (authLoading) return;
+    if (isReader) { router.replace('/approvals'); return; }
+    if (!user) {
+      // Check if first-time setup is needed
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/setup-status`)
+        .then(r => r.json())
+        .then(data => { if (data.required) router.replace('/setup'); })
+        .catch(() => {});
     }
-  }, [authLoading, isReader, router]);
+  }, [authLoading, isReader, user, router]);
 
   useEffect(() => {
     if (authLoading) {

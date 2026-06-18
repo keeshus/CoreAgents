@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import * as oidc from 'openid-client';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { users, roles } from '../db/schema.js';
 import { authenticate, JWT_SECRET } from '../middleware/auth.js';
@@ -199,6 +199,13 @@ router.get('/sso/callback', asyncHandler(async (req, res) => {
   }
 }));
 
+// ── GET /api/auth/setup-status — check if first-time setup is needed ──────
+
+router.get('/setup-status', asyncHandler(async (_req, res) => {
+  const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(users);
+  res.json({ required: Number(count) === 0 });
+}));
+
 // ── Local auth (register / login / me / logout) ───────────────────────────
 
 // POST /api/auth/register
@@ -219,21 +226,25 @@ router.post('/register', asyncHandler(async (req, res) => {
   // Hash password
   const password_hash = await bcrypt.hash(password, 10);
 
-  // Get default role (viewer)
-  const [viewerRole] = await db.select().from(roles).where(eq(roles.name, 'viewer'));
+  // First user is always admin
+  const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` }).from(users);
+  const isFirstUser = Number(count) === 0;
+
+  // Get role: admin for first user, viewer otherwise
+  const [role] = await db.select().from(roles).where(eq(roles.name, isFirstUser ? 'admin' : 'viewer'));
 
   // Create user
   const [user] = await db.insert(users).values({
     email,
     password_hash,
     name,
-    role_id: viewerRole?.id || null,
+    role_id: role?.id || null,
   }).returning();
 
   // Generate JWT
-  const permissions = viewerRole?.permissions || [];
+  const rolePermissions = role?.permissions || [];
   const token = jwt.sign(
-    { userId: user.id, email: user.email, role: viewerRole?.name || 'viewer', permissions },
+    { userId: user.id, email: user.email, role: role?.name || 'viewer', permissions: rolePermissions },
     JWT_SECRET,
     { expiresIn: '7d' },
   );
@@ -248,8 +259,7 @@ router.post('/register', asyncHandler(async (req, res) => {
   await db.update(users).set({ last_login_at: new Date() }).where(eq(users.id, user.id));
 
   res.status(201).json({
-    user: { id: user.id, email: user.email, name: user.name, role: viewerRole?.name || 'viewer', permissions },
-    token,
+    user: { id: user.id, email: user.email, name: user.name, role: role?.name || 'viewer', permissions: rolePermissions },
   });
 }));
 
