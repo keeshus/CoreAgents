@@ -66,12 +66,13 @@ export const api = {
     update: (id: string, data: any) =>
       request<any>(`/flows/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/flows/${id}`, { method: 'DELETE' }),
-    execute: async (id: string, input?: Record<string, unknown>) => {
+    execute: async (id: string, input?: Record<string, unknown>, signal?: AbortSignal) => {
       const res = await fetch(`${BASE_URL}/flows/${id}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ input }),
+        signal,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: res.statusText }));

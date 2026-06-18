@@ -41,8 +41,12 @@ export default function FlowsListPage() {
   };
 
   const handleCreate = async () => {
-    const flow = await api.flows.create({ name: 'New Flow', description: '' });
-    router.push(`/flows/${flow.id}/edit`);
+    try {
+      const flow = await api.flows.create({ name: 'New Flow', description: '' });
+      router.push(`/flows/${flow.id}/edit`);
+    } catch (err) {
+      console.error('Failed to create flow:', err);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -56,11 +60,15 @@ export default function FlowsListPage() {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
-      await api.flows.execute(flowId, { message: 'Hello!' });
+      await api.flows.execute(flowId, { message: 'Hello!' }, controller.signal);
       clearTimeout(timeout);
       setRunning((prev) => ({ ...prev, [flowId]: 'ok' }));
-    } catch {
-      setRunning((prev) => ({ ...prev, [flowId]: 'error' }));
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        setRunning((prev) => ({ ...prev, [flowId]: 'error' }));
+      } else {
+        setRunning((prev) => ({ ...prev, [flowId]: null }));
+      }
     }
     setTimeout(() => setRunning((prev) => ({ ...prev, [flowId]: null })), 2000);
   };

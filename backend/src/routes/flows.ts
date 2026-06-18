@@ -88,33 +88,27 @@ router.delete(
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
 
-    // Cascade-delete all related records
-    // 1. Delete chat messages for all sessions of this flow
-    const sessions = await db.select({ id: chatSessions.id }).from(chatSessions).where(eq(chatSessions.flow_id, id));
-    for (const s of sessions) {
-      await db.delete(chatMessages).where(eq(chatMessages.session_id, s.id));
-    }
-    // 2. Delete chat sessions
-    await db.delete(chatSessions).where(eq(chatSessions.flow_id, id));
+    // Cascade-delete all related records in a single transaction
+    await db.transaction(async (tx) => {
+      const sessions = await tx.select({ id: chatSessions.id }).from(chatSessions).where(eq(chatSessions.flow_id, id));
+      for (const s of sessions) {
+        await tx.delete(chatMessages).where(eq(chatMessages.session_id, s.id));
+      }
+      await tx.delete(chatSessions).where(eq(chatSessions.flow_id, id));
 
-    // 3. Delete execution steps for all executions of this flow
-    const execs = await db.select({ id: executions.id }).from(executions).where(eq(executions.flow_id, id));
-    for (const e of execs) {
-      await db.delete(executionSteps).where(eq(executionSteps.execution_id, e.id));
-    }
-    // 4. Delete executions
-    await db.delete(executions).where(eq(executions.flow_id, id));
+      const execs = await tx.select({ id: executions.id }).from(executions).where(eq(executions.flow_id, id));
+      for (const e of execs) {
+        await tx.delete(executionSteps).where(eq(executionSteps.execution_id, e.id));
+      }
+      await tx.delete(executions).where(eq(executions.flow_id, id));
 
-    // 5. Delete flow versions
-    await db.delete(flowVersions).where(eq(flowVersions.flow_id, id));
+      await tx.delete(flowVersions).where(eq(flowVersions.flow_id, id));
 
-    // 6. Delete the flow itself
-    const result = await db.delete(flows).where(eq(flows.id, id)).returning();
-
-    if (result.length === 0) {
-      res.status(404).json({ error: 'Flow not found' });
-      return;
-    }
+      const result = await tx.delete(flows).where(eq(flows.id, id)).returning();
+      if (result.length === 0) {
+        throw new Error('Flow not found');
+      }
+    });
 
     res.status(204).send();
   }),

@@ -665,7 +665,8 @@ function resolveTemplate(template: string, data: unknown): string {
           if (Array.isArray(arr) && idx < arr.length) {
             current = arr[idx];
           } else {
-            return match;
+            console.warn(`Template variable ${match} could not be resolved`);
+            return '';
           }
         } else {
           return match;

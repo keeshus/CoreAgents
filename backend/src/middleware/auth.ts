@@ -1,7 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isValidUUID(str: string): boolean {
+  return UUID_REGEX.test(str);
+}
+
+export function validateUUID(paramName: string) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const value = req.params[paramName];
+    if (value && typeof value === 'string' && !isValidUUID(value)) {
+      _res.status(400).json({ error: `Invalid ${paramName} format` });
+      return;
+    }
+    next();
+  };
+}
+
+const JWT_SECRET: string = process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET environment variable is required'); })();
 
 export interface JwtPayload {
   userId: string;
