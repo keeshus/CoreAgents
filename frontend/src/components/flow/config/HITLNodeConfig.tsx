@@ -1,4 +1,7 @@
+import { useState, useEffect, useRef } from 'react';
 import { TemplateAutocomplete } from '@/components/flow/config/TemplateAutocomplete';
+import { API_URL } from '@/lib/api-client';
+import { Search, X, Check, Loader2 } from 'lucide-react';
 
 interface HITLNodeConfigProps {
   config: Record<string, any>;
@@ -6,6 +9,123 @@ interface HITLNodeConfigProps {
   nodeId: string;
   nodes: any[];
   edges: any[];
+}
+
+interface Role {
+  id: string;
+  name: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+}
+
+function UserSearch({ assignedUserId, onSelect }: { assignedUserId: string; onSelect: (userId: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    fetch(`${API_URL}/users`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setUsers(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const filtered = query
+    ? users.filter(u => u.name.toLowerCase().includes(query.toLowerCase()) || u.email.toLowerCase().includes(query.toLowerCase()))
+    : users;
+
+  const selected = users.find(u => u.id === assignedUserId);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      {selected ? (
+        <div className="flex items-center gap-2 border border-gray-300 rounded p-2 text-sm bg-gray-50">
+          <span className="flex-1">{selected.name} <span className="text-gray-400">({selected.email})</span></span>
+          <button onClick={() => { onSelect(''); setQuery(''); }} className="text-gray-400 hover:text-red-600">
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
+          <input
+            className="w-full rounded border border-gray-300 p-2 pl-8 text-sm"
+            placeholder="Search users..."
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+          />
+        </div>
+      )}
+      {open && !selected && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>
+          ) : filtered.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">No users found</p>
+          ) : (
+            filtered.map(u => (
+              <button
+                key={u.id}
+                onClick={() => { onSelect(u.id); setOpen(false); setQuery(''); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b last:border-0"
+              >
+                <span className="font-medium text-gray-900">{u.name}</span>
+                <span className="text-gray-400 ml-2">{u.email}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoleSelect({ assignedRoleId, onSelect }: { assignedRoleId: string; onSelect: (roleId: string) => void }) {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_URL}/roles`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setRoles(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-xs text-gray-400 py-1">Loading roles...</div>;
+
+  return (
+    <select
+      className="block w-full rounded border border-gray-300 p-2 text-sm bg-white"
+      value={assignedRoleId}
+      onChange={e => onSelect(e.target.value)}
+    >
+      <option value="">Select a role...</option>
+      {roles.map(r => (
+        <option key={r.id} value={r.id}>{r.name}</option>
+      ))}
+    </select>
+  );
 }
 
 export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLNodeConfigProps) {
@@ -98,7 +218,7 @@ export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLN
         <span className="text-sm text-gray-700">Allow reviewer feedback</span>
         <span className="text-xs text-gray-400">(text input field)</span>
       </label>
-      {/* Assignment picker (populated when auth is available) */}
+      {/* Assignment picker */}
       <div className="border-t border-gray-100 pt-3 mt-3">
         <span className="text-sm font-medium text-gray-700 block mb-2">Assignment</span>
         <div className="space-y-2">
@@ -111,9 +231,9 @@ export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLN
                 const { assignedTo, ...rest } = config;
                 onChange({ ...rest, assignedTo: undefined });
               } else if (val === 'role') {
-                onChange({ assignedTo: { type: 'role', roleId: config.assignedTo?.roleId || '' } });
+                onChange({ assignedTo: { type: 'role', roleId: '' } });
               } else {
-                onChange({ assignedTo: { type: 'user', userId: config.assignedTo?.userId || '' } });
+                onChange({ assignedTo: { type: 'user', userId: '' } });
               }
             }}
           >
@@ -122,19 +242,15 @@ export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLN
             <option value="user">Specific user</option>
           </select>
           {config.assignedTo?.type === 'role' && (
-            <input
-              className="block w-full rounded border border-gray-300 p-2 text-sm"
-              value={config.assignedTo.roleId || ''}
-              onChange={(e) => onChange({ assignedTo: { ...config.assignedTo, roleId: e.target.value } })}
-              placeholder="Role name (e.g. admin, editor)"
+            <RoleSelect
+              assignedRoleId={config.assignedTo.roleId || ''}
+              onSelect={(roleId) => onChange({ assignedTo: { ...config.assignedTo, roleId } })}
             />
           )}
           {config.assignedTo?.type === 'user' && (
-            <input
-              className="block w-full rounded border border-gray-300 p-2 text-sm"
-              value={config.assignedTo.userId || ''}
-              onChange={(e) => onChange({ assignedTo: { ...config.assignedTo, userId: e.target.value } })}
-              placeholder="User ID"
+            <UserSearch
+              assignedUserId={config.assignedTo.userId || ''}
+              onSelect={(userId) => onChange({ assignedTo: { ...config.assignedTo, userId } })}
             />
           )}
           <p className="text-[10px] text-gray-400">
