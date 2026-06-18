@@ -67,7 +67,7 @@ export default function FlowsListPage() {
       // Use the trigger node's configured input if available
       const flow = flows.find(f => f.id === flowId);
       const triggerNode = flow?.nodes?.find((n: any) => n.data?.type === 'trigger');
-      const inputMessage = triggerNode?.data?.config?.inputMessage || triggerNode?.data?.config?.scheduleInput || triggerNode?.data?.config?.inputSchema || '';
+      const inputMessage = triggerNode?.data?.config?.inputMessage || '';
       let input: any;
       try { input = inputMessage ? JSON.parse(inputMessage) : { message: inputMessage || 'Hello!' }; }
       catch { input = { message: inputMessage || 'Hello!' }; }
