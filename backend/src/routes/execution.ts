@@ -243,9 +243,10 @@ router.post(
       // Handle HITL pause — save partial outputs and await approval
       if (err instanceof HitlPauseError) {
         activeExecutors.delete(exec.id);
+        const hitlCfg = (flowDef.nodes || []).find((n) => n.id === err.nodeId)?.data?.config || {};
         await db
           .update(executions)
-          .set({ status: 'awaiting_approval', output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt } as any })
+          .set({ status: 'awaiting_approval', output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlAllowFeedback: hitlCfg.allowFeedback !== false } as any })
           .where(eq(executions.id, exec.id));
 
         emitSSE({

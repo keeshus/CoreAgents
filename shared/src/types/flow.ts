@@ -113,6 +113,7 @@ export interface HitlNodeData extends BaseNodeData {
   config: {
     prompt: string;
     buttons: Array<{ label: string; value: string }>;
+    allowFeedback?: boolean;
   };
 }
 

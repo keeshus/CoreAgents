@@ -49,6 +49,7 @@ export default function ExecutionHistoryPage() {
   const [steps, setSteps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [feedback, setFeedback] = useState('');
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   const cancel = async (execId: string, e: React.MouseEvent) => {
@@ -118,23 +119,33 @@ export default function ExecutionHistoryPage() {
                           <ReactMarkdown>{exec.output._hitlPrompt}</ReactMarkdown>
                         </div>
                       )}
-                      <div className="flex items-center gap-2">
-                      {(exec.output?._hitlButtons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }]).map((btn: any) => (
-                        <button key={btn.value} onClick={async (e) => {
-                          e.stopPropagation();
-                          if (btn.value === 'rejected') {
-                            await fetch(`${API_URL}/executions/${exec.id}/reject`, { method: 'POST' });
-                          } else {
-                            await fetch(`${API_URL}/executions/${exec.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: btn.value, feedback: '' }) });
-                          }
-                          window.location.reload();
-                        }} className={`flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0 ${
-                          btn.value === 'rejected' ? 'bg-red-100 text-red-700 hover:bg-red-200' :
-                          btn.value === 'approved' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
-                          'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                        }`}><CheckCircle className="w-3 h-3" />{btn.label}</button>
-                      ))}
-                      </div>
+                      <div className="w-full">
+                        {exec.output?._hitlAllowFeedback !== false && (
+                          <textarea
+                            value={feedback}
+                            onChange={(e) => setFeedback(e.target.value)}
+                            placeholder="Optional feedback..."
+                            rows={2}
+                            className="w-full mb-2 text-xs border border-gray-300 rounded p-2 resize-none"
+                          />
+                        )}
+                        <div className="flex items-center gap-2 justify-end">
+                        {(exec.output?._hitlButtons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }]).map((btn: any) => (
+                          <button key={btn.value} onClick={async (e) => {
+                            e.stopPropagation();
+                            if (btn.value === 'rejected') {
+                              await fetch(`${API_URL}/executions/${exec.id}/reject`, { method: 'POST' });
+                            } else {
+                              await fetch(`${API_URL}/executions/${exec.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: btn.value, feedback }) });
+                            }
+                            window.location.reload();
+                          }} className={`flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0 ${
+                            btn.value === 'rejected' ? 'bg-red-100 text-red-700 hover:bg-red-200' :
+                            btn.value === 'approved' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
+                            'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          }`}><CheckCircle className="w-3 h-3" />{btn.label}</button>
+                        ))}
+                        </div>
                     </>
                   )}
                   {exec.status === 'running' && (
