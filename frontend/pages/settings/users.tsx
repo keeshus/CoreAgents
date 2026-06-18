@@ -46,10 +46,10 @@ export default function UsersSettingsPage() {
         credentials: 'include',
         body: JSON.stringify({ email: newEmail, password: newPassword, name: newName }),
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({ error: 'Failed' })); throw new Error(err.error); }
+      if (!res.ok) { const err = await res.json().catch(() => ({ error: 'Registration failed' })); throw new Error(err.error); }
       setShowCreate(false);
       setNewName(''); setNewEmail(''); setNewPassword('');
-      load();
+      await load();
     } catch (err: any) { setCreateError(err.message); }
     finally { setCreating(false); }
   };
