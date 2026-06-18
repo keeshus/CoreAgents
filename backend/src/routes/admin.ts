@@ -14,7 +14,7 @@ router.post('/seed-roles', requirePermission('admin'), asyncHandler(async (_req,
   const defaults = [
     { name: 'admin', description: 'Full system access', permissions: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'settings:read', 'settings:write', 'execution:approve'], is_system: true },
     { name: 'editor', description: 'Can create and edit flows', permissions: ['flow:create', 'flow:edit', 'execution:approve', 'settings:read'], is_system: true },
-    { name: 'viewer', description: 'Read-only access, can approve HITL', permissions: ['flow:read', 'execution:approve', 'settings:read'], is_system: true },
+    { name: 'viewer', description: 'Can approve Human-in-the-Loop requests', permissions: ['execution:approve'], is_system: true },
   ];
 
   const created: string[] = [];

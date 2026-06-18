@@ -62,7 +62,7 @@ describe('role permissions', () => {
   const rolePermissions: Record<string, string[]> = {
     admin: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'settings:read', 'settings:write', 'execution:approve'],
     editor: ['flow:create', 'flow:edit', 'execution:approve', 'settings:read'],
-    viewer: ['flow:read', 'execution:approve', 'settings:read'],
+    viewer: ['execution:approve'],
   };
 
   it('admin has all permissions', () => {
@@ -78,12 +78,13 @@ describe('role permissions', () => {
     expect(rolePermissions.editor).not.toContain('flow:delete');
   });
 
-  it('viewer can read flows and approve HITL', () => {
-    expect(rolePermissions.viewer).toContain('flow:read');
+  it('viewer can only approve HITL', () => {
     expect(rolePermissions.viewer).toContain('execution:approve');
+    expect(rolePermissions.viewer).not.toContain('flow:read');
     expect(rolePermissions.viewer).not.toContain('flow:create');
     expect(rolePermissions.viewer).not.toContain('flow:edit');
     expect(rolePermissions.viewer).not.toContain('flow:delete');
+    expect(rolePermissions.viewer).not.toContain('settings:read');
     expect(rolePermissions.viewer).not.toContain('settings:write');
   });
 

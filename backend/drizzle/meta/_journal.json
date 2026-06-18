@@ -29,6 +29,13 @@
       "when": 1781774305845,
       "tag": "0003_flat_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781850000000,
+      "tag": "0004_fix_role_permissions",
+      "breakpoints": true
     }
   ]
 }
