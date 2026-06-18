@@ -33,4 +33,5 @@ COPY --from=builder /app/frontend/next.config.js ./frontend/
 COPY --from=builder /app/frontend/package*.json ./frontend/
 
 EXPOSE 3000
+USER node
 CMD ["npm", "start", "-w", "frontend", "--", "-H", "0.0.0.0"]

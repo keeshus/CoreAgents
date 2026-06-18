@@ -338,9 +338,7 @@ export function NodeConfigModal({
                     <code className="text-[10px] text-gray-700 break-all">
                       {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/webhook/
                       {flowId}
-                      {node.data.config.webhookSecret
-                        ? `?secret=${node.data.config.webhookSecret}`
-                        : ''}
+                      {node.data.config.webhookSecret ? '?secret=••••••••' : ''}
                     </code>
                   </div>
                 </>

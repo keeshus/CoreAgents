@@ -32,4 +32,5 @@ COPY --from=builder /app/backend/drizzle ./backend/drizzle
 COPY --from=builder /app/backend/package*.json ./backend/
 
 EXPOSE 3001
+USER node
 CMD ["node", "backend/dist/index.js"]

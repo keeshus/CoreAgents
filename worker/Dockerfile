@@ -28,4 +28,5 @@ COPY --from=builder /app/shared ./shared
 COPY --from=builder /app/worker/dist ./worker/dist
 COPY --from=builder /app/worker/package*.json ./worker/
 
+USER node
 CMD ["node", "worker/dist/run.js"]

@@ -4,8 +4,9 @@ import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ThumbsUp, AlertTriangle, User, LogOut } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface PendingExec {
   id: string;
@@ -182,7 +183,7 @@ export default function ApprovalsPage() {
 
                   {prompt && (
                     <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm max-h-48 overflow-y-auto prose prose-sm max-w-none">
-                      <ReactMarkdown>{prompt}</ReactMarkdown>
+                      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{prompt}</ReactMarkdown>
                     </div>
                   )}
 

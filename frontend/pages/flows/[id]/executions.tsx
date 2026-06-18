@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Zap, StopCircle, Bug } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 import { useAuth } from '@/lib/auth-context';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface Execution {
   id: string;
@@ -123,7 +124,7 @@ export default function ExecutionHistoryPage() {
                     <>
                       {exec.output?._hitlPrompt && (
                         <div className="w-full mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs max-h-48 overflow-y-auto prose prose-sm max-w-none">
-                          <ReactMarkdown>{exec.output._hitlPrompt}</ReactMarkdown>
+                          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{exec.output._hitlPrompt}</ReactMarkdown>
                         </div>
                       )}
                       <div className="w-full">
