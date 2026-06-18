@@ -380,10 +380,32 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
   const mergedInput = { ...(exec.input || {}), _approved: true, _feedback: feedback, _decision: decision, ...userData };
 
   try {
+    const persistStep = async (_nodeId: string, event: SSEEvent) => {
+      const data = event.data;
+      const resolvedNodeId = (data.nodeId as string) || _nodeId;
+      const resolvedNodeType = (data.nodeType as string) || '';
+      try {
+        if (event.type === 'step.started') {
+          await db.insert(executionSteps).values({
+            execution_id: exec.id, node_id: resolvedNodeId,
+            node_type: resolvedNodeType, status: 'running',
+            input: data.input as any, started_at: new Date(),
+          });
+        } else if (event.type === 'step.completed') {
+          await db.update(executionSteps).set({
+            status: 'completed', output: data.output as any, completed_at: new Date(),
+          }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
+        } else if (event.type === 'step.failed') {
+          await db.update(executionSteps).set({
+            status: 'failed', error: data.error as string, completed_at: new Date(),
+          }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
+        }
+      } catch (e) { console.error('Failed to persist step:', e); }
+    };
     const result = await executor.execute(
       flowDef,
       mergedInput,
-      async () => {}, // no SSE needed for replay
+      persistStep,
       executionContext,
       { replayFrom: hitlEntry.nodeId, replayOutputs: savedOutputs, inputOverride: mergedInput },
     );
