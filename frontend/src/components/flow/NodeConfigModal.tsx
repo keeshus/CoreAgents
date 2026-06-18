@@ -524,7 +524,7 @@ export function NodeConfigModal({
                               if (list.includes(f)) onConfigChange({ displayFields: list.filter(x => x !== f) });
                               else onConfigChange({ displayFields: [...list, f] });
                             }} className="rounded" />
-                            <span className={forwardList.length > 0 && !forwardList.includes(f) ? 'text-gray-300 line-through' : ''}>{f}</span>
+                            <span>{f}</span>
                           </label>
                         ))}
                       </div>
