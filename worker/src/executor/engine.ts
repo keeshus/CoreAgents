@@ -379,6 +379,9 @@ export class FlowExecutor {
         // Resolve {{input.path.to.field}} template variables in system prompt
         const resolvedPrompt = resolveTemplate(config.systemPrompt || '', input);
 
+        // Track all tool calls for the execution log
+        const executedTools: Array<{ name: string; input: any; result: string }> = [];
+
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           if (this.abortController.signal.aborted) break;
 
@@ -410,9 +413,6 @@ export class FlowExecutor {
 
           // Add the assistant's tool-use message to conversation
           conversation.push({ role: 'assistant' as const, content: response.text || '' });
-
-          // Track all tool calls for the execution log
-          const executedTools: Array<{ name: string; input: any; result: string }> = [];
 
           // Execute each tool call and add results
           for (const tc of response.toolCalls) {
