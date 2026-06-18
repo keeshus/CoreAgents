@@ -114,8 +114,8 @@ export class FlowExecutor {
         const allFiltered = incomingEdges.every((e, i) => {
           if (!e.condition?.label) return false;
           const src = sourceOutputs[i] as Record<string, unknown> | undefined;
-          const branchLabel = (src as any)?.label;
-          return branchLabel !== e.condition.label;
+          const routeLabel = (src as any)?.label ?? (src as any)?.decision;
+          return routeLabel !== e.condition.label;
         });
 
         if (allFiltered && incomingEdges.some(e => e.condition?.label)) {
@@ -437,6 +437,30 @@ export class FlowExecutor {
                 }
               }
 
+              // Handle built-in utility tools (auto-injected, no MCP node needed)
+              if (toolResult === 'Tool not found') {
+                const input = tc.input || {};
+                switch (tc.name) {
+                  case 'now': {
+                    const d = new Date();
+                    toolResult = JSON.stringify({ iso: d.toISOString(), unix: d.getTime() });
+                    break;
+                  }
+                  case 'uuid': {
+                    const { randomUUID } = await import('node:crypto');
+                    toolResult = JSON.stringify({ uuid: randomUUID() });
+                    break;
+                  }
+                  case 'log': {
+                    const level: string = (input as any).level || 'info';
+                    const msg: string = (input as any).message || '';
+                    console.log(`[llm-log:${level}] ${msg}`);
+                    toolResult = JSON.stringify({ logged: true, level, message: msg });
+                    break;
+                  }
+                }
+              }
+
               conversation.push({
                 role: 'user' as const,
                 content: `Tool result for ${tc.name}: ${toolResult}`,
@@ -446,7 +470,7 @@ export class FlowExecutor {
                 type: 'log',
                 executionId: '',
                 nodeId: node.id,
-                data: { nodeId: node.id, toolCall: tc.name, toolResult },
+                data: { nodeId: node.id, toolCall: tc.name, toolInput: tc.input, toolResult },
                 timestamp: new Date().toISOString(),
               });
             } catch (err) {
