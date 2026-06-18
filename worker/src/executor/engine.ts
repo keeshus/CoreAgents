@@ -137,9 +137,16 @@ export class FlowExecutor {
           return false;
         });
 
-        if (allFiltered && incomingEdges.some(e => e.condition?.label || e.sourceHandle)) {
-          nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
-          continue;
+        if (allFiltered) {
+          if (incomingEdges.some(e => e.condition?.label || e.sourceHandle)) {
+            nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
+            continue;
+          }
+          // All edges have no conditions/sourceHandles — misconfigured flow
+          throw new Error(
+            `Node "${node.data.label || node.id}" has ${incomingEdges.length} incoming edges from a branch/HITL node, but none have routing conditions set. ` +
+            `Connect each edge to a specific output handle on the source node.`
+          );
         }
       }
 
