@@ -165,11 +165,10 @@ export default function UsersSettingsPage() {
                     <td className="p-3 text-gray-600">{u.email}</td>
                     <td className="p-3">
                       <select
-                        value={u.role_id || ''}
+                        value={u.role_id || roles[0]?.id || ''}
                         onChange={e => handleRoleChange(u.id, e.target.value)}
                         className="text-xs border border-gray-200 rounded px-2 py-1 bg-white"
                       >
-                        <option value="">None</option>
                         {roles.map(r => (
                           <option key={r.id} value={r.id}>{r.name}</option>
                         ))}
