@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, Shield, Loader2, AlertTriangle } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+import { ArrowLeft, Trash2, Shield, Loader2, AlertTriangle, Plus, X } from 'lucide-react';
+import { API_URL } from '@/lib/api-client';
 
 interface Role {
   id: string;
@@ -29,6 +28,31 @@ export default function UsersSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  const handleCreate = async () => {
+    if (!newName || !newEmail || !newPassword) { setCreateError('All fields required'); return; }
+    if (newPassword.length < 8) { setCreateError('Password must be at least 8 characters'); return; }
+    setCreating(true);
+    setCreateError('');
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: newEmail, password: newPassword, name: newName }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({ error: 'Failed' })); throw new Error(err.error); }
+      setShowCreate(false);
+      setNewName(''); setNewEmail(''); setNewPassword('');
+      load();
+    } catch (err: any) { setCreateError(err.message); }
+    finally { setCreating(false); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -97,6 +121,9 @@ export default function UsersSettingsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Users</h1>
             <p className="text-sm text-gray-500 mt-1">Manage user accounts and roles</p>
           </div>
+          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">
+            <Plus className="w-3 h-3" /> Create User
+          </button>
           <button onClick={load} disabled={loading} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 disabled:opacity-50">
             <Loader2 className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -173,6 +200,37 @@ export default function UsersSettingsPage() {
           <Link href="/settings" className="text-sm text-blue-600 hover:underline">← Back to settings</Link>
         </div>
       </div>
+
+      {/* Create User Modal */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowCreate(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Create User</h3>
+              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+            </div>
+            {createError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{createError}</div>}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+                <input type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
+                <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" />
+                <p className="text-[10px] text-gray-400 mt-1">Minimum 8 characters</p>
+              </div>
+              <button onClick={handleCreate} disabled={creating} className="w-full bg-gray-900 text-white rounded p-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
+                {creating ? 'Creating...' : 'Create User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
