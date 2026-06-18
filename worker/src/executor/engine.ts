@@ -107,18 +107,37 @@ export class FlowExecutor {
         }
       }
 
-      // Check if this node should be skipped based on incoming edge conditions
+      // Check if this node should be skipped based on incoming edge conditions or sourceHandle
       const incomingEdges = flow.edges.filter(e => e.target === node.id);
       if (incomingEdges.length > 0) {
         const sourceOutputs = incomingEdges.map(e => nodeOutputs.get(e.source));
         const allFiltered = incomingEdges.every((e, i) => {
-          if (!e.condition?.label) return false;
           const src = sourceOutputs[i] as Record<string, unknown> | undefined;
-          const routeLabel = (src as any)?.label ?? (src as any)?.decision;
-          return routeLabel !== e.condition.label;
+
+          // Check explicit edge condition (branch nodes, HITL edges with conditions)
+          if (e.condition?.label) {
+            const routeLabel = (src as any)?.label ?? (src as any)?.decision;
+            if (routeLabel !== e.condition.label) return true;
+          }
+
+          // For HITL sources without explicit conditions, filter by sourceHandle
+          // The HITL node has dynamic output handles per button. If the decision
+          // doesn't match the button at the sourceHandle index, filter this edge.
+          if (!e.condition?.label && e.sourceHandle) {
+            const sourceNode = flow.nodes.find(n => n.id === e.source);
+            if (sourceNode?.data?.type === 'hitl') {
+              const buttons: Array<{ value: string }> = (sourceNode.data as any).config?.buttons || [];
+              const handleIndex = parseInt((e.sourceHandle as string).replace('output-', ''), 10);
+              const buttonValue = buttons[handleIndex]?.value;
+              const decision = (src as any)?.decision;
+              if (buttonValue && decision && buttonValue !== decision) return true;
+            }
+          }
+
+          return false;
         });
 
-        if (allFiltered && incomingEdges.some(e => e.condition?.label)) {
+        if (allFiltered && incomingEdges.some(e => e.condition?.label || e.sourceHandle)) {
           nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
           continue;
         }
