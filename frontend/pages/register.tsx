@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth, useAuthConfig } from '@/lib/auth-context';
 import Link from 'next/link';
+import { CheckCircle, XCircle } from 'lucide-react';
 import { PasswordStrengthMeter } from '@/components/PasswordStrength';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
