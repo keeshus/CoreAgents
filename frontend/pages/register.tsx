@@ -2,33 +2,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth, useAuthConfig } from '@/lib/auth-context';
 import Link from 'next/link';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { PasswordStrengthMeter } from '@/components/PasswordStrength';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
-
-interface PwCheck {
-  label: string;
-  met: boolean;
-}
-
-function passwordStrength(password: string): { score: number; label: string; color: string; checks: PwCheck[] } {
-  const checks: PwCheck[] = [
-    { label: '8+ characters', met: password.length >= 8 },
-    { label: 'Contains lowercase', met: /[a-z]/.test(password) },
-    { label: 'Contains uppercase', met: /[A-Z]/.test(password) },
-    { label: 'Contains number', met: /[0-9]/.test(password) },
-    { label: 'Contains special character', met: /[^a-zA-Z0-9]/.test(password) },
-  ];
-  const score = checks.filter(c => c.met).length;
-
-  let label: string, color: string;
-  if (score <= 1) { label = 'Weak'; color = 'bg-red-500'; }
-  else if (score <= 2) { label = 'Fair'; color = 'bg-orange-500'; }
-  else if (score <= 3) { label = 'Good'; color = 'bg-blue-500'; }
-  else { label = 'Strong'; color = 'bg-green-500'; }
-
-  return { score, label, color, checks };
-}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -44,7 +20,6 @@ export default function RegisterPage() {
   const hasSso = authConfig?.sso != null;
   const ssoName = authConfig?.sso?.name || 'SSO';
 
-  const pwStrength = passwordStrength(password);
   const passwordsMatch = password === confirmPassword;
   const touchedConfirm = confirmPassword.length > 0;
 
@@ -128,24 +103,7 @@ export default function RegisterPage() {
                 autoComplete="new-password"
               />
               <p className="text-[10px] text-gray-400 mt-1">Minimum 8 characters required</p>
-              {password.length > 0 && (
-                <div className="mt-2">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${pwStrength.color}`} style={{ width: `${(pwStrength.score / 5) * 100}%` }} />
-                    </div>
-                    <span className="text-[10px] font-medium text-gray-500">{pwStrength.label}</span>
-                  </div>
-                  <div className="space-y-0.5">
-                    {pwStrength.checks.map((c, i) => (
-                      <p key={i} className={`text-[10px] flex items-center gap-1 ${c.met ? 'text-green-600' : 'text-gray-400'}`}>
-                        {c.met ? <CheckCircle className="w-2.5 h-2.5 shrink-0" /> : <XCircle className="w-2.5 h-2.5 shrink-0" />}
-                        {c.label}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {password.length > 0 && <PasswordStrengthMeter password={password} />}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
