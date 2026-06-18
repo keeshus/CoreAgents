@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { flows, executions, executionSteps, llmEndpoints } from '../db/schema.js';
-import { FlowExecutor } from '../../../worker/src/executor/engine.js';
+import { flows, executions } from '../db/schema.js';
+import { enqueueExecution } from '../../../worker/src/queue.js';
 import { asyncHandler } from '../utils/async-handler.js';
-import type { NodeData } from 'core-agents-shared';
+import type { NodeData, FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
 
@@ -63,78 +63,21 @@ router.post(
       input.message = (req as any).body || '';
     }
 
-    // Execute the flow (non-streaming — return result directly)
-    const executionContext = {
-      getEndpoint: async (endpointId: string) => {
-        const [endpoint] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, endpointId));
-        if (!endpoint) return null;
-        return {
-          providerType: endpoint.provider_type as 'anthropic' | 'openai' | 'litellm',
-          apiKey: endpoint.api_key,
-          baseUrl: endpoint.base_url,
-        };
-      },
-      flowNodes: flow.nodes as any[],
-      flowEdges: flow.edges as any[],
+    // Create execution record and enqueue via BullMQ
+    const [exec] = await db.insert(executions).values({
+      flow_id: flowId, status: 'pending', input, started_at: new Date(),
+    }).returning();
+
+    const flowDef: FlowDefinition = {
+      id: flow.id, name: flow.name, description: flow.description || '',
+      nodes: flow.nodes as any[], edges: flow.edges as any[],
+      version: flow.version,
+      createdAt: flow.created_at?.toISOString() || '', updatedAt: flow.updated_at?.toISOString() || '',
     };
 
-    const executor = new FlowExecutor();
+    await enqueueExecution(flowDef, { ...input, __executionId: exec.id });
 
-    try {
-      const result = await executor.execute(
-        {
-          id: flow.id,
-          name: flow.name,
-          description: flow.description || '',
-          nodes: flow.nodes as any[],
-          edges: flow.edges as any[],
-          version: flow.version,
-          createdAt: flow.created_at?.toISOString() || '',
-          updatedAt: flow.updated_at?.toISOString() || '',
-        },
-        input,
-        async (nodeId, event) => {
-          // Persist step to DB (non-streaming context)
-          const d = event.data;
-          const nid = (d.nodeId as string) || nodeId;
-          const ntype = (d.nodeType as string) || '';
-          if (event.type === 'step.started') {
-            await db.insert(executionSteps).values({
-              execution_id: '',
-              node_id: nid,
-              node_type: ntype,
-              status: 'running',
-              input: d.input as any,
-              started_at: new Date(),
-            });
-          } else if (event.type === 'step.completed') {
-            await db.insert(executionSteps).values({
-              execution_id: '',
-              node_id: nid,
-              node_type: ntype,
-              status: 'completed',
-              output: d.output as any,
-              completed_at: new Date(),
-            });
-          } else if (event.type === 'step.failed') {
-            await db.insert(executionSteps).values({
-              execution_id: '',
-              node_id: nid,
-              node_type: ntype,
-              status: 'failed',
-              error: d.error as string,
-              completed_at: new Date(),
-            });
-          }
-        },
-        executionContext,
-      );
-
-      res.json({ status: 'completed', output: result.output });
-    } catch (err) {
-      const error = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ status: 'failed', error });
-    }
+    res.json({ status: 'queued', executionId: exec.id });
   }),
 );
 

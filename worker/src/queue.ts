@@ -4,6 +4,8 @@ import type { FlowDefinition } from 'core-agents-shared';
 const connection = {
   host: process.env.VALKEY_HOST || 'localhost',
   port: Number(process.env.VALKEY_PORT) || 6379,
+  password: process.env.VALKEY_PASSWORD || undefined,
+  ...(process.env.VALKEY_TLS === 'true' ? { tls: {} } : {}),
 };
 
 export const executionQueue = new Queue('flow-executions', { connection });

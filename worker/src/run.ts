@@ -3,41 +3,43 @@
  * Listens to the BullMQ queue and executes flows as jobs arrive.
  */
 import { createExecutionWorker } from './queue.js';
-import { FlowExecutor } from './executor/engine.js';
-import type { ExecutionContext } from './executor/engine.js';
+import { executeFlowWithPersistence } from './executor/runner.js';
 
 async function main() {
   console.log('Worker started, waiting for jobs...');
 
-  // Lazy-load DB dependencies at runtime
   const { db } = await import('../../backend/src/db/connection.js');
-  const { llmEndpoints } = await import('../../backend/src/db/schema.js');
-  const { eq } = await import('drizzle-orm');
+  const { executions, executionSteps } = await import('../../backend/src/db/schema.js');
+  const { eq, and } = await import('drizzle-orm');
 
   const worker = createExecutionWorker(async (job) => {
     const { flow, input } = job;
-    console.log(`Executing flow: ${flow.name} (${flow.id})`);
+    const executionId = (input as any)?.__executionId as string | undefined;
+    console.log(`Executing flow: ${flow.name} (${flow.id})${executionId ? ' exec=' + executionId : ''}`);
 
-    const executionContext: ExecutionContext = {
-      getEndpoint: async (endpointId: string) => {
-        const [endpoint] = await db
-          .select()
-          .from(llmEndpoints)
-          .where(eq(llmEndpoints.id, endpointId));
-        if (!endpoint) return null;
-        return {
-          providerType: endpoint.provider_type as 'anthropic' | 'openai' | 'litellm',
-          apiKey: endpoint.api_key,
-          baseUrl: endpoint.base_url,
-        };
-      },
-      flowNodes: flow.nodes,
-      flowEdges: flow.edges,
-    };
+    let execId = executionId;
+    if (!execId) {
+      const [exec] = await db.insert(executions).values({
+        flow_id: flow.id, status: 'running', input, started_at: new Date(),
+      }).returning();
+      execId = exec.id;
+    } else {
+      await db.update(executions).set({ status: 'running', started_at: new Date() })
+        .where(eq(executions.id, execId));
+    }
 
-    const executor = new FlowExecutor();
-    const result = await executor.execute(flow, input, async () => {}, executionContext);
-    console.log(`Flow ${flow.id} completed`);
+    const result = await executeFlowWithPersistence({
+      flow,
+      input,
+      executionId: execId,
+      db,
+      executionsTable: executions,
+      executionStepsTable: executionSteps,
+      eq,
+      and,
+    });
+
+    console.log(`Flow ${flow.id}: ${result.status} (exec ${execId})`);
   });
 
   process.on('SIGTERM', () => {
