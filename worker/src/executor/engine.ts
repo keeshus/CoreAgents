@@ -411,6 +411,9 @@ export class FlowExecutor {
           // Add the assistant's tool-use message to conversation
           conversation.push({ role: 'assistant' as const, content: response.text || '' });
 
+          // Track all tool calls for the execution log
+          const executedTools: Array<{ name: string; input: any; result: string }> = [];
+
           // Execute each tool call and add results
           for (const tc of response.toolCalls) {
             try {
@@ -452,6 +455,8 @@ export class FlowExecutor {
                 content: `Tool result for ${tc.name}: ${toolResult}`,
               });
 
+              executedTools.push({ name: tc.name, input: tc.input, result: toolResult });
+
               onEvent(node.id, {
                 type: 'log',
                 executionId: '',
@@ -460,6 +465,7 @@ export class FlowExecutor {
                 timestamp: new Date().toISOString(),
               });
             } catch (err) {
+              executedTools.push({ name: tc.name, input: tc.input, result: `Error: ${err instanceof Error ? err.message : String(err)}` });
               conversation.push({
                 role: 'user' as const,
                 content: `Tool error for ${tc.name}: ${err instanceof Error ? err.message : String(err)}`,
@@ -470,6 +476,7 @@ export class FlowExecutor {
 
         
         const result: Record<string, unknown> = { content: finalContent };
+        if (executedTools.length > 0) result.toolCalls = executedTools;
         if (config?.responseFormat === 'json_object' && finalContent) {
           try {
             const parsed = JSON.parse(finalContent);
