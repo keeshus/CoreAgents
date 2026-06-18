@@ -52,6 +52,12 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    // Client-side validation matching server rules
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
     setLoading(true);
     try {
       await register(email, password, name);
