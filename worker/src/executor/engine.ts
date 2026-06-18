@@ -103,8 +103,8 @@ export class FlowExecutor {
         const allFiltered = incomingEdges.every((e, i) => {
           if (!e.condition?.label) return false;
           const src = sourceOutputs[i] as Record<string, unknown> | undefined;
-          const branchLabel = (src as any)?.label;
-          return branchLabel !== e.condition.label;
+          const routeLabel = (src as any)?.label ?? (src as any)?.decision;
+          return routeLabel !== e.condition.label;
         });
 
         if (allFiltered && incomingEdges.some(e => e.condition?.label)) {
