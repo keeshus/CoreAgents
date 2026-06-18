@@ -386,11 +386,22 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       const resolvedNodeType = (data.nodeType as string) || '';
       try {
         if (event.type === 'step.started') {
-          await db.insert(executionSteps).values({
-            execution_id: exec.id, node_id: resolvedNodeId,
-            node_type: resolvedNodeType, status: 'running',
-            input: data.input as any, started_at: new Date(),
-          });
+          // Upsert: update existing step (from original run) or insert new one
+          const [existing] = await db.select({ id: executionSteps.id })
+            .from(executionSteps)
+            .where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)))
+            .limit(1);
+          if (existing) {
+            await db.update(executionSteps).set({
+              status: 'running', input: data.input as any, started_at: new Date(),
+            }).where(eq(executionSteps.id, existing.id));
+          } else {
+            await db.insert(executionSteps).values({
+              execution_id: exec.id, node_id: resolvedNodeId,
+              node_type: resolvedNodeType, status: 'running',
+              input: data.input as any, started_at: new Date(),
+            });
+          }
         } else if (event.type === 'step.completed') {
           await db.update(executionSteps).set({
             status: 'completed', output: data.output as any, completed_at: new Date(),
