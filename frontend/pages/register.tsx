@@ -121,6 +121,7 @@ export default function RegisterPage() {
                 className="w-full rounded border border-gray-300 p-2 text-sm"
                 autoComplete="new-password"
               />
+              <p className="text-[10px] text-gray-400 mt-1">Minimum 8 characters required</p>
               {password.length > 0 && (
                 <div className="mt-2">
                   <div className="flex items-center gap-2 mb-2">
