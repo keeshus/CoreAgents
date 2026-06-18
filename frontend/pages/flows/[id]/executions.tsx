@@ -146,6 +146,7 @@ export default function ExecutionHistoryPage() {
                           }`}><CheckCircle className="w-3 h-3" />{btn.label}</button>
                         ))}
                         </div>
+                      </div>
                     </>
                   )}
                   {exec.status === 'running' && (
