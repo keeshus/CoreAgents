@@ -508,31 +508,7 @@ export function NodeConfigModal({
                   + Add Button
                 </button>
               </div>
-              {(() => {
-                // Only show fields that are selected as input (or all if no input selection)
-                const displayList: string[] = node.data.config?.displayFields || [];
-                                return (
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm font-medium text-gray-700 block mb-1">Fields to Display (what the user sees)</span>
-                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
-                        {upstreamLabels.length === 0 && <p className="text-xs text-gray-400">No upstream data available yet.</p>}
-                        {upstreamLabels.map((f) => (
-                          <label key={`display-${f}`} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
-                            <input type="checkbox" checked={displayList.includes(f)} onChange={() => {
-                              const list = [...displayList];
-                              if (list.includes(f)) onConfigChange({ displayFields: list.filter(x => x !== f) });
-                              else onConfigChange({ displayFields: [...list, f] });
-                            }} className="rounded" />
-                            <span>{f}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">Unchecked = hidden from reviewer. Empty = show all.</p>
-                    </div>
-                  </div>
-                );
-              })()}
+              <p className="text-xs text-gray-400">Use {'{{'}input.Label.field{'}}'} in the prompt above to reference upstream data.</p>
             </div>
           )}
 

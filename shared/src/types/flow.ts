@@ -112,7 +112,6 @@ export interface HitlNodeData extends BaseNodeData {
   type: 'hitl';
   config: {
     prompt: string;
-    displayFields: string[];
     buttons: Array<{ label: string; value: string }>;
   };
 }

@@ -243,18 +243,9 @@ router.post(
       // Handle HITL pause — save partial outputs and await approval
       if (err instanceof HitlPauseError) {
         activeExecutors.delete(exec.id);
-        // Extract what the user should see (displayFields)
-        const hitlCfg = (flow.nodes as any[])?.find((n: any) => n.id === err.nodeId)?.data?.config || {};
-        const displayFields: string[] = hitlCfg.displayFields || [];
-        const lastOutput = Object.values(err.savedOutputs).pop() as Record<string, unknown> | undefined || {};
-        const displayedContent: Record<string, unknown> = {};
-        if (displayFields.length > 0) {
-          for (const f of displayFields) { if (lastOutput[f] !== undefined) displayedContent[f] = lastOutput[f]; }
-        } else { Object.assign(displayedContent, lastOutput); }
-
         await db
           .update(executions)
-          .set({ status: 'awaiting_approval', output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlDisplayed: displayedContent } as any })
+          .set({ status: 'awaiting_approval', output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt } as any })
           .where(eq(executions.id, exec.id));
 
         emitSSE({

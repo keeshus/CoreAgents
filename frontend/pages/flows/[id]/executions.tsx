@@ -2,6 +2,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Zap, StopCircle, Bug } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -109,9 +110,15 @@ export default function ExecutionHistoryPage() {
                   <p className="text-xs text-gray-400 mt-1">{fmtTime(exec.created_at)}</p>
                   {exec.error && <p className="text-xs text-red-500 mt-1 truncate font-mono">{trunc(exec.error, 80)}</p>}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end gap-2">
                   {exec.status === 'awaiting_approval' && (
                     <>
+                      {exec.output?._hitlPrompt && (
+                        <div className="w-full mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs max-h-48 overflow-y-auto prose prose-sm max-w-none">
+                          <ReactMarkdown>{exec.output._hitlPrompt}</ReactMarkdown>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
                       {(exec.output?._hitlButtons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }]).map((btn: any) => (
                         <button key={btn.value} onClick={async (e) => {
                           e.stopPropagation();
@@ -127,6 +134,7 @@ export default function ExecutionHistoryPage() {
                           'bg-blue-100 text-blue-700 hover:bg-blue-200'
                         }`}><CheckCircle className="w-3 h-3" />{btn.label}</button>
                       ))}
+                      </div>
                     </>
                   )}
                   {exec.status === 'running' && (

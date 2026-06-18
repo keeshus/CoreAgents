@@ -73,7 +73,7 @@ const catalog: NodeCatalogEntry[] = [
     label: 'Human in the Loop',
     category: 'processing',
     description: 'Pause the flow for human approval. Shows upstream output and waits for approve/reject.',
-    defaultConfig: { prompt: 'Please review the following before continuing:', displayFields: [], forwardFields: [], buttons: [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }] },
+    defaultConfig: { prompt: 'Please review the following before continuing:', buttons: [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }] },
     inputs: 1,
     outputs: 1,
   },
