@@ -122,6 +122,39 @@ const TOOL_SCHEMAS: Record<string, { type: string; properties: Record<string, un
   },
 };
 
+// ── Direct tool execution (in-process, no HTTP needed) ────────────────────────
+// Handles utility tools (now, uuid, log, fetch) that don't need DB access.
+// Store/file tools require database access — configure an MCP tool node for those.
+
+export async function callBuiltInTool(name: string, args: Record<string, unknown>): Promise<string> {
+  switch (name) {
+    case 'now': {
+      const d = new Date();
+      return JSON.stringify({ iso: d.toISOString(), unix: d.getTime() });
+    }
+    case 'uuid': {
+      return JSON.stringify({ uuid: randomUUID() });
+    }
+    case 'log': {
+      const level = (args?.level as string) || 'info';
+      const message = (args?.message as string) || '';
+      console.log(`[builtin-log:${level}] ${message}`);
+      return JSON.stringify({ logged: true, level, message });
+    }
+    case 'fetch': {
+      const url = args?.url as string;
+      if (!url?.startsWith('http://') && !url?.startsWith('https://')) {
+        throw new Error('Only HTTP(S) URLs are allowed');
+      }
+      const response = await fetch(url);
+      const text = await response.text();
+      return JSON.stringify({ status: response.status, body: text });
+    }
+    default:
+      throw new Error(`Built-in tool "${name}" requires a database connection — add an MCP tool node in the flow`);
+  }
+}
+
 // ── Server bootstrap ─────────────────────────────────────────────────────────────
 
 export async function startBuiltInMCPServer(options: BuiltInMCPServerOptions): Promise<BuiltInMCPServerHandle> {

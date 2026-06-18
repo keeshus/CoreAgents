@@ -437,27 +437,13 @@ export class FlowExecutor {
                 }
               }
 
-              // Handle built-in utility tools (auto-injected, no MCP node needed)
+              // Handle built-in utility tools (auto-injected, no MCP node required)
               if (toolResult === 'Tool not found') {
-                const input = tc.input || {};
-                switch (tc.name) {
-                  case 'now': {
-                    const d = new Date();
-                    toolResult = JSON.stringify({ iso: d.toISOString(), unix: d.getTime() });
-                    break;
-                  }
-                  case 'uuid': {
-                    const { randomUUID } = await import('node:crypto');
-                    toolResult = JSON.stringify({ uuid: randomUUID() });
-                    break;
-                  }
-                  case 'log': {
-                    const level: string = (input as any).level || 'info';
-                    const msg: string = (input as any).message || '';
-                    console.log(`[llm-log:${level}] ${msg}`);
-                    toolResult = JSON.stringify({ logged: true, level, message: msg });
-                    break;
-                  }
+                try {
+                  const { callBuiltInTool } = await import('../mcp/built-in.js');
+                  toolResult = await callBuiltInTool(tc.name, tc.input || {});
+                } catch (err) {
+                  toolResult = `Error: ${err instanceof Error ? err.message : String(err)}`;
                 }
               }
 
