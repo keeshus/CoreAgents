@@ -669,12 +669,14 @@ function resolveTemplate(template: string, data: unknown): string {
             return '';
           }
         } else {
-          return match;
+          console.warn(`Template variable ${match} could not be resolved`);
+          return '';
         }
       } else if (current && typeof current === 'object' && part in (current as Record<string, unknown>)) {
         current = (current as Record<string, unknown>)[part];
       } else {
-        return match;
+        console.warn(`Template variable ${match} could not be resolved`);
+        return '';
       }
     }
     if (typeof current === 'object') return JSON.stringify(current);

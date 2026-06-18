@@ -196,13 +196,6 @@ export default function ApprovalsPage() {
                   )}
 
                   <div className="flex items-center gap-2 justify-end">
-                    <button
-                      onClick={() => handleReject(exec.id)}
-                      disabled={isActing}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50"
-                    >
-                      <XCircle className="w-3 h-3" /> Reject
-                    </button>
                     {buttons.map((btn: any) => (
                       <button
                         key={btn.value}

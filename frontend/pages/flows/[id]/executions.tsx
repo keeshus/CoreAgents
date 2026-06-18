@@ -2,8 +2,6 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Zap, StopCircle, Bug } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import rehypeSanitize from 'rehype-sanitize';
 import { useAuth } from '@/lib/auth-context';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
@@ -54,7 +52,6 @@ export default function ExecutionHistoryPage() {
   const [steps, setSteps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   const cancel = async (execId: string, e: React.MouseEvent) => {
@@ -121,42 +118,9 @@ export default function ExecutionHistoryPage() {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   {exec.status === 'awaiting_approval' && (
-                    <>
-                      {exec.output?._hitlPrompt && (
-                        <div className="w-full mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs max-h-48 overflow-y-auto prose prose-sm max-w-none">
-                          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{exec.output._hitlPrompt}</ReactMarkdown>
-                        </div>
-                      )}
-                      <div className="w-full">
-                        {exec.output?._hitlAllowFeedback !== false && (
-                          <textarea
-                            value={feedback[exec.id] || ''}
-                            onChange={(e) => setFeedback(prev => ({ ...prev, [exec.id]: e.target.value }))}
-                            placeholder="Optional feedback..."
-                            rows={2}
-                            className="w-full mb-2 text-xs border border-gray-300 rounded p-2 resize-none"
-                          />
-                        )}
-                        <div className="flex items-center gap-2 justify-end">
-                        {(exec.output?._hitlButtons || [{ label: 'Approve', value: 'approved' }]).map((btn: any) => (
-                          <button key={btn.value} onClick={async (e) => {
-                            e.stopPropagation();
-                            const fb = feedback[exec.id] || '';
-                            if (btn.value === 'rejected') {
-                              await fetch(`${API_URL}/executions/${exec.id}/reject`, { method: 'POST' });
-                            } else {
-                              await fetch(`${API_URL}/executions/${exec.id}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: btn.value, feedback: fb, hitlNodeId: exec.output?._hitlNodeId || undefined }) });
-                            }
-                            window.location.reload();
-                          }} className={`flex items-center gap-1 px-2 py-1 rounded text-xs shrink-0 ${
-                            btn.value === 'rejected' ? 'bg-red-100 text-red-700 hover:bg-red-200' :
-                            btn.value === 'approved' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
-                            'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                          }`}><CheckCircle className="w-3 h-3" />{btn.label}</button>
-                        ))}
-                        </div>
-                      </div>
-                    </>
+                    <Link href="/approvals" className="text-xs text-amber-600 hover:text-amber-700 underline whitespace-nowrap">
+                      Pending approval →
+                    </Link>
                   )}
                   {exec.status === 'running' && (
                     <button onClick={(e) => cancel(exec.id, e)} disabled={cancelling === exec.id} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 disabled:opacity-50 shrink-0"><StopCircle className="w-3 h-3" />{cancelling === exec.id ? '...' : 'Stop'}</button>
