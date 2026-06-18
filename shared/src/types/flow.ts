@@ -113,7 +113,6 @@ export interface HitlNodeData extends BaseNodeData {
   config: {
     prompt: string;
     displayFields: string[];
-    forwardFields: string[];
     buttons: Array<{ label: string; value: string }>;
   };
 }

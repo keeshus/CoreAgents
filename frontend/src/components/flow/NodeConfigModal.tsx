@@ -207,7 +207,7 @@ export function NodeConfigModal({
           )}
 
           {node.data.type === 'branch' && (
-            <div className="space-y-3">
+            <div>
               <label className="block">
                 <span className="text-xs font-medium text-gray-700">Condition Expression</span>
                 <TemplateAutocomplete
@@ -510,19 +510,14 @@ export function NodeConfigModal({
               </div>
               {(() => {
                 // Only show fields that are selected as input (or all if no input selection)
-                const inputFields: string[] = node.data.config?.inputFields || [];
-                const available = inputFields.length > 0
-                  ? upstreamLabels.filter(f => inputFields.includes(f))
-                  : upstreamLabels;
                 const displayList: string[] = node.data.config?.displayFields || [];
-                const forwardList: string[] = node.data.config?.forwardFields || [];
-                return (
+                                return (
                   <div className="space-y-3">
                     <div>
                       <span className="text-sm font-medium text-gray-700 block mb-1">Fields to Display (what the user sees)</span>
                       <div className="space-y-0.5 max-h-32 overflow-y-auto">
-                        {available.length === 0 && <p className="text-xs text-gray-400">No upstream data available yet.</p>}
-                        {available.map((f) => (
+                        {upstreamLabels.length === 0 && <p className="text-xs text-gray-400">No upstream data available yet.</p>}
+                        {upstreamLabels.map((f) => (
                           <label key={`display-${f}`} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
                             <input type="checkbox" checked={displayList.includes(f)} onChange={() => {
                               const list = [...displayList];
@@ -534,22 +529,6 @@ export function NodeConfigModal({
                         ))}
                       </div>
                       <p className="text-xs text-gray-400 mt-1">Unchecked = hidden from reviewer. Empty = show all.</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-700 block mb-1">Fields to Forward (to the next node)</span>
-                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
-                        {available.map((f) => (
-                          <label key={`forward-${f}`} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5">
-                            <input type="checkbox" checked={forwardList.includes(f)} onChange={() => {
-                              const list = [...forwardList];
-                              if (list.includes(f)) onConfigChange({ forwardFields: list.filter(x => x !== f) });
-                              else onConfigChange({ forwardFields: [...list, f] });
-                            }} className="rounded" />
-                            <span>{f}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">Unchecked = hidden from downstream. Empty = forward all.</p>
                     </div>
                   </div>
                 );

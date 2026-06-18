@@ -170,23 +170,10 @@ export class FlowExecutor {
       });
 
       try {
-        // For HITL replay: separate what was displayed vs what gets forwarded
+        // For HITL replay: pass through approved content
         let nodeInput = filteredInput;
         if (node.data.type === 'hitl' && replayFrom && node.id === replayFrom) {
-          const cfg = (node.data as any)?.config || {};
-          const displayFields: string[] = cfg.displayFields || [];
-          const forwardFields: string[] = cfg.forwardFields || [];
-          const raw = stepInput as Record<string, unknown> | undefined || {};
-          const displayed: Record<string, unknown> = {};
-          const forwarded: Record<string, unknown> = {};
-          if (displayFields.length > 0) {
-            for (const f of displayFields) { if (raw[f] !== undefined) displayed[f] = raw[f]; }
-          } else { Object.assign(displayed, raw); }
-          if (forwardFields.length > 0) {
-            for (const f of forwardFields) { if (raw[f] !== undefined) forwarded[f] = raw[f]; }
-          } else { Object.assign(forwarded, raw); }
-          // Store displayed for UI, pass forwarded to next node
-          nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
+          nodeInput = { ...(filteredInput as any), _approved: true };
         }
         const output = await this.executeNode(node, nodeInput, context, onEvent);
         const outputKey = (node.data.label || node.id).replace(/\s+/g, '_');
