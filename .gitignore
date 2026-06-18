@@ -18,4 +18,4 @@ yarn-error.log*
 example-transaction-files/
 error
 ponto-key
-gemini-key
+gemini-key.claude/
