@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Send, Bot, User, Loader2 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export default function ChatPage() {
   const router = useRouter();

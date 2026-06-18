@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Edit3, Cpu, Database, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import { api } from '@/lib/api-client';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export default function KnowledgePage() {
   return (

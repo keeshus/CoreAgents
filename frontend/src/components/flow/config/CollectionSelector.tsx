@@ -6,7 +6,7 @@ interface CollectionSelectorProps {
   onChange: (collectionName: string) => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export function CollectionSelector({ vectorStoreId, value, onChange }: CollectionSelectorProps) {
   const [collections, setCollections] = useState<string[]>([]);

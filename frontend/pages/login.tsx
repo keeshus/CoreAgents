@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { useAuth, useAuthConfig } from '@/lib/auth-context';
 import Link from 'next/link';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export default function LoginPage() {
   const router = useRouter();

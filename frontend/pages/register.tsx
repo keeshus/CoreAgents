@@ -4,7 +4,7 @@ import { useAuth, useAuthConfig } from '@/lib/auth-context';
 import Link from 'next/link';
 import { CheckCircle, XCircle } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface PwCheck {
   label: string;
