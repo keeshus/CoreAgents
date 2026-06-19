@@ -110,7 +110,17 @@ export class FlowExecutor {
       // Check if this node should be skipped based on incoming edge conditions or sourceHandle
       const incomingEdges = flow.edges.filter(e => e.target === node.id);
       if (incomingEdges.length > 0) {
-        const sourceOutputs = incomingEdges.map(e => nodeOutputs.get(e.source));
+        const sourceOutputs = incomingEdges.map(e => {
+          // Try by node ID first, then by label — outputs are stored under label key
+          const byId = nodeOutputs.get(e.source);
+          if (byId !== undefined) return byId;
+          const srcNode = flow.nodes.find(n => n.id === e.source);
+          if (srcNode) {
+            const labelKey = (srcNode.data?.label || srcNode.id).replace(/\s+/g, '_');
+            return nodeOutputs.get(labelKey);
+          }
+          return undefined;
+        });
         const allFiltered = incomingEdges.every((e, i) => {
           const src = sourceOutputs[i] as Record<string, unknown> | undefined;
 
@@ -228,6 +238,7 @@ export class FlowExecutor {
         const output = await this.executeNode(node, nodeInput, context, onEvent);
         const outputKey = (node.data.label || node.id).replace(/\s+/g, '_');
         nodeOutputs.set(outputKey, output);
+        nodeOutputs.set(node.id, output); // Also store under node ID for edge routing
 
         await onEvent(node.id, {
           type: 'step.completed',
