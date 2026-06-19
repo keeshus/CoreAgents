@@ -92,6 +92,8 @@ export class FlowExecutor {
           beforeHitl = false;
         } else if (replayOutputs[node.id] !== undefined) {
           nodeOutputs.set(node.id, replayOutputs[node.id]);
+          const labelKey = (node.data.label || node.id).replace(/\s+/g, '_').replace(/\./g, '_');
+          nodeOutputs.set(labelKey, replayOutputs[node.id]);
           continue; // skip already-completed nodes
         }
       }
@@ -236,7 +238,7 @@ export class FlowExecutor {
           nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
         }
         const output = await this.executeNode(node, nodeInput, context, onEvent);
-        const outputKey = (node.data.label || node.id).replace(/\s+/g, '_');
+        const outputKey = (node.data.label || node.id).replace(/[\s.]+/g, '_');
         nodeOutputs.set(outputKey, output);
         nodeOutputs.set(node.id, output); // Also store under node ID for edge routing
 
@@ -265,7 +267,7 @@ export class FlowExecutor {
         if (err instanceof HitlPauseError) {
           const saved: Record<string, unknown> = {};
           for (const [k, v] of nodeOutputs) {
-            if (k !== '__input__') saved[k] = v;
+            if (k !== '__input__' && flow.nodes.some(n => n.id === k)) saved[k] = v;
           }
           const hitlConfig = (node.data as any)?.config || {};
           throw new HitlPauseError(err.nodeId, saved, hitlConfig.buttons, err.prompt);
@@ -295,7 +297,12 @@ export class FlowExecutor {
       }
     }
 
-    return { output: Object.fromEntries(nodeOutputs), steps };
+    // Deduplicate: only include ID-keyed entries (labels are secondary keys)
+    const nodeIds = new Set(flow.nodes.map(n => n.id));
+    const uniqueOutput = Object.fromEntries(
+      [...nodeOutputs].filter(([k]) => k === '__input__' || nodeIds.has(k))
+    );
+    return { output: uniqueOutput, steps };
   }
 
   private prepareInput(node: FlowNode, edges: FlowEdge[], nodeOutputs: Map<string, unknown>): unknown {
