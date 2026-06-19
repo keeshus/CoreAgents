@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/run.js",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=../.env src/index.ts",
+    "dev:worker": "tsx --env-file=../.env src/run.ts",
+    "dev:scheduler": "tsx --env-file=../.env src/scheduler-run.ts",
     "test": "vitest run"
   },
   "dependencies": {
