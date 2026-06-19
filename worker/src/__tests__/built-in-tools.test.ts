@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BUILT_IN_TOOLS } from '../mcp/built-in.js';
+import { BUILT_IN_TOOLS } from '../tools/built-in.js';
 
 describe('BUILT_IN_TOOLS', () => {
   it('exports exactly 11 tools', () => {

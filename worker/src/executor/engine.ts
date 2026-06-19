@@ -472,7 +472,7 @@ export class FlowExecutor {
                 if (!mcpNode) continue;
                 const mcpConfig = (mcpNode.data as any).config || {};
                 if (mcpConfig.toolName === tc.name && mcpConfig.serverId) {
-                  const { mcpHub } = await import('../mcp/hub.js');
+                  const { mcpHub } = await import('../tools/hub.js');
                   const server = await context.getMCPServer!(mcpConfig.serverId);
                   if (server) {
                     if (!mcpHub.isConnected(server.id)) {
@@ -487,7 +487,7 @@ export class FlowExecutor {
               // Handle built-in utility tools (auto-injected, no MCP node required)
               if (toolResult === 'Tool not found') {
                 try {
-                  const { callBuiltInTool } = await import('../mcp/built-in.js');
+                  const { callBuiltInTool } = await import('../tools/built-in.js');
                   toolResult = await callBuiltInTool(tc.name, tc.input || {});
                 } catch (err) {
                   toolResult = `Error: ${err instanceof Error ? err.message : String(err)}`;
@@ -546,7 +546,7 @@ export class FlowExecutor {
         }
 
         // Use the MCP Hub to call the tool
-        const { mcpHub } = await import('../mcp/hub.js');
+        const { mcpHub } = await import('../tools/hub.js');
 
         // Ensure the server is connected
         if (!mcpHub.isConnected(server.id)) {

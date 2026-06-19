@@ -118,7 +118,7 @@ router.post(
     }
 
     try {
-      const { mcpHub } = await import('../../../worker/src/mcp/hub.js');
+      const { mcpHub } = await import('../../../worker/src/tools/hub.js');
 
       // Force reconnect
       if (mcpHub.isConnected(server.id)) {
