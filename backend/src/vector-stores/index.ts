@@ -70,7 +70,7 @@ export function createPgvectorStore(db: any): VectorStore {
 // ── Qdrant implementation ────────────────────────────────────
 
 export function createQdrantStore(url: string, apiKey?: string): VectorStore {
-  const client = new QdrantClient({ url, apiKey, checkCompatibility: false });
+  const client = new QdrantClient({ url, apiKey });
 
   return {
     async search(collectionName, queryEmbedding, topK, minScore) {
