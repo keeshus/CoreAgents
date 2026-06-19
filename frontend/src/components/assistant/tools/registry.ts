@@ -1,24 +1,45 @@
 import type { AssistantTool } from '../AssistantContext';
 
-// ── Tool definitions ────────────────────────────────────────────────────────────
+const API = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+// ── Helper: authenticated API call ─────────────────────────────────────────────
+
+async function apiFetch(path: string, options?: RequestInit): Promise<string> {
+  const res = await fetch(`${API}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    credentials: 'include',
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  if (res.status === 204) return 'Success';
+  const data = await res.json();
+  return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+}
+
+// ── Code Node tools (stubs — injected by NodeConfigModal when open) ───────────
 
 const readCode: AssistantTool = {
   name: 'read_code',
   description: 'Read the current code in the Code Node editor',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Code reading not available in this context'; },
+  async execute() { return 'Code reading not available — open a Code Node first'; },
 };
 
 const replaceCode: AssistantTool = {
   name: 'replace_code',
-  description: 'Replace the code in the Code Node editor with new code. Call this whenever you produce new code to keep the editor in sync.',
+  description: 'Replace the code in the Code Node editor with new code. Call this whenever you produce new code.',
   inputSchema: {
     type: 'object',
     properties: { code: { type: 'string', description: 'The new JavaScript code' } },
     required: ['code'],
   },
-  async execute({ code }) { return 'Code replacement not available in this context'; },
+  async execute() { return 'Code replacement not available — open a Code Node first'; },
 };
+
+// ── Navigation tool ───────────────────────────────────────────────────────────
 
 const navigateTo: AssistantTool = {
   name: 'navigate_to',
@@ -26,20 +47,23 @@ const navigateTo: AssistantTool = {
   inputSchema: {
     type: 'object',
     properties: {
-      page: { type: 'string', enum: ['flows', 'approvals', 'settings', 'settings/endpoints', 'settings/mcp-servers', 'settings/knowledge', 'profile'] },
+      page: { type: 'string', enum: ['flows', 'approvals', 'settings', 'settings/endpoints', 'settings/mcp-servers', 'settings/knowledge', 'settings/users', 'profile'] },
     },
     required: ['page'],
   },
-  async execute({ page }) { return `Navigation to ${page} not available in this context`; },
+  async execute({ page }) {
+    if (typeof window !== 'undefined') window.location.href = `/${page}`;
+    return `Navigated to /${page}`;
+  },
 };
 
-// ── Flow editor tools ────────────────────────────────────────────────────────────
+// ── Flow editor tools (stubs — injected by FlowEditor when active) ───────────
 
 const getFlowJson: AssistantTool = {
   name: 'get_flow_json',
   description: 'Get the full flow definition as JSON',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Not available in this context'; },
+  async execute() { return 'Not available — open a flow in the editor first'; },
 };
 
 const addNode: AssistantTool = {
@@ -53,41 +77,111 @@ const addNode: AssistantTool = {
     },
     required: ['type'],
   },
-  async execute({ type, label }) { return `Adding ${type} node not available in this context`; },
+  async execute() { return 'Not available — open a flow in the editor first'; },
 };
 
-// ── Settings tools ────────────────────────────────────────────────────────────────
+// ── LLM Endpoints CRUD ───────────────────────────────────────────────────────
 
 const listEndpoints: AssistantTool = {
   name: 'list_endpoints',
-  description: 'List all configured LLM endpoints',
+  description: 'List all configured LLM endpoints (providers, models, default status)',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Not available in this context'; },
+  async execute() { return apiFetch('/llm-endpoints'); },
 };
+
+const createEndpoint: AssistantTool = {
+  name: 'create_endpoint',
+  description: 'Add a new LLM endpoint. Requires name, providerType (anthropic/openai/litellm), apiKey, defaultModel.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Display name' },
+      providerType: { type: 'string', enum: ['anthropic', 'openai', 'litellm'] },
+      apiKey: { type: 'string' },
+      defaultModel: { type: 'string' },
+      baseUrl: { type: 'string', description: 'Base URL (required for LiteLLM)' },
+    },
+    required: ['name', 'providerType', 'apiKey', 'defaultModel'],
+  },
+  async execute({ name, providerType, apiKey, defaultModel, baseUrl }) {
+    return apiFetch('/llm-endpoints', {
+      method: 'POST',
+      body: JSON.stringify({ name, providerType, apiKey, defaultModel, baseUrl }),
+    });
+  },
+};
+
+const deleteEndpoint: AssistantTool = {
+  name: 'delete_endpoint',
+  description: 'Delete an LLM endpoint by ID. Cannot delete the default endpoint.',
+  inputSchema: {
+    type: 'object',
+    properties: { id: { type: 'string', description: 'Endpoint ID' } },
+    required: ['id'],
+  },
+  async execute({ id }) {
+    await apiFetch(`/llm-endpoints/${id}`, { method: 'DELETE' });
+    return 'Endpoint deleted';
+  },
+};
+
+// ── MCP Servers CRUD ─────────────────────────────────────────────────────────
 
 const listMcpServers: AssistantTool = {
   name: 'list_mcp_servers',
-  description: 'List all configured MCP servers',
+  description: 'List all configured MCP servers with their tool counts and status',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Not available in this context'; },
+  async execute() { return apiFetch('/mcp-servers'); },
 };
 
-// ── Approvals tools ───────────────────────────────────────────────────────────────
+// ── Approvals ─────────────────────────────────────────────────────────────────
 
 const getPendingApprovals: AssistantTool = {
   name: 'get_pending_approvals',
-  description: 'Get a list of all executions currently awaiting approval',
+  description: 'List all executions currently awaiting human approval',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Not available in this context'; },
+  async execute() { return apiFetch('/executions/pending'); },
 };
 
-// ── Executions tools ──────────────────────────────────────────────────────────────
+const approveExecution: AssistantTool = {
+  name: 'approve_execution',
+  description: 'Approve a HITL-paused execution by its ID',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      executionId: { type: 'string', description: 'The execution ID to approve' },
+      decision: { type: 'string', description: 'The decision value (e.g. "approved")' },
+    },
+    required: ['executionId', 'decision'],
+  },
+  async execute({ executionId, decision }) {
+    return apiFetch(`/executions/${executionId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ decision }),
+    });
+  },
+};
+
+const rejectExecution: AssistantTool = {
+  name: 'reject_execution',
+  description: 'Reject a HITL-paused execution by its ID, setting it to cancelled',
+  inputSchema: {
+    type: 'object',
+    properties: { executionId: { type: 'string', description: 'The execution ID to reject' } },
+    required: ['executionId'],
+  },
+  async execute({ executionId }) {
+    return apiFetch(`/executions/${executionId}/reject`, { method: 'POST' });
+  },
+};
+
+// ── Executions ────────────────────────────────────────────────────────────────
 
 const listExecutions: AssistantTool = {
   name: 'list_executions',
-  description: 'Get execution history for the current flow',
+  description: 'Get execution history (last 100 executions across all flows)',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Not available in this context'; },
+  async execute() { return apiFetch('/executions'); },
 };
 
 const getExecutionDetails: AssistantTool = {
@@ -98,7 +192,7 @@ const getExecutionDetails: AssistantTool = {
     properties: { executionId: { type: 'string', description: 'The execution ID' } },
     required: ['executionId'],
   },
-  async execute() { return 'Not available in this context'; },
+  async execute({ executionId }) { return apiFetch(`/executions/${executionId}`); },
 };
 
 // ── Tool groups ──────────────────────────────────────────────────────────────────
@@ -107,34 +201,20 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'code-node': [readCode, replaceCode],
   'navigation': [navigateTo],
   'flow-editor': [getFlowJson, addNode],
-  'settings-crud': [listEndpoints, listMcpServers],
-  'approvals': [getPendingApprovals],
+  'settings-crud': [listEndpoints, createEndpoint, deleteEndpoint, listMcpServers],
+  'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails],
 };
 
 // ── Registry: page key pattern → tool group names ──────────────────────────────
 
-const pageToolMap: Record<string, string[]> = {
-  'flows-list': ['navigation'],
-  'approvals': ['navigation'],
-  'profile': ['navigation'],
-  'default': ['navigation'],
-};
-
 export function getToolGroupNames(pageKey: string, nodeType?: string): string[] {
   const groups: string[] = ['navigation'];
 
-  // Flow editor pages
   if (pageKey?.startsWith('flow:')) groups.push('flow-editor');
   if (pageKey?.startsWith('executions:')) groups.push('executions');
-
-  // Settings pages
   if (pageKey?.startsWith('settings:')) groups.push('settings-crud');
-
-  // Approval page
   if (pageKey === 'approvals') groups.push('approvals');
-
-  // Node-specific tools (when a node config is open)
   if (nodeType === 'code') groups.push('code-node');
 
   return groups;
@@ -150,26 +230,18 @@ export function getToolsForPage(pageKey: string, nodeType?: string): AssistantTo
   return tools;
 }
 
-// ── Tool executors that can be injected from pages ─────────────────────────────
+// ── Tool factory functions (for injected tools from pages) ─────────────────────
 
 export function createCodeTools(onRead: () => string, onReplace: (code: string) => void): AssistantTool[] {
   return [
-    {
-      ...readCode,
-      async execute() { return onRead(); },
-    },
-    {
-      ...replaceCode,
-      async execute({ code }) { onReplace(code); return 'Code updated successfully'; },
-    },
+    { ...readCode, async execute() { return onRead(); } },
+    { ...replaceCode, async execute({ code }) { onReplace(code); return 'Code updated successfully'; } },
   ];
 }
 
 export function createNavigationTools(navigate: (path: string) => void): AssistantTool[] {
-  return [
-    {
-      ...navigateTo,
-      async execute({ page }) { navigate(`/${page}`); return `Navigated to ${page}`; },
-    },
-  ];
+  return [{
+    ...navigateTo,
+    async execute({ page }) { navigate(`/${page}`); return `Navigated to /${page}`; },
+  }];
 }
