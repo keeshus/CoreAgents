@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '@/lib/api-client';
 import { useAuth, useAuthConfig } from '@/lib/auth-context';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import Link from 'next/link';
 import { Plus, Trash2, Edit3, MessageCircle, Settings, Play, Loader2, CheckCircle, XCircle, History, Bug, LogIn, UserPlus, LogOut, User, ThumbsUp } from 'lucide-react';
 
@@ -13,6 +14,7 @@ export default function FlowsListPage() {
   const [running, setRunning] = useState<Record<string, 'running' | 'ok' | 'error' | null>>({});
   const router = useRouter();
 
+  useAssistantContext({ pageKey: 'flows-list', description: 'Viewing all flows' });
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const isReader = user && !can('flow:create');
 
