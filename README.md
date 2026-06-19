@@ -1,39 +1,56 @@
-# Core Agents
+<div align="center">
 
-Visual LLM Agent Builder — design, compose, and deploy intelligent agent workflows on a visual canvas.
+# ⚡ Core Agents
 
-## Features
+**Visual LLM Agent Builder** — design, compose, and deploy intelligent agent workflows on a drag-and-drop canvas.
 
-- **Visual Flow Editor** — drag-and-drop canvas built with `@xyflow/react` v12. Connect triggers, LLM agents, tools, conditions, and outputs into reusable workflows.
-- **Multi-Provider LLM** — Anthropic, OpenAI, and LiteLLM endpoints managed centrally. Select different models per node. Structured JSON output mode for predictable data between steps.
-- **Agent Routing** — Branch nodes route execution based on conditions. LLM classifiers determine the path, JSON mode auto-parses into structured fields.
-- **MCP Tool Integration** — Connect MCP servers (both SSE and Streamable HTTP). Tools wired into LLM Agent nodes via dedicated tool handles. Built-in tools (store, file, fetch, uuid, now, log) auto-injected into every agent.
-- **RAG Pipeline** — Qdrant vector search with configurable embedding providers. Retriever nodes query collections and inject context into LLM prompts.
-- **Parallel Execution** — Run multiple sub-nodes concurrently inside Parallel containers. Results merged by node label.
-- **Human-in-the-Loop** — Flow pauses for approval with custom buttons. Configurable display and forward fields. Reviewer sees upstream data with resolved template variables.
-- **Template Variables** — Use `{{input.Trigger.message}}`, `{{input.Summarizer.transactions[0].amount}}` in system prompts. Autocomplete with arrow keys and mouse selection.
-- **Chat Interface** — User-facing chat at `/chat/[flowId]` with SSE streaming, conversation history, and agent routing.
-- **Centralized Resource Management** — LLM endpoints, MCP servers, embedding providers, and vector stores all managed from Settings. Select per-node from dropdowns.
-- **Input Field Selection** — Per-node checkboxes to control exactly which upstream data passes through. Dot-notation paths for granular field selection.
-- **Execution History** — Debug trace per execution with step-by-step input/output/error. Approve/reject for HITL nodes.
-- **Scheduling** — Cron-based flow triggers via lightweight scheduler. Valkey + BullMQ queue for scalable execution.
-- **Scalable** — Helm chart with Valkey queue, HPA autoscaling, separate scheduler and worker pods. Postgres + Qdrant for storage.
+![Node.js](https://img.shields.io/badge/Node.js-25+-339933?logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)
+![React Flow](https://img.shields.io/badge/React_Flow-12-FF0072?logo=react&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-1.18-000000?logo=qdrant&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## Architecture
+[✨ Features](#-features) · [🏗️ Architecture](#️-architecture) · [🚀 Getting Started](#-getting-started) · [📖 Usage](#-usage) · [🧪 Tests](#-tests)
+
+---
+
+</div>
+
+## ✨ Features
+
+| | |
+|---|---|
+| 🎨 **Visual Flow Editor** | Drag-and-drop canvas with React Flow v12. Connect triggers, LLM agents, tools, conditions, and outputs. |
+| 🤖 **Multi-Provider LLM** | Anthropic, OpenAI, and LiteLLM. Select models per node. JSON output mode for structured data. |
+| 🔀 **Agent Routing** | Branch nodes route execution based on conditions. LLM classifiers determine the path automatically. |
+| 🧰 **MCP Tool Integration** | Connect MCP servers (SSE + Streamable HTTP). Tools wired via dedicated handles. Built-in tools auto-injected. |
+| 📚 **RAG Pipeline** | Qdrant vector search with configurable embedding providers. Retriever nodes inject context into prompts. |
+| ⚡ **Parallel Execution** | Run sub-nodes concurrently inside Parallel containers. Results merged by label. |
+| 👤 **Human-in-the-Loop** | Flow pauses for approval with custom buttons, feedback, and role/user assignments. |
+| 🧩 **Template Variables** | `{{input.Trigger.message}}`, `{{input.Summarizer.transactions[0].amount}}`. Autocomplete with suggestions. |
+| 💬 **Chat Interface** | User-facing chat with SSE streaming, conversation history, and agent routing. |
+| ⏰ **Scheduling** | Cron-based triggers via BullMQ queue. Scalable worker pool for background execution. |
+| 🛡️ **Role-Based Access** | Admin, editor, and viewer roles with granular permissions. SSO/OIDC support. |
+| 🔍 **Execution History** | Step-by-step trace with inputs, outputs, tool calls, and timing breakdown. |
+
+## 🏗️ Architecture
 
 ```
 ┌──────────────┐     HTTP / SSE     ┌──────────────────────┐
 │   Frontend    │◄──────────────────►│  Backend (Express 5) │
 │  Next.js 16   │                    │  Flow CRUD, Chat     │
-│  @xyflow/react│                    │  MCP Hub, SSE        │
-│  Tailwind v4  │                    │  Drizzle ORM         │
+│  React Flow   │                    │  Auth, SSE Streaming  │
+│  Tailwind v4  │                    │  Drizzle ORM (PG)    │
 └──────────────┘                    └──────┬───────────────┘
                                           │
                               ┌───────────▼───────────┐
                               │   Worker (Node.js)     │
                               │  FlowExecutor (DAG)    │
                               │  LLM Providers         │
-                              │  Built-in MCP Server   │
+                              │  Direct Tool Execution  │
                               │  Scheduler / Queue     │
                               └───────────┬───────────┘
                                           │
@@ -47,145 +64,165 @@ Visual LLM Agent Builder — design, compose, and deploy intelligent agent workf
               └───────────┘        └─────────────┘       └─────────┘
 ```
 
-## Stack
-
-| Layer | Tech |
-|-------|------|
-| Frontend | Next.js 16, React 19, @xyflow/react v12, Tailwind CSS v4, shadcn/ui |
-| Backend | Express 5, TypeScript, Drizzle ORM |
-| Database | PostgreSQL 17 |
-| Vector DB | Qdrant |
-| Queue | Valkey 7 + BullMQ |
-| Worker | Node.js, @anthropic-ai/sdk, openai, @modelcontextprotocol/sdk |
-| LLMs | Anthropic, OpenAI, LiteLLM (and any OpenAI-compatible provider) |
-| Infrastructure | Docker, Helm chart for Kubernetes |
-
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js 25+
-- Docker + Docker Compose
-- An API key for at least one LLM provider
+- **Node.js** 25+
+- **Docker** + **Docker Compose**
+- An **API key** for at least one LLM provider
 
-### Development
+### Quick Start
 
 ```bash
-# 1. Start infrastructure
+# 1. Clone and install
+git clone https://github.com/keeshus/CoreAgents.git
+cd core-agents
+npm install
+
+# 2. Start infrastructure (PostgreSQL, Qdrant, Valkey)
 docker compose up -d
 
-# 2. Create database tables
-npm run db:migrate
+# 3. Run database migrations
+cd backend && npm run db:migrate && cd ..
 
-# 3. Start dev servers (backend, worker, frontend)
+# 4. Start all dev servers
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open **[http://localhost:3000](http://localhost:3000)** — the first user to register becomes admin.
 
-### Production
+### Running Components Individually
 
 ```bash
-# Build and start all services
-docker compose -f docker-compose.prod.yml up -d --build
+# Backend API (port 3001)
+cd backend && npm run dev
+
+# Worker (processes scheduled and webhook flows via BullMQ)
+cd worker && npm run dev:worker
+
+# Scheduler (triggers cron-based flows)
+cd worker && npm run dev:scheduler
+
+# Frontend (port 3000)
+cd frontend && npm run dev
 ```
 
-### Kubernetes
+### Deployment
 
 ```bash
+# Docker Compose (all services)
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Kubernetes
 helm install core-agents ./helm/core-agents \
   --set anthropicApiKey=sk-ant-... \
   --set openaiApiKey=sk-...
 ```
 
-## Configuration
+## 📖 Usage
 
-### LLM Endpoints
+### Building a Flow
 
-Go to **Settings → LLM Endpoints** and add your providers:
-- **Anthropic** — API key + model selection
-- **OpenAI** — API key + model selection
-- **LiteLLM** — base URL + API key + model selection
-
-### Embedding Providers
-
-For RAG, configure embedding providers in **Settings → Knowledge Bases**.
-
-### MCP Servers
-
-Add MCP servers in **Settings → MCP Servers**. Supports both SSE and Streamable HTTP transports.
-
-## Building a Flow
-
-A typical agent flow:
+A typical agent workflow:
 
 ```
-1. Trigger ──→ 2. Retriever ──→ 3. LLM Agent (with tools) ──→ 4. Output
-                                 ↕ MCP Tool connection
+Trigger ──→ Retriever ──→ LLM Agent ──→ Output
+                              ↕
+                        MCP Tool (optional)
 ```
 
-1. **Trigger** — starts the flow (manual, chat, webhook, or schedule)
-2. **Retriever** — fetches relevant documents from a Qdrant collection
-3. **LLM Agent** — processes input with a system prompt. Connect MCP tools via the purple handle. Use `{{input.Trigger.message}}` templates in your prompt.
-4. **Output** — returns the result
+1. **🎯 Trigger** — starts the flow (manual, chat, webhook, or schedule)
+2. **📄 Retriever** — fetches relevant documents from a Qdrant collection
+3. **🤖 LLM Agent** — processes input with a system prompt. Connect MCP tools via the purple handle
+4. **📤 Output** — returns the final result
 
 ### Template Variables
 
-In any system prompt or condition expression, reference upstream data:
+Reference upstream data in any system prompt or condition:
 
-```
+```handlebars
 {{input.Trigger.message}}
 {{input.Summarizer.content}}
 {{input.Summarizer.transactions[0].amount}}
 ```
 
-Type `{{` for autocomplete with arrow-key navigation.
+Type **`{{`** for autocomplete with arrow-key navigation and mouse selection.
 
 ### Input Field Selection
 
-Click the checkboxes in the **Select Input Nodes** section to control exactly which upstream data the current node receives. Select entire labels or individual fields using dot-notation paths.
+Check the **Select Input Nodes** checkboxes to control which upstream data a node receives. Select entire labels or individual fields using dot-notation paths.
 
-## Project Structure
+## 🧪 Tests
+
+```bash
+# Run all tests across all packages
+npm test
+```
+
+| Package | Tests | Status |
+|---------|-------|--------|
+| **shared** | 24 | ✅ |
+| **worker** | 55 | ✅ |
+| **backend** | 45 | ✅ |
+| **frontend** | 9 | ✅ |
+| **Total** | **133** | ✅ |
+
+## 🗂️ Project Structure
 
 ```
 core-agents/
-├── frontend/           # Next.js 16 Pages Router
-│   └── pages/          # Flow editor, chat, settings, execution history
-├── backend/            # Express 5 API server
-│   └── src/routes/     # Flows, chat, webhook, MCP, documents, vector stores
-├── worker/             # Flow executor + MCP server + scheduler
+├── frontend/                 # Next.js 16 Pages Router
+│   ├── pages/                # Flow editor, chat, settings, executions
+│   └── src/components/       # Shared UI components
+├── backend/                  # Express 5 API server
 │   └── src/
-│       ├── executor/   # DAG executor (topological sort, node dispatch)
-│       ├── providers/  # Anthropic, OpenAI/LiteLLM clients
-│       ├── mcp/        # Built-in MCP server (store, file, now, uuid, log, fetch)
-│       └── rag/        # Embedding generation, vector store search
-├── shared/             # Shared TypeScript types
-├── helm/               # Kubernetes Helm chart
-└── docker-compose.yml  # Dev infrastructure
+│       ├── routes/           # Flows, chat, webhook, auth, admin
+│       ├── middleware/        # JWT auth, permission checking
+│       └── db/               # Drizzle schema, migrations
+├── worker/                   # Flow executor + BullMQ consumer
+│   └── src/
+│       ├── executor/         # DAG executor, shared runner
+│       ├── providers/        # Anthropic, OpenAI/LiteLLM clients
+│       ├── tools/            # Built-in tool execution (direct, no MCP)
+│       └── rag/              # Embedding generation, vector search
+├── shared/                   # Shared TypeScript types
+├── helm/                     # Kubernetes Helm chart
+└── docker-compose.yml        # Development infrastructure
 ```
 
-## Node Types
+## 🛠️ Configuration
+
+| Setting | Location | Description |
+|---------|----------|-------------|
+| **LLM Endpoints** | Settings → LLM Endpoints | Anthropic, OpenAI, LiteLLM providers |
+| **MCP Servers** | Settings → MCP Servers | External tool servers (SSE/HTTP) |
+| **Embedding Providers** | Settings → Knowledge Bases | For RAG pipeline |
+| **Vector Stores** | Settings → Knowledge Bases | Qdrant connection settings |
+| **Auth** | `.env` → `JWT_SECRET` | JWT signing key (required) |
+| **SSO** | `.env` → `AUTH_SSO_*` | OIDC provider (Keycloak, etc.) |
+
+## 📊 Node Types
 
 | Node | Category | Purpose |
 |------|----------|---------|
-| Trigger | Input | Start a flow (manual, chat, webhook, schedule) |
-| LLM Agent | Processing | Call an LLM with system prompt and tools |
-| Condition | Processing | Route based on a JavaScript expression |
-| Code | Processing | Run JavaScript to transform data |
-| Parallel | Processing | Run sub-nodes concurrently |
-| MCP Tool | Tools | Call a tool from a configured MCP server |
-| Retriever | Tools | Query a vector store for relevant documents |
-| Human in the Loop | Processing | Pause for human approval |
-| Output | Output | Return the final result |
+| 🎯 **Trigger** | Input | Start a flow (manual, chat, webhook, schedule) |
+| 🤖 **LLM Agent** | Processing | Call an LLM with system prompt and tools |
+| 🔀 **Condition** | Processing | Route based on a JavaScript expression |
+| 💻 **Code** | Processing | Run JavaScript to transform data |
+| ⚡ **Parallel** | Processing | Run sub-nodes concurrently |
+| 🧰 **MCP Tool** | Tools | Call a tool from a configured MCP server |
+| 📄 **Retriever** | Tools | Query a vector store for relevant documents |
+| 👤 **HITL** | Processing | Pause for human approval |
+| 🛑 **Stop** | Processing | Terminate execution with a status |
+| 📤 **Output** | Output | Return the final result |
 
-## Tests
+## 📄 License
 
-```bash
-npx vitest run
-```
+[MIT](LICENSE)
 
-106 tests across worker, backend, and shared packages.
+---
 
-## License
-
-MIT
+<div align="center">
+  Built with ❤️ by Kees Hus
+</div>
