@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Cpu, Plus, Trash2, Edit3, Eye, EyeOff, ArrowLeft, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api-client';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 
 const PROVIDER_STYLES: Record<string, string> = {
   anthropic: 'bg-blue-100 text-blue-700',
@@ -43,6 +44,7 @@ export default function EndpointsPage() {
   const [saving, setSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<string | null>(null);
+  useAssistantContext({ pageKey: 'settings:endpoints', description: 'Managing LLM endpoints' });
 
   const fetchEndpoints = async () => {
     setLoading(true);
