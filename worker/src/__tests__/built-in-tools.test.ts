@@ -49,7 +49,7 @@ describe('BUILT_IN_TOOLS', () => {
 
     it('`now` tool has expected description', () => {
       const tool = BUILT_IN_TOOLS.find(t => t.name === 'now')!;
-      expect(tool.description).toMatch(/current utc date and time/i);
+      expect(tool.description).toMatch(/current date and time/i);
     });
 
     it('`uuid` tool has expected description', () => {
