@@ -283,7 +283,7 @@ router.post(
           .update(executions)
           .set({
             status: 'awaiting_approval',
-            output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlAllowFeedback: (hitlCfg as any).allowFeedback !== false, _hitlNodeId: err.nodeId } as any,
+            output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlAllowFeedback: (hitlCfg as any).allowFeedback !== false, _hitlNodeId: err.nodeId, _pausedAt: Date.now() } as any,
             pending_hitls: JSON.stringify([hitlEntry]) as any,
           })
           .where(eq(executions.id, exec.id));
@@ -421,12 +421,17 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       { replayFrom: hitlEntry.nodeId, replayOutputs: savedOutputs, inputOverride: mergedInput },
     );
 
+    // Calculate total paused time (if any)
+    const prevPausedAt = (exec.output as any)?._pausedAt;
+    const prevPausedTotal = (exec.output as any)?._pausedTotal || 0;
+    const pausedTotal = prevPausedAt ? prevPausedTotal + (Date.now() - prevPausedAt) : prevPausedTotal;
+
     // Success — no more HITLs hit. Mark execution as completed (UPDATE, don't create new).
     await db
       .update(executions)
       .set({
         status: 'completed',
-        output: result.output as any,
+        output: { ...(result.output as object), _pausedTotal: pausedTotal } as any,
         pending_hitls: JSON.stringify([]) as any,
         completed_at: new Date(),
       })
@@ -438,11 +443,14 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       // Another HITL was hit — add to pending list, set back to awaiting_approval
       const stillPending = pendingHitls.filter((h: any) => h.nodeId !== hitlEntry.nodeId);
       const newHitls = [...stillPending, { nodeId: err.nodeId, prompt: err.prompt, buttons: err.buttons, savedOutputs: err.savedOutputs }];
+      const prevPausedAt2 = (exec.output as any)?._pausedAt;
+      const prevPausedTotal2 = (exec.output as any)?._pausedTotal || 0;
+      const addPause2 = prevPausedAt2 ? (Date.now() - prevPausedAt2) : 0;
       await db
         .update(executions)
         .set({
           status: 'awaiting_approval',
-          output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt } as any,
+          output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _pausedTotal: prevPausedTotal2 + addPause2, _pausedAt: Date.now() } as any,
           pending_hitls: JSON.stringify(newHitls) as any,
         })
         .where(eq(executions.id, exec.id));

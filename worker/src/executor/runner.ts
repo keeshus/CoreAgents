@@ -76,7 +76,7 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
       const hitlEntry = { nodeId: err.nodeId, prompt: err.prompt, buttons: err.buttons, savedOutputs: err.savedOutputs };
       await database.update(executionsTable).set({
         status: 'awaiting_approval',
-        output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt } as any,
+        output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _pausedAt: Date.now() } as any,
         pending_hitls: JSON.stringify([hitlEntry]) as any,
       }).where(eqFn(executionsTable.id, executionId));
       return { status: 'awaiting_approval' };

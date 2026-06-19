@@ -33,9 +33,10 @@ const statusConfig: Record<string, { icon: any; color: string; bg: string; label
 };
 
 const fmtTime = (t: string | null) => t ? new Date(t).toLocaleTimeString() : '—';
-const dur = (s: string | null, e: string | null) => {
+const dur = (s: string | null, e: string | null, pausedMs?: number) => {
   if (!s || !e) return null;
-  const ms = new Date(e).getTime() - new Date(s).getTime();
+  let ms = new Date(e).getTime() - new Date(s).getTime();
+  if (pausedMs) ms = Math.max(0, ms - pausedMs);
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 };
 const trunc = (s: string, n: number) => s.length > n ? s.slice(0, n) + '...' : s;
@@ -102,7 +103,8 @@ export default function ExecutionHistoryPage() {
           <div className="space-y-2">{executions.map(exec => {
             const cfg = statusConfig[exec.status] || statusConfig.pending;
             const Icon = cfg.icon;
-            const d = dur(exec.started_at, exec.completed_at);
+            const pausedTotal = exec.output?._pausedTotal || 0;
+            const d = dur(exec.started_at, exec.completed_at, pausedTotal);
             const isDebug = exec.input?._debug;
             return (
               <div key={exec.id} onClick={() => viewDetails(exec.id)} className="w-full bg-white rounded-lg border p-4 flex items-center gap-4 hover:shadow-sm transition-shadow cursor-pointer">
@@ -138,7 +140,11 @@ export default function ExecutionHistoryPage() {
   // Detail view
   const cfg = selected ? statusConfig[selected.status] || statusConfig.pending : statusConfig.pending;
   const Icon = cfg.icon;
-  const total = selected ? dur(selected.started_at, selected.completed_at) : null;
+  const pausedTotal = selected?.output?._pausedTotal || 0;
+  const waitingSince = selected?.output?._pausedAt
+    ? Math.floor((Date.now() - selected.output._pausedAt) / 1000) + 's'
+    : null;
+  const total = selected ? dur(selected.started_at, selected.completed_at, pausedTotal) : null;
   const isDebug = selected?.input?._debug;
 
   return (
@@ -152,7 +158,7 @@ export default function ExecutionHistoryPage() {
               {isDebug && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium flex items-center gap-1"><Bug className="w-3 h-3" /> Debug</span>}
               {selected && <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>}
             </div>
-            {selected && <p className="text-sm text-gray-500 mt-1">{fmtTime(selected.created_at)}{total && <span className="ml-2 text-gray-400">· {total}</span>}</p>}
+            {selected && <p className="text-sm text-gray-500 mt-1">{fmtTime(selected.created_at)}{total && <span className="ml-2 text-gray-400">· run: {total}</span>}{pausedTotal > 0 && <span className="ml-2 text-amber-500">· paused: {(pausedTotal / 1000).toFixed(0)}s</span>}{selected.status === 'awaiting_approval' && waitingSince && <span className="ml-2 text-amber-500">· waiting: {waitingSince}</span>}</p>}
           </div>
           {flowId && <Link href={`/flows/${flowId}/edit`} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Open Editor</Link>}
         </div>
