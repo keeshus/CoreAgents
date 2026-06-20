@@ -53,7 +53,6 @@ router.post('/chat', requirePermission('flow:create'), asyncHandler(async (req, 
         maxTokens: 4096,
         onToken: (token: string) => emitSSE({ type: 'token', content: token }),
         tools: tools || undefined,
-        signal: req.signal || undefined,
       },
       resolvedEndpoint,
     );
