@@ -101,6 +101,7 @@ export const llmEndpoints = pgTable('llm_endpoints', {
   api_key: text('api_key').notNull(),
   default_model: text('default_model').notNull(),
   models: jsonb('models').notNull().default('[]'),
+  is_default: boolean('is_default').notNull().default(false),
   created_at: timestamp('created_at').notNull().defaultNow(),
   updated_at: timestamp('updated_at').notNull().defaultNow(),
 });
