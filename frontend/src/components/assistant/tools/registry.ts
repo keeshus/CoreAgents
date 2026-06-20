@@ -19,24 +19,36 @@ async function apiFetch(path: string, options?: RequestInit): Promise<string> {
   return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
 }
 
-// ── Code Node tools (stubs — injected by NodeConfigModal when open) ───────────
+// ── Code Node tools (work via DOM when a Code Node config is open) ────────────
 
 const readCode: AssistantTool = {
   name: 'read_code',
-  description: 'Read the current code in the Code Node editor',
+  description: 'Read the current code in the Code Node editor. Open a Code Node config first.',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Code reading not available — open a Code Node first'; },
+  async execute() {
+    const ta = document.querySelector('.fixed.inset-0.z-50 textarea.font-mono') as HTMLTextAreaElement;
+    if (ta && ta.value) return ta.value;
+    return 'No code editor found. Open a Code Node configuration panel first.';
+  },
 };
 
 const replaceCode: AssistantTool = {
   name: 'replace_code',
-  description: 'Replace the code in the Code Node editor with new code. Call this whenever you produce new code.',
+  description: 'Replace the code in the Code Node editor. Call this whenever you produce or modify code.',
   inputSchema: {
     type: 'object',
-    properties: { code: { type: 'string', description: 'The new JavaScript code' } },
+    properties: { code: { type: 'string', description: 'The new JavaScript code to insert' } },
     required: ['code'],
   },
-  async execute() { return 'Code replacement not available — open a Code Node first'; },
+  async execute({ code }) {
+    const ta = document.querySelector('.fixed.inset-0.z-50 textarea.font-mono') as HTMLTextAreaElement;
+    if (ta) {
+      ta.value = code;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'Code updated in the editor.';
+    }
+    return 'No code editor found. Open a Code Node configuration panel first.';
+  },
 };
 
 // ── Navigation tool ───────────────────────────────────────────────────────────
@@ -61,9 +73,13 @@ const navigateTo: AssistantTool = {
 
 const getFlowJson: AssistantTool = {
   name: 'get_flow_json',
-  description: 'Get the full flow definition as JSON',
+  description: 'Get the full flow definition as JSON. Use this to inspect the current flow structure and node configurations.',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return 'Not available — open a flow in the editor first'; },
+  async execute() {
+    const match = typeof window !== 'undefined' ? window.location.pathname.match(/\/flows\/([^/]+)\/edit/) : null;
+    if (!match) return 'Not on a flow editor page. Open a flow in the editor first.';
+    return apiFetch(`/flows/${match[1]}`);
+  },
 };
 
 const addNode: AssistantTool = {
