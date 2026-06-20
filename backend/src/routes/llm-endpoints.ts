@@ -83,7 +83,7 @@ router.put(
   requirePermission('endpoint:write'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
-    const { name, providerType, baseUrl, apiKey, defaultModel, models } = req.body;
+    const { name, providerType, baseUrl, apiKey, defaultModel, models, isDefault } = req.body;
 
     const updateData: Record<string, unknown> = {
       updated_at: new Date(),
@@ -102,6 +102,12 @@ router.put(
     if (apiKey !== undefined) updateData.api_key = apiKey;
     if (defaultModel !== undefined) updateData.default_model = defaultModel;
     if (models !== undefined) updateData.models = models;
+    if (isDefault === true) {
+      await db.update(llmEndpoints).set({ is_default: false }).where(eq(llmEndpoints.is_default, true));
+      updateData.is_default = true;
+    } else if (isDefault === false) {
+      updateData.is_default = false;
+    }
 
     const result = await db.update(llmEndpoints).set(updateData).where(eq(llmEndpoints.id, id)).returning();
 
