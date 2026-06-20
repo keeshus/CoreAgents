@@ -12,7 +12,7 @@ export default function ProfilePage() {
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const backHref = user && !can('flow:create') ? '/approvals' : '/';
   const backLabel = user && !can('flow:create') ? 'Back to approvals' : 'Back to flows';
-  useAssistantContext({ pageKey: 'profile', description: 'Viewing profile' });
+  useAssistantContext({ pageKey: 'profile', description: 'Viewing profile — edit name and email, view role and permissions, account details' });
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
