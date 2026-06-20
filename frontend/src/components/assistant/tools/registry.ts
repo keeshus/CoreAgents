@@ -311,9 +311,8 @@ const getExecutionDetails: AssistantTool = {
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
-  'code-node': [readCode, replaceCode],
   'navigation': [navigateTo],
-  'flow-editor': [getFlowJson, addNode, getNodeConfig, updateNodeField, getAvailableNodes],
+  'flow-editor': [getFlowJson, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
   'settings-crud': [listEndpoints, createEndpoint, deleteEndpoint, listMcpServers],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails],
@@ -324,7 +323,7 @@ export const toolGroups: Record<string, AssistantTool[]> = {
 export function getToolGroupNames(pageKey: string, nodeType?: string): string[] {
   const groups: string[] = ['navigation'];
 
-  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'code-node');
+  if (pageKey?.startsWith('flow:')) groups.push('flow-editor');
   else if (pageKey?.startsWith('settings:')) groups.push('settings-crud');
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
@@ -342,18 +341,3 @@ export function getToolsForPage(pageKey: string, nodeType?: string): AssistantTo
   return tools;
 }
 
-// ── Tool factory functions (for injected tools from pages) ─────────────────────
-
-export function createCodeTools(onRead: () => string, onReplace: (code: string) => void): AssistantTool[] {
-  return [
-    { ...readCode, async execute() { return onRead(); } },
-    { ...replaceCode, async execute({ code }) { onReplace(code); return 'Code updated successfully'; } },
-  ];
-}
-
-export function createNavigationTools(navigate: (path: string) => void): AssistantTool[] {
-  return [{
-    ...navigateTo,
-    async execute({ page }) { navigate(`/${page}`); return `Navigated to /${page}`; },
-  }];
-}
