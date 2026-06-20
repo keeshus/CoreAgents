@@ -211,11 +211,10 @@ export const toolGroups: Record<string, AssistantTool[]> = {
 export function getToolGroupNames(pageKey: string, nodeType?: string): string[] {
   const groups: string[] = ['navigation'];
 
-  if (pageKey?.startsWith('flow:')) groups.push('flow-editor');
-  if (pageKey?.startsWith('executions:')) groups.push('executions');
-  if (pageKey?.startsWith('settings:')) groups.push('settings-crud');
-  if (pageKey === 'approvals') groups.push('approvals');
-  if (nodeType === 'code') groups.push('code-node');
+  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'code-node');
+  else if (pageKey?.startsWith('settings:')) groups.push('settings-crud');
+  else if (pageKey === 'approvals') groups.push('approvals');
+  else if (pageKey?.startsWith('executions:')) groups.push('executions');
 
   return groups;
 }

@@ -36,6 +36,13 @@
       "when": 1781850000000,
       "tag": "0004_fix_role_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0005_add_default_endpoint",
+      "breakpoints": true
     }
   ]
 }
