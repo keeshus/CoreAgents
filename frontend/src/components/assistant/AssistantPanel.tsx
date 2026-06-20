@@ -7,7 +7,7 @@ import rehypeSanitize from 'rehype-sanitize';
 export function AssistantPanel() {
   const {
     open, messages, streaming, streamingContent, error,
-    sendMessage, clearConversation, defaultEndpointId,
+    sendMessage, clearConversation, defaultEndpointId, pageContext,
   } = useAssistant();
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -38,6 +38,11 @@ export function AssistantPanel() {
       <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50 rounded-t-xl shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-900">Co-Pilot</span>
+          {pageContext && (
+            <span className="text-[9px] text-gray-400 ml-1 max-w-[120px] truncate" title={pageContext.description}>
+              · {pageContext.description}
+            </span>
+          )}
           {!defaultEndpointId && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700">No endpoint</span>
           )}
