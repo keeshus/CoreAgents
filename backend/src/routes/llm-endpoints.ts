@@ -10,9 +10,10 @@ const router = Router();
 // GET /api/llm-endpoints — list all endpoints
 router.get(
   '/',
+  requirePermission('endpoint:read'),
   asyncHandler(async (_req, res) => {
     const result = await db.select().from(llmEndpoints);
-    res.json(result);
+    res.json(result.map(({ api_key, ...safe }: any) => safe));
   }),
 );
 
@@ -27,6 +28,7 @@ router.get('/default', asyncHandler(async (_req, res) => {
 // GET /api/llm-endpoints/:id — get single endpoint
 router.get(
   '/:id',
+  requirePermission('endpoint:read'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
     const result = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, id)).limit(1);
@@ -36,14 +38,15 @@ router.get(
       return;
     }
 
-    res.json(result[0]);
+    const { api_key, ...safe } = result[0];
+    res.json(safe);
   }),
 );
 
 // POST /api/llm-endpoints — create endpoint (admin only)
 router.post(
   '/',
-  requirePermission('settings:write'),
+  requirePermission('endpoint:write'),
   asyncHandler(async (req, res) => {
     const { name, providerType, baseUrl, apiKey, defaultModel, models = [] } = req.body;
 
@@ -77,7 +80,7 @@ router.post(
 // PUT /api/llm-endpoints/:id — update endpoint (admin only)
 router.put(
   '/:id',
-  requirePermission('settings:write'),
+  requirePermission('endpoint:write'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
     const { name, providerType, baseUrl, apiKey, defaultModel, models } = req.body;
@@ -114,7 +117,7 @@ router.put(
 // DELETE /api/llm-endpoints/:id — delete endpoint (admin only)
 router.delete(
   '/:id',
-  requirePermission('settings:write'),
+  requirePermission('endpoint:write'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
 

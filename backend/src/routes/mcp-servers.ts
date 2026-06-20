@@ -35,7 +35,7 @@ router.get(
 // POST /api/mcp-servers — create server (admin only)
 router.post(
   '/',
-  requirePermission('settings:write'),
+  requirePermission('mcp:write'),
   asyncHandler(async (req, res) => {
     const { name, url, tools = [], enabled = true } = req.body;
 
@@ -61,7 +61,7 @@ router.post(
 // PUT /api/mcp-servers/:id — update server (admin only)
 router.put(
   '/:id',
-  requirePermission('settings:write'),
+  requirePermission('mcp:write'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
     const { name, url, tools, enabled } = req.body;
@@ -89,7 +89,7 @@ router.put(
 // DELETE /api/mcp-servers/:id — delete server (admin only)
 router.delete(
   '/:id',
-  requirePermission('settings:write'),
+  requirePermission('mcp:write'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
 
@@ -107,7 +107,7 @@ router.delete(
 // POST /api/mcp-servers/:id/refresh — Refresh tools list from server (admin only)
 router.post(
   '/:id/refresh',
-  requirePermission('settings:write'),
+  requirePermission('mcp:write'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
 

@@ -53,7 +53,7 @@ router.get('/vector-stores/:id', asyncHandler(async (req, res) => {
   res.json(row);
 }));
 
-router.post('/vector-stores', requirePermission('settings:write'), asyncHandler(async (req, res) => {
+router.post('/vector-stores', requirePermission('store:write'), asyncHandler(async (req, res) => {
   const { name, storeType = 'qdrant', url, apiKey } = req.body;
   if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return; }
 
@@ -71,7 +71,7 @@ router.post('/vector-stores', requirePermission('settings:write'), asyncHandler(
   res.status(201).json(row);
 }));
 
-router.put('/vector-stores/:id', requirePermission('settings:write'), asyncHandler(async (req, res) => {
+router.put('/vector-stores/:id', requirePermission('store:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const data: Record<string, unknown> = { updated_at: new Date() };
   const { name, url, apiKey } = req.body;
@@ -94,7 +94,7 @@ router.put('/vector-stores/:id', requirePermission('settings:write'), asyncHandl
   res.json(row);
 }));
 
-router.delete('/vector-stores/:id', requirePermission('settings:write'), asyncHandler(async (req, res) => {
+router.delete('/vector-stores/:id', requirePermission('store:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const [row] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
   if (row) {

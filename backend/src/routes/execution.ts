@@ -34,7 +34,7 @@ router.get('/executions', requirePermission('admin'), asyncHandler(async (_req, 
 }));
 
 // POST /api/executions/:executionId/cancel — cancel a running execution
-router.post('/executions/:executionId/cancel', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
+router.post('/executions/:executionId/cancel', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
 
   // Abort in-process if available

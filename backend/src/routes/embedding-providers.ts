@@ -7,18 +7,18 @@ import { asyncHandler } from '../utils/async-handler.js';
 
 const router = Router();
 
-router.get('/embedding-providers', asyncHandler(async (_req, res) => {
+router.get('/embedding-providers', requirePermission('embedding:read'), asyncHandler(async (_req, res) => {
   res.json(await db.select().from(embeddingProviders));
 }));
 
-router.get('/embedding-providers/:id', asyncHandler(async (req, res) => {
+router.get('/embedding-providers/:id', requirePermission('embedding:read'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const [row] = await db.select().from(embeddingProviders).where(eq(embeddingProviders.id, id));
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(row);
 }));
 
-router.post('/embedding-providers', requirePermission('settings:write'), asyncHandler(async (req, res) => {
+router.post('/embedding-providers', requirePermission('embedding:write'), asyncHandler(async (req, res) => {
   const { name, providerType, baseUrl, apiKey, model } = req.body;
   if (!name || !providerType || !apiKey) {
     res.status(400).json({ error: 'name, providerType, and apiKey required' }); return;
@@ -29,7 +29,7 @@ router.post('/embedding-providers', requirePermission('settings:write'), asyncHa
   res.status(201).json(row);
 }));
 
-router.put('/embedding-providers/:id', requirePermission('settings:write'), asyncHandler(async (req, res) => {
+router.put('/embedding-providers/:id', requirePermission('embedding:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const data: Record<string, unknown> = { updated_at: new Date() };
   const { name, providerType, baseUrl, apiKey, model } = req.body;
@@ -43,7 +43,7 @@ router.put('/embedding-providers/:id', requirePermission('settings:write'), asyn
   res.json(row);
 }));
 
-router.delete('/embedding-providers/:id', requirePermission('settings:write'), asyncHandler(async (req, res) => {
+router.delete('/embedding-providers/:id', requirePermission('embedding:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   await db.delete(embeddingProviders).where(eq(embeddingProviders.id, id));
   res.status(204).send();

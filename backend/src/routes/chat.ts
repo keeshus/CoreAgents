@@ -9,7 +9,7 @@ import { getStore } from '../vector-stores/index.js';
 const router = Router();
 
 // POST /api/chat/:flowId/sessions — Create a new chat session
-router.post('/chat/:flowId/sessions', asyncHandler(async (req, res) => {
+router.post('/chat/:flowId/sessions', requirePermission('chat:create'), asyncHandler(async (req, res) => {
   const flowId = req.params.flowId as string;
 
   // Verify flow exists
@@ -61,7 +61,7 @@ router.delete('/chat/sessions/:sessionId', requirePermission('flow:edit'), async
 }));
 
 // SSE POST /api/chat/sessions/:sessionId/messages — Send message + get streaming response
-router.post('/chat/sessions/:sessionId/messages', asyncHandler(async (req, res) => {
+router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create'), asyncHandler(async (req, res) => {
   const sessionId = req.params.sessionId as string;
   const { message } = req.body;
 

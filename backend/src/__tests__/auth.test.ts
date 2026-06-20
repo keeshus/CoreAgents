@@ -60,13 +60,13 @@ describe('requirePermission', () => {
 
 describe('role permissions', () => {
   const rolePermissions: Record<string, string[]> = {
-    admin: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'settings:read', 'settings:write', 'execution:approve'],
-    editor: ['flow:create', 'flow:edit', 'execution:approve', 'settings:read'],
+    admin: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'endpoint:read', 'endpoint:write', 'mcp:read', 'mcp:write', 'embedding:read', 'embedding:write', 'store:read', 'store:write', 'document:write', 'knowledge:write', 'chat:create', 'execution:approve'],
+    editor: ['flow:create', 'flow:edit', 'execution:approve', 'endpoint:read', 'mcp:read', 'embedding:read', 'store:read', 'document:write', 'knowledge:write', 'chat:create'],
     viewer: ['execution:approve'],
   };
 
   it('admin has all permissions', () => {
-    const all = ['flow:create', 'flow:edit', 'flow:delete', 'settings:read', 'settings:write', 'execution:approve'];
+    const all = ['flow:create', 'flow:edit', 'flow:delete', 'endpoint:read', 'endpoint:write', 'execution:approve', 'chat:create'];
     for (const perm of all) {
       expect(rolePermissions.admin).toContain(perm);
     }
@@ -75,7 +75,10 @@ describe('role permissions', () => {
   it('editor can create and edit flows', () => {
     expect(rolePermissions.editor).toContain('flow:create');
     expect(rolePermissions.editor).toContain('flow:edit');
+    expect(rolePermissions.editor).toContain('chat:create');
+    expect(rolePermissions.editor).toContain('endpoint:read');
     expect(rolePermissions.editor).not.toContain('flow:delete');
+    expect(rolePermissions.editor).not.toContain('endpoint:write');
   });
 
   it('viewer can only approve HITL', () => {
@@ -84,14 +87,18 @@ describe('role permissions', () => {
     expect(rolePermissions.viewer).not.toContain('flow:create');
     expect(rolePermissions.viewer).not.toContain('flow:edit');
     expect(rolePermissions.viewer).not.toContain('flow:delete');
-    expect(rolePermissions.viewer).not.toContain('settings:read');
-    expect(rolePermissions.viewer).not.toContain('settings:write');
+    expect(rolePermissions.viewer).not.toContain('endpoint:read');
+    expect(rolePermissions.viewer).not.toContain('endpoint:write');
+    expect(rolePermissions.viewer).not.toContain('chat:create');
   });
 
-  it('only admin can write settings', () => {
-    expect(rolePermissions.admin).toContain('settings:write');
-    expect(rolePermissions.editor).not.toContain('settings:write');
-    expect(rolePermissions.viewer).not.toContain('settings:write');
+  it('only admin can write to settings domains', () => {
+    expect(rolePermissions.admin).toContain('endpoint:write');
+    expect(rolePermissions.admin).toContain('mcp:write');
+    expect(rolePermissions.admin).toContain('embedding:write');
+    expect(rolePermissions.admin).toContain('store:write');
+    expect(rolePermissions.editor).not.toContain('endpoint:write');
+    expect(rolePermissions.viewer).not.toContain('endpoint:write');
   });
 
   it('only admin can delete flows', () => {

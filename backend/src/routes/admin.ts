@@ -12,8 +12,26 @@ router.use(authenticate);
 // POST /api/admin/seed-roles — create default roles if they don't exist
 router.post('/roles/seed', requirePermission('admin'), asyncHandler(async (_req, res) => {
   const defaults = [
-    { name: 'admin', description: 'Full system access', permissions: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'settings:read', 'settings:write', 'execution:approve'], is_system: true },
-    { name: 'editor', description: 'Can create and edit flows', permissions: ['flow:create', 'flow:edit', 'execution:approve', 'settings:read'], is_system: true },
+    {
+      name: 'admin', description: 'Full system access', is_system: true,
+      permissions: [
+        'admin', 'flow:create', 'flow:edit', 'flow:delete',
+        'endpoint:read', 'endpoint:write',
+        'mcp:read', 'mcp:write',
+        'embedding:read', 'embedding:write',
+        'store:read', 'store:write',
+        'document:write', 'knowledge:write',
+        'chat:create', 'execution:approve',
+      ],
+    },
+    {
+      name: 'editor', description: 'Can create and edit flows', is_system: true,
+      permissions: [
+        'flow:create', 'flow:edit', 'execution:approve',
+        'endpoint:read', 'mcp:read', 'embedding:read', 'store:read',
+        'document:write', 'knowledge:write', 'chat:create',
+      ],
+    },
     { name: 'viewer', description: 'Can approve Human-in-the-Loop requests', permissions: ['execution:approve'], is_system: true },
   ];
 
