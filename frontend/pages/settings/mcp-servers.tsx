@@ -1,3 +1,4 @@
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -29,6 +30,7 @@ export default function MCPServersPage() {
   const [servers, setServers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  useAssistantContext({ pageKey: 'settings:mcp-servers', description: 'Managing MCP servers' });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);

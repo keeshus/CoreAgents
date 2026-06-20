@@ -1,3 +1,4 @@
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
@@ -27,6 +28,7 @@ export default function UsersSettingsPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  useAssistantContext({ pageKey: 'settings:users', description: 'Managing users' });
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');

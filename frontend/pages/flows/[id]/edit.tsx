@@ -1,3 +1,4 @@
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '@/lib/api-client';
@@ -21,6 +22,7 @@ export default function FlowEditPage() {
   const deleteNodeRef = useRef<((nodeId: string) => void) | null>(null);
   const setNodeLabelRef = useRef<((nodeId: string, label: string) => void) | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  useAssistantContext({ pageKey: 'flow:' + (flow?.id || ""), description: 'Editing flow "' + (flow?.name || "") + '"' });
 
   // Selected node for config editing
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);

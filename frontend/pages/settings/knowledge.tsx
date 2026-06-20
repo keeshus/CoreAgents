@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { ArrowLeft, Plus, Trash2, Edit3, Cpu, Database, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import { api } from '@/lib/api-client';
 

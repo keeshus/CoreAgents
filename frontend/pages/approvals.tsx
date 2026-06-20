@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -24,6 +25,7 @@ export default function ApprovalsPage() {
   const router = useRouter();
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const isReader = user && !can('flow:create');
+  useAssistantContext({ pageKey: 'approvals', description: 'Reviewing pending approvals' });
 
   const handleLogout = async () => {
     await logout();

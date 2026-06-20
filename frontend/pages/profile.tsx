@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api-client';
@@ -11,6 +12,7 @@ export default function ProfilePage() {
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const backHref = user && !can('flow:create') ? '/approvals' : '/';
   const backLabel = user && !can('flow:create') ? 'Back to approvals' : 'Back to flows';
+  useAssistantContext({ pageKey: 'profile', description: 'Viewing profile' });
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

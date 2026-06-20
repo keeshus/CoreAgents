@@ -1,3 +1,4 @@
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -47,6 +48,7 @@ export default function ExecutionHistoryPage() {
   const { user } = useAuth();
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const backHref = user && !can('flow:create') ? '/approvals' : '/';
+  useAssistantContext({ pageKey: 'executions:' + flowId, description: 'Viewing execution history' });
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selected, setSelected] = useState<Execution | null>(null);

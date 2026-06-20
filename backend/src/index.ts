@@ -17,6 +17,7 @@ import knowledgeRouter from './routes/knowledge.js';
 import vectorStoresRouter from './routes/vector-stores.js';
 import embeddingProvidersRouter from './routes/embedding-providers.js';
 import authRouter from './routes/auth.js';
+import llmChatRouter from './routes/llm.js';
 import assignmentsRouter from './routes/assignments.js';
 import adminRouter from './routes/admin.js';
 import { authenticate } from './middleware/auth.js';
@@ -69,6 +70,7 @@ app.use('/api/auth', authRouter);
 // Protected routes (authentication required)
 app.use('/api/flows', authenticate, flowsRouter);
 app.use('/api/catalog', authenticate, catalogRouter);
+app.use('/api/llm', authenticate, llmChatRouter); // Handles /api/llm/chat
 app.use('/api/llm-endpoints', authenticate, llmEndpointsRouter);
 app.use('/api/mcp-servers', authenticate, mcpServersRouter);
 app.use('/api', authenticate, executionRouter);  // Handles /api/flows/:flowId/execute and /api/flows/:flowId/executions

@@ -1,3 +1,4 @@
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 import Link from 'next/link';
 import { Cpu, Server, BookOpen, Shield, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
@@ -6,6 +7,7 @@ export default function SettingsIndex() {
   const { user } = useAuth();
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const backHref = user && !can('flow:create') ? '/approvals' : '/';
+  useAssistantContext({ pageKey: 'settings', description: 'Viewing settings' });
   const sections = [
     {
       href: '/settings/endpoints',
