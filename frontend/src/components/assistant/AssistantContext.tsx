@@ -108,7 +108,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
     prevKeyRef.current = pageContext.pageKey;
     const saved = memory.load(memKey(pageContext.pageKey));
-    if (saved.length > 0) setMessages(saved);
+    setMessages(saved);
   }, [pageContext?.pageKey]);
 
   // Reload tools when page context or node type changes
