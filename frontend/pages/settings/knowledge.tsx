@@ -7,6 +7,7 @@ import { api } from '@/lib/api-client';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export default function KnowledgePage() {
+  useAssistantContext({ pageKey: 'settings:knowledge', description: 'Managing knowledge bases' });
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto p-6">
