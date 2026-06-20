@@ -313,7 +313,7 @@ const getExecutionDetails: AssistantTool = {
 export const toolGroups: Record<string, AssistantTool[]> = {
   'code-node': [readCode, replaceCode],
   'navigation': [navigateTo],
-  'flow-editor': [getFlowJson, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
+  'flow-editor': [getFlowJson, addNode, getNodeConfig, updateNodeField, getAvailableNodes],
   'settings-crud': [listEndpoints, createEndpoint, deleteEndpoint, listMcpServers],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails],
