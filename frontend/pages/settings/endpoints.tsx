@@ -82,16 +82,29 @@ export default function EndpointsPage() {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (ep: any) => {
+    if (ep.is_default) {
+      setError('Cannot delete the default endpoint. Set another endpoint as default first.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this endpoint?')) return;
-    setDeleting(id);
+    setDeleting(ep.id);
     try {
-      await api.llmEndpoints.delete(id);
-      setEndpoints((prev) => prev.filter((ep) => ep.id !== id));
+      await api.llmEndpoints.delete(ep.id);
+      setEndpoints((prev) => prev.filter((e) => e.id !== ep.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete endpoint');
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const handleSetDefault = async (id: string) => {
+    try {
+      await api.llmEndpoints.update(id, { isDefault: true });
+      setEndpoints(await api.llmEndpoints.list());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set default');
     }
   };
 
@@ -155,6 +168,9 @@ export default function EndpointsPage() {
             <h1 className="text-2xl font-bold text-gray-900">LLM Endpoints</h1>
             <p className="text-sm text-gray-500 mt-1">
               Manage your LLM provider connections
+            </p>
+            <p className="text-[10px] text-gray-400 mt-1">
+              ⭐ The default endpoint is used by the Co-Pilot AI assistant for system-wide tasks like answering questions and helping you build flows.
             </p>
           </div>
           {!showForm && (
@@ -363,6 +379,9 @@ export default function EndpointsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-medium text-gray-900">{ep.name}</h3>
+                    {ep.is_default && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium">⭐ Default</span>
+                    )}
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                         PROVIDER_STYLES[ep.provider_type] || 'bg-gray-100 text-gray-700'
@@ -395,6 +414,15 @@ export default function EndpointsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {!ep.is_default && (
+                    <button
+                      onClick={() => handleSetDefault(ep.id)}
+                      className="text-[10px] px-2 py-1 rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                      title="Use this endpoint for the Co-Pilot AI assistant"
+                    >
+                      Set as default
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEdit(ep)}
                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -403,7 +431,7 @@ export default function EndpointsPage() {
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(ep.id)}
+                    onClick={() => handleDelete(ep)}
                     disabled={deleting === ep.id}
                     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
                     title="Delete endpoint"
