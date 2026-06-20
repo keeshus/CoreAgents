@@ -7,7 +7,7 @@ export default function SettingsIndex() {
   const { user } = useAuth();
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const backHref = user && !can('flow:create') ? '/approvals' : '/';
-  useAssistantContext({ pageKey: 'settings', description: 'Settings overview — links to LLM endpoints, MCP servers, knowledge bases, and user management' });
+  useAssistantContext({ pageKey: 'settings', description: 'Settings overview' });
   const sections = [
     {
       href: '/settings/endpoints',
