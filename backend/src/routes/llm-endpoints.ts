@@ -16,6 +16,14 @@ router.get(
   }),
 );
 
+// GET /api/llm-endpoints/default — get the default endpoint (for Co-Pilot)
+router.get('/default', asyncHandler(async (_req, res) => {
+  const [result] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.is_default, true)).limit(1);
+  if (!result) { res.status(404).json({ error: 'No default endpoint configured' }); return; }
+  const { api_key, ...safe } = result;
+  res.json(safe);
+}));
+
 // GET /api/llm-endpoints/:id — get single endpoint
 router.get(
   '/:id',
