@@ -168,13 +168,27 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [pageContext?.pageKey]);
 
+  // Permission check: tool → required permission map
+  const toolPerms: Record<string, string> = {
+    create_endpoint: 'endpoint:write', delete_endpoint: 'endpoint:write',
+    create_mcp_server: 'mcp:write', delete_mcp_server: 'mcp:write', refresh_mcp_tools: 'mcp:write',
+    create_embedding_provider: 'embedding:write', delete_embedding_provider: 'embedding:write',
+    create_vector_store: 'store:write', delete_vector_store: 'store:write',
+    list_users: 'admin', create_user: 'admin', delete_user: 'admin', update_user_role: 'admin',
+    list_executions: 'admin',
+    list_endpoints: 'endpoint:read', list_mcp_servers: 'mcp:read',
+    list_embedding_providers: 'embedding:read', list_vector_stores: 'store:read',
+    get_pending_approvals: 'execution:approve', approve_execution: 'execution:approve', reject_execution: 'execution:approve',
+  };
+
   // Reload tools when page context or node type changes
   useEffect(() => {
     if (!pageContext?.pageKey) return;
     const nodeType = pageContext.data?.nodeType as string | undefined;
     const tools = getTools(pageContext.pageKey, nodeType);
-    setActiveTools(tools);
-  }, [pageContext?.pageKey, pageContext?.data?.nodeType]);
+    // Only include tools the user has permission to use
+    setActiveTools(tools.filter(t => !toolPerms[t.name] || user?.permissions?.includes(toolPerms[t.name])));
+  }, [pageContext?.pageKey, pageContext?.data?.nodeType, user?.permissions]);
 
   const clearConversation = useCallback(() => {
     setMessages([]);
