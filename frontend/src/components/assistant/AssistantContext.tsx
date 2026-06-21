@@ -261,7 +261,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Execute tool calls
+      // Execute tool calls and loop back to LLM for final response
       if (toolCalls.length > 0) {
         const toolResults: Message[] = [];
         for (const tc of toolCalls) {
@@ -269,18 +269,55 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           if (tool) {
             try {
               const result = await tool.execute(tc.input);
-              toolResults.push({ id: crypto.randomUUID(), role: 'tool', content: result, name: tc.name, timestamp: Date.now() });
+              toolResults.push({ id: crypto.randomUUID(), role: 'tool', content: result.slice(0, 2000), name: tc.name, timestamp: Date.now() });
             } catch (err: any) {
               toolResults.push({ id: crypto.randomUUID(), role: 'tool', content: `Error: ${err.message}`, name: tc.name, timestamp: Date.now() });
             }
           }
         }
-        // Add tool results and then the assistant's text response
-        const finalMessages = [...updatedMessages, ...toolResults];
-        if (assistantContent) {
-          finalMessages.push({ id: crypto.randomUUID(), role: 'assistant', content: assistantContent, timestamp: Date.now() });
+
+        // Feed tool results back to LLM for a final text response
+        const followUpMessages = [
+          ...apiMessages,
+          { role: 'assistant' as const, content: assistantContent || '' },
+          ...toolResults.map(t => ({ role: 'user' as const, content: `Tool result (${t.name}): ${t.content}` })),
+        ];
+
+        const followUp = await fetch(`${API}/llm/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            endpointId: defaultEndpointId,
+            messages: followUpMessages,
+            tools: toolDefs,
+            systemPrompt: systemPrompt + '\n\nDo not call tools again. Respond to the user based on the tool results above.',
+          }),
+          signal: controller.signal,
+        });
+
+        if (followUp.ok) {
+          const fReader = followUp.body!.getReader();
+          let fBuffer = '';
+          let finalContent = '';
+          while (true) {
+            const { done, value } = await fReader.read();
+            if (done) break;
+            fBuffer += new TextDecoder().decode(value, { stream: true });
+            for (const line of fBuffer.split('\n')) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const ev = JSON.parse(line.slice(6));
+                if (ev.type === 'token') { finalContent += ev.content; setStreamingContent(finalContent); }
+              } catch {}
+            }
+            fBuffer = '';
+          }
+          setMessages([...updatedMessages, ...toolResults, { id: crypto.randomUUID(), role: 'assistant', content: finalContent, timestamp: Date.now() }]);
+        } else {
+          // Fallback: just show tool results without LLM commentary
+          setMessages([...updatedMessages, ...toolResults]);
         }
-        setMessages(finalMessages);
       } else if (assistantContent) {
         const finalMessages = [...updatedMessages, { id: crypto.randomUUID(), role: 'assistant', content: assistantContent, timestamp: Date.now() }];
         setMessages(finalMessages);
