@@ -211,6 +211,27 @@ const findFlow: AssistantTool = {
 
 // ── Flow editor tools ───────────────────────────────────────────────────────
 
+const openNode: AssistantTool = {
+  name: 'open_node',
+  description: 'Click on a node in the flow canvas by its label to open its config panel. Use this before get_node_config or update_node_field.',
+  inputSchema: {
+    type: 'object',
+    properties: { label: { type: 'string', description: 'The label or type of the node (e.g. "trigger", "llm-agent", "hitl", or a custom label)' } },
+    required: ['label'],
+  },
+  async execute({ label }) {
+    const nodes = document.querySelectorAll('.react-flow__node');
+    if (nodes.length === 0) return 'No nodes found on the canvas. Open a flow in the editor first.';
+    for (const node of nodes) {
+      if (node.textContent?.toLowerCase().includes((label as string).toLowerCase())) {
+        (node as HTMLElement).click();
+        return `Clicked on node matching "${label}". The config panel should now be open.`;
+      }
+    }
+    return `No node found matching "${label}". Available nodes: ${[...nodes].map(n => n.textContent?.trim()).join(', ')}`;
+  },
+};
+
 const getFlowJson: AssistantTool = {
   name: 'get_flow_json',
   description: 'Get the full flow definition as JSON. Use this to inspect the current flow structure and node configurations.',
@@ -560,7 +581,7 @@ const getExecutionDetails: AssistantTool = {
 
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo, findFlow],
-  'flow-editor': [getFlowJson, updateFlow, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
+  'flow-editor': [openNode, getFlowJson, updateFlow, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
