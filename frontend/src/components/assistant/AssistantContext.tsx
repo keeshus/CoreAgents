@@ -292,7 +292,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           if (tool) {
             try {
               const result = await tool.execute(tc.input);
-              toolResults.push({ id: crypto.randomUUID(), role: 'tool', content: result.slice(0, 2000), name: tc.name, timestamp: Date.now() });
+              toolResults.push({ id: crypto.randomUUID(), role: 'tool', content: result.slice(0, 8000), name: tc.name, timestamp: Date.now() });
             } catch (err: any) {
               toolResults.push({ id: crypto.randomUUID(), role: 'tool', content: `Error: ${err.message}`, name: tc.name, timestamp: Date.now() });
             }
