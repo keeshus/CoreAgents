@@ -210,29 +210,44 @@ const getFlowJson: AssistantTool = {
   },
 };
 
-const renameFlow: AssistantTool = {
-  name: 'rename_flow',
-  description: 'Rename the current flow without reloading the page.',
+const updateFlow: AssistantTool = {
+  name: 'update_flow',
+  description: 'Update the flow name and/or description without reloading the page.',
   inputSchema: {
     type: 'object',
-    properties: { name: { type: 'string', description: 'The new name for the flow' } },
-    required: ['name'],
+    properties: {
+      name: { type: 'string', description: 'New name for the flow (optional)' },
+      description: { type: 'string', description: 'New description for the flow (optional)' },
+    },
   },
-  async execute({ name }) {
+  async execute({ name, description }) {
     const match = typeof window !== 'undefined' ? window.location.pathname.match(/\/flows\/([^/]+)\/edit/) : null;
     if (!match) return 'Not on a flow editor page.';
     const flow = JSON.parse(await apiFetch(`/flows/${match[1]}`));
-    flow.name = name;
+    if (name) flow.name = name;
+    if (description !== undefined) flow.description = description;
     await apiFetch(`/flows/${match[1]}`, { method: 'PUT', body: JSON.stringify(flow) });
-    // Update the name input in the editor header directly (don't reload — would lose changes)
-    const nameInput = document.querySelector('input[placeholder="Flow name"]') as HTMLInputElement;
-    if (nameInput) {
-      const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(nameInput), 'value')?.set;
-      nativeSetter?.call(nameInput, name);
-      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-      nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+    // Update name input in DOM
+    if (name) {
+      const nameInput = document.querySelector('input[placeholder="Flow name"]') as HTMLInputElement;
+      if (nameInput) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(nameInput), 'value')?.set;
+        nativeSetter?.call(nameInput, name);
+        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     }
-    return `Flow renamed to "${name}". The editor name field has been updated.`;
+    // Update description input in DOM
+    if (description !== undefined) {
+      const descInput = document.querySelector('input[placeholder="Add a description..."]') as HTMLInputElement;
+      if (descInput) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(descInput), 'value')?.set;
+        nativeSetter?.call(descInput, description);
+        descInput.dispatchEvent(new Event('input', { bubbles: true }));
+        descInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+    return `Flow updated${name ? `: name → "${name}"` : ''}${description ? `: description → "${description}"` : ''}.`;
   },
 };
 
@@ -533,7 +548,7 @@ const getExecutionDetails: AssistantTool = {
 
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo, findFlow],
-  'flow-editor': [getFlowJson, renameFlow, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
+  'flow-editor': [getFlowJson, updateFlow, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
