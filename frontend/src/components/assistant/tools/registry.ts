@@ -367,6 +367,23 @@ const listUsers: AssistantTool = {
   async execute() { return apiFetch('/users'); },
 };
 
+const createUser: AssistantTool = {
+  name: 'create_user',
+  description: 'Create a new user account. Requires email, password (min 8 chars), and name.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      email: { type: 'string' },
+      password: { type: 'string', description: 'Minimum 8 characters' },
+      name: { type: 'string' },
+    },
+    required: ['email', 'password', 'name'],
+  },
+  async execute({ email, password, name }) {
+    return apiFetch('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
+  },
+};
+
 const deleteUser: AssistantTool = {
   name: 'delete_user',
   description: 'Delete a user by ID',
@@ -464,7 +481,7 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
   'store-crud': [listVectorStores, createVectorStore, deleteVectorStore],
-  'user-crud': [listUsers, deleteUser, updateUserRole],
+  'user-crud': [listUsers, createUser, deleteUser, updateUserRole],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails],
 };
