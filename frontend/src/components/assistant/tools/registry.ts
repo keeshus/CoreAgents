@@ -210,6 +210,24 @@ const getFlowJson: AssistantTool = {
   },
 };
 
+const renameFlow: AssistantTool = {
+  name: 'rename_flow',
+  description: 'Rename the current flow. Provide the new name. The flow ID is taken from the current editor URL.',
+  inputSchema: {
+    type: 'object',
+    properties: { name: { type: 'string', description: 'The new name for the flow' } },
+    required: ['name'],
+  },
+  async execute({ name }) {
+    const match = typeof window !== 'undefined' ? window.location.pathname.match(/\/flows\/([^/]+)\/edit/) : null;
+    if (!match) return 'Not on a flow editor page.';
+    const flow = JSON.parse(await apiFetch(`/flows/${match[1]}`));
+    flow.name = name;
+    await apiFetch(`/flows/${match[1]}`, { method: 'PUT', body: JSON.stringify(flow) });
+    return `Flow renamed to "${name}". The page will reload to show the new name.`;
+  },
+};
+
 const addNode: AssistantTool = {
   name: 'add_node',
   description: 'Add a new node to the flow canvas',
@@ -507,7 +525,7 @@ const getExecutionDetails: AssistantTool = {
 
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo, findFlow],
-  'flow-editor': [getFlowJson, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
+  'flow-editor': [getFlowJson, renameFlow, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
