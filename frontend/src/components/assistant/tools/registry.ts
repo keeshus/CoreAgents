@@ -174,7 +174,30 @@ const getAvailableNodes: AssistantTool = {
   },
 };
 
-// ── Flow editor tools (stubs — injected by FlowEditor when active) ───────────
+// ── Flow listing tool ────────────────────────────────────────────────────────
+
+const findFlow: AssistantTool = {
+  name: 'find_flow',
+  description: 'Search for a flow by name or list all flows. Returns flow IDs and names that can be used with navigate_to.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Flow name to search for (partial match). Leave empty to list all flows.' },
+    },
+  },
+  async execute({ name }) {
+    const data = await apiFetch('/flows');
+    const flows = JSON.parse(data);
+    if (!Array.isArray(flows)) return 'No flows found.';
+    const matching = name
+      ? flows.filter((f: any) => f.name?.toLowerCase().includes((name as string).toLowerCase()))
+      : flows;
+    if (matching.length === 0) return `No flow found matching "${name}".`;
+    return matching.slice(0, 10).map((f: any) => `- ${f.name} (id: ${f.id})`).join('\n');
+  },
+};
+
+// ── Flow editor tools ───────────────────────────────────────────────────────
 
 const getFlowJson: AssistantTool = {
   name: 'get_flow_json',
@@ -483,7 +506,7 @@ const getExecutionDetails: AssistantTool = {
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
-  'navigation': [navigateTo],
+  'navigation': [navigateTo, findFlow],
   'flow-editor': [getFlowJson, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
