@@ -81,15 +81,28 @@ const navigateTo: AssistantTool = {
 
 // ── DOM helpers for node config panels ──────────────────────────────────────
 
+function getFieldLabel(el: Element): string | null {
+  // 1. Check the nearest preceding span with label class (sibling before the input)
+  let prev = el.previousElementSibling;
+  while (prev) {
+    if (prev.matches('span.text-xs.font-medium, span.text-sm.font-medium')) return prev.textContent?.trim() || null;
+    prev = prev.previousElementSibling;
+  }
+  // 2. Check parent label's first span
+  const parent = el.closest('label');
+  if (parent) {
+    const span = parent.querySelector('span.text-xs.font-medium, span.text-sm.font-medium');
+    if (span) return span.textContent?.trim() || null;
+  }
+  // 3. Fallback to placeholder
+  return el.getAttribute('placeholder') || null;
+}
+
 function findModalField(label: string): HTMLElement | null {
-  const labels = document.querySelectorAll('.fixed.inset-0.z-50 label, .fixed.inset-0.z-50 span.text-xs.font-medium, .fixed.inset-0.z-50 span.text-sm.font-medium');
-  for (const el of labels) {
-    if (el.textContent?.trim() === label) {
-      const parent = el.closest('div') || el.parentElement;
-      if (!parent) return null;
-      // Try finding input, textarea, select, or checkbox
-      return parent.querySelector('input, textarea, select') as HTMLElement;
-    }
+  const modal = document.querySelector('.fixed.inset-0.z-50');
+  if (!modal) return null;
+  for (const el of modal.querySelectorAll('input, textarea, select')) {
+    if (getFieldLabel(el) === label) return el as HTMLElement;
   }
   return null;
 }
@@ -115,8 +128,7 @@ const getNodeConfig: AssistantTool = {
     const fields: Record<string, string> = {};
 
     modal.querySelectorAll('input, textarea, select').forEach((el: any) => {
-      const label = el.closest('div')?.querySelector('label, .text-xs.font-medium, .text-sm.font-medium');
-      const name = label?.textContent?.trim() || el.placeholder || el.name || 'unknown';
+      const name = getFieldLabel(el) || el.placeholder || el.name || 'unknown';
       if (el.type === 'checkbox') fields[name] = el.checked ? 'true' : 'false';
       else fields[name] = el.value || '';
     });
