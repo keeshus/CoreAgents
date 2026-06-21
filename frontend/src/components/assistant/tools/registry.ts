@@ -212,7 +212,7 @@ const getFlowJson: AssistantTool = {
 
 const renameFlow: AssistantTool = {
   name: 'rename_flow',
-  description: 'Rename the current flow. Provide the new name. The flow ID is taken from the current editor URL.',
+  description: 'Rename the current flow without reloading the page.',
   inputSchema: {
     type: 'object',
     properties: { name: { type: 'string', description: 'The new name for the flow' } },
@@ -224,7 +224,15 @@ const renameFlow: AssistantTool = {
     const flow = JSON.parse(await apiFetch(`/flows/${match[1]}`));
     flow.name = name;
     await apiFetch(`/flows/${match[1]}`, { method: 'PUT', body: JSON.stringify(flow) });
-    return `Flow renamed to "${name}". The page will reload to show the new name.`;
+    // Update the name input in the editor header directly (don't reload — would lose changes)
+    const nameInput = document.querySelector('input[placeholder="Flow name"]') as HTMLInputElement;
+    if (nameInput) {
+      const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(nameInput), 'value')?.set;
+      nativeSetter?.call(nameInput, name);
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return `Flow renamed to "${name}". The editor name field has been updated.`;
   },
 };
 
