@@ -55,17 +55,25 @@ const replaceCode: AssistantTool = {
 
 const navigateTo: AssistantTool = {
   name: 'navigate_to',
-  description: 'Navigate to a page in the app',
+  description: 'Navigate to a page or a specific flow editor in the app',
   inputSchema: {
     type: 'object',
     properties: {
       page: { type: 'string', enum: ['flows', 'approvals', 'settings', 'settings/endpoints', 'settings/mcp-servers', 'settings/knowledge', 'settings/users', 'profile'] },
+      flowId: { type: 'string', description: 'Flow ID to navigate directly into its editor (e.g. "f30fa521-...")' },
     },
-    required: ['page'],
+    required: [],
   },
-  async execute({ page }) {
-    if (typeof window !== 'undefined') window.location.href = `/${page}`;
-    return `Navigated to /${page}`;
+  async execute({ page, flowId }) {
+    if (flowId) {
+      if (typeof window !== 'undefined') window.location.href = `/flows/${flowId}/edit`;
+      return `Navigated to flow editor for ${flowId}`;
+    }
+    if (page) {
+      if (typeof window !== 'undefined') window.location.href = `/${page}`;
+      return `Navigated to /${page}`;
+    }
+    return 'Please provide a page or flowId to navigate to.';
   },
 };
 
