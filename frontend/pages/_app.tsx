@@ -1,4 +1,5 @@
 import type { AppProps } from 'next/app';
+import { useRouter } from 'next/router';
 import '@/styles/globals.css';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { AssistantProvider } from '@/components/assistant/AssistantContext';
@@ -18,7 +19,10 @@ export default function App({ Component, pageProps }: AppProps) {
 
 function AssistantGate() {
   const { user, loading } = useAuth();
+  const { pathname } = useRouter();
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
-  if (loading || !user || !can('flow:create')) return null;
+  const isApprovalsPage = pathname?.startsWith('/approvals');
+  if (loading || !user) return null;
+  if (!can('flow:create') && !(isApprovalsPage && can('execution:approve'))) return null;
   return <><AssistantPanel /><AssistantButton /></>;
 }

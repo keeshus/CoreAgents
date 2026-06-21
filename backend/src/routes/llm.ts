@@ -10,7 +10,7 @@ const router = Router();
 router.use(authenticate);
 
 // POST /api/llm/chat — SSE-streamed chat with an LLM (for Co-Pilot assistant)
-router.post('/chat', requirePermission('flow:create'), asyncHandler(async (req, res) => {
+router.post('/chat', asyncHandler(async (req, res) => {
   const { endpointId, messages, tools, systemPrompt } = req.body || {};
 
   if (!endpointId) { res.status(400).json({ error: 'endpointId is required' }); return; }
