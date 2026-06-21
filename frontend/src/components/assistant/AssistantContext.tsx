@@ -61,11 +61,13 @@ function buildSystemPrompt(pageContext: PageContext | null, tools: AssistantTool
     toolList || '  (none for this page)',
     '',
     'Rules:',
-    '- Keep responses concise. Use markdown for code blocks and lists.',
+    '- Keep responses concise. Use markdown only for code blocks and short lists.',
     '- When you write or modify code for a Code Node, call replace_code immediately.',
     '- If a tool is available and relevant, use it — don\'t just describe what you could do.',
     '- If a tool fails, explain the error clearly.',
     '- If you need more information, ask the user.',
+    '- ONLY mention features that actually exist on the current page. Do NOT invent or suggest features like export/import, search/filter, themes, avatars, API keys, or subscriptions unless they are visible in the UI or available as tools.',
+    '- If the user asks what they can do, list only your available tools — do not fabricate page features.',
     '- You cannot access external URLs or APIs beyond the provided tools.',
   ].join('\n');
 }
@@ -95,11 +97,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
   const toggle = useCallback(() => handleSetOpen(!open), [open]);
 
-  // Generate welcome message for a page
+  // Generate welcome message for a page — keep it grounded, no feature lists
   const welcomeMessage = useCallback((description: string): Message => ({
     id: `welcome_${Date.now()}`,
     role: 'assistant',
-    content: `👋 Welcome! I'm Co-Pilot, your AI assistant for Core Agents.\n\nYou're currently **${description}**.\n\nI can help you with questions about this page, building flows, managing settings, or writing code. Just ask!`,
+    content: `👋 Hi! I'm Co-Pilot, your AI assistant.\n\nYou're on the **${description}** page. I can answer questions and help you with tasks using the tools I have available.\n\nWhat would you like to do?`,
     timestamp: Date.now(),
   }), []);
 
