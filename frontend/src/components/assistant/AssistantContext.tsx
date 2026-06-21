@@ -355,10 +355,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         }
         setMessages(finalMessages);
       }
-    } else if (assistantContent) {
-        const finalMessages = [...updatedMessages, { id: crypto.randomUUID(), role: 'assistant', content: assistantContent, timestamp: Date.now() }];
-        setMessages(finalMessages);
-      }
     } catch (err: any) {
       if (err.name !== 'AbortError') setError(err.message);
     } finally {
