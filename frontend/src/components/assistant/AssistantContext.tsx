@@ -70,10 +70,10 @@ function getPageCapabilities(pageKey: string): string {
     return 'This page lists MCP server configurations (name, URL, enabled status, tool count). You can add new MCP servers, edit their URL/name, toggle enabled, or delete them. The refresh button re-fetches available tools from the server.';
   }
   if (pageKey === 'settings:knowledge') {
-    return 'This page has two sections: Embedding Providers (configure embedding API endpoints for RAG) and Vector Stores (configure Qdrant connections). You can create, edit, and delete both.';
+    return 'This page has two sections: Embedding Providers (configure embedding API endpoints for RAG) and Vector Stores (configure Qdrant connections). You can create, edit, and delete both using the available tools.';
   }
   if (pageKey === 'settings:users') {
-    return 'This page shows a table of all users with their name, email, role (editable dropdown), provider, and last login. Admins can create new users, change user roles, and delete users.';
+    return 'This page shows a table of all users with their name, email, role (editable dropdown), provider, and last login. You can create users, change roles, and delete users using the available tools.';
   }
   if (pageKey === 'profile') {
     return 'This page shows your profile: name, email, role, permissions, provider, member since date, and last login. You can edit your name and email. There are no avatars, themes, API keys, or subscriptions.';

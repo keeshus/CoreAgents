@@ -247,6 +247,42 @@ const listMcpServers: AssistantTool = {
   async execute() { return apiFetch('/mcp-servers'); },
 };
 
+const createMcpServer: AssistantTool = {
+  name: 'create_mcp_server',
+  description: 'Add a new MCP server. Requires name and url.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      url: { type: 'string', description: 'MCP server URL' },
+    },
+    required: ['name', 'url'],
+  },
+  async execute({ name, url }) { return apiFetch('/mcp-servers', { method: 'POST', body: JSON.stringify({ name, url }) }); },
+};
+
+const deleteMcpServer: AssistantTool = {
+  name: 'delete_mcp_server',
+  description: 'Delete an MCP server by ID',
+  inputSchema: {
+    type: 'object',
+    properties: { id: { type: 'string' } },
+    required: ['id'],
+  },
+  async execute({ id }) { return apiFetch(`/mcp-servers/${id}`, { method: 'DELETE' }); },
+};
+
+const refreshMcpTools: AssistantTool = {
+  name: 'refresh_mcp_tools',
+  description: 'Refresh the tool list from an MCP server by its ID',
+  inputSchema: {
+    type: 'object',
+    properties: { id: { type: 'string', description: 'The MCP server ID' } },
+    required: ['id'],
+  },
+  async execute({ id }) { return apiFetch(`/mcp-servers/${id}/refresh`, { method: 'POST' }); },
+};
+
 // ── Embedding Providers ───────────────────────────────────────────────────────
 
 const listEmbeddingProviders: AssistantTool = {
@@ -424,7 +460,8 @@ const getExecutionDetails: AssistantTool = {
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo],
   'flow-editor': [getFlowJson, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
-  'settings-crud': [listEndpoints, createEndpoint, deleteEndpoint, listMcpServers],
+  'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
+  'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
   'store-crud': [listVectorStores, createVectorStore, deleteVectorStore],
   'user-crud': [listUsers, deleteUser, updateUserRole],
@@ -438,9 +475,10 @@ export function getToolGroupNames(pageKey: string, nodeType?: string): string[] 
   const groups: string[] = ['navigation'];
 
   if (pageKey?.startsWith('flow:')) groups.push('flow-editor');
-  else if (pageKey === 'settings:knowledge') groups.push('settings-crud', 'embedding-crud', 'store-crud');
+  else if (pageKey === 'settings:endpoints') groups.push('endpoint-crud');
+  else if (pageKey === 'settings:mcp-servers') groups.push('mcp-crud');
+  else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud');
   else if (pageKey === 'settings:users') groups.push('user-crud');
-  else if (pageKey?.startsWith('settings:')) groups.push('settings-crud');
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
 
