@@ -275,8 +275,6 @@ export class FlowExecutor {
         });
 
         // ── Feedback loop detection ──────────────────────────────────────────
-        // After a HITL node completes (approve/replay path), check if any
-        // outgoing edge targets an already-executed node (feedback loop).
         if ((node.data as any)?.type === 'hitl') {
           const hitlOutput = output as Record<string, unknown> | undefined;
           const decision = hitlOutput?.decision as string | undefined;
@@ -288,38 +286,35 @@ export class FlowExecutor {
               const buttonValue = buttons[handleIdx]?.value;
               const targetIdx = sorted.findIndex(n => n.id === edge.target);
 
-              if (decision === buttonValue && targetIdx >= 0 && targetIdx < i) {
-                // This is a feedback edge — re-execute from target
-                const isMaxIter = hitlConfig.maxIterations > 0 && (feedbackIterCount + 1) >= hitlConfig.maxIterations;
-                if (isMaxIter) {
-                  // Max iterations reached — override output so the exit handle edge is followed
-                  nodeOutputs.set(node.id, { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: feedbackIterCount + 1 });
-                  nodeOutputs.set(slugify(node.data?.label || node.id), { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: feedbackIterCount + 1 });
+              if (targetIdx >= 0 && targetIdx < i) {
+                if (decision === buttonValue) {
+                  // This is a feedback edge — re-execute from target
+                  const isMaxIter = hitlConfig.maxIterations > 0 && (feedbackIterCount + 1) >= hitlConfig.maxIterations;
+                  if (isMaxIter) {
+                    nodeOutputs.set(node.id, { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: feedbackIterCount + 1 });
+                    nodeOutputs.set(slugify(node.data?.label || node.id), { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: feedbackIterCount + 1 });
+                    break;
+                  }
+
+                  feedbackIterCount++;
+                  if (feedbackIterCount >= MAX_FEEDBACK_ITERS) break;
+
+                  for (let r = targetIdx; r <= i; r++) {
+                    const resetNode = sorted[r];
+                    nodeOutputs.delete(resetNode.id);
+                    nodeOutputs.delete(slugify(resetNode.data?.label || resetNode.id));
+                  }
+
+                  const flowInput = nodeOutputs.get('__input__') as Record<string, unknown> || {};
+                  delete flowInput._approved;
+                  delete flowInput._decision;
+                  delete flowInput._feedback;
+
+                  flowInput._iterationCount = feedbackIterCount;
+
+                  i = targetIdx - 1;
                   break;
                 }
-
-                feedbackIterCount++;
-                if (feedbackIterCount >= MAX_FEEDBACK_ITERS) break;
-
-                // Reset outputs for all nodes after the loop target
-                for (let r = targetIdx; r <= i; r++) {
-                  const resetNode = sorted[r];
-                  nodeOutputs.delete(resetNode.id);
-                  nodeOutputs.delete(slugify(resetNode.data?.label || resetNode.id));
-                }
-
-                // Clear HITL flags from accumulated input
-                const flowInput = nodeOutputs.get('__input__') as Record<string, unknown> || {};
-                delete flowInput._approved;
-                delete flowInput._decision;
-                delete flowInput._feedback;
-
-                // Inject feedback + iteration count for the re-execution
-                flowInput._iterationCount = feedbackIterCount;
-
-                // Rewind loop to execute from the target node again
-                i = targetIdx - 1;
-                break;
               }
             }
           }
