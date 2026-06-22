@@ -508,12 +508,14 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
                         {btn.label}
                       </button>
                     ))}
-                    <button
-                      onClick={handleHitlReject}
-                      className="px-4 py-2 rounded text-sm font-medium bg-white text-gray-600 border hover:bg-gray-50 transition-colors"
-                    >
-                      Reject
-                    </button>
+                    {!hitlPause.buttons.some(b => b.value === 'rejected') && (
+                      <button
+                        onClick={handleHitlReject}
+                        className="px-4 py-2 rounded text-sm font-medium bg-white text-gray-600 border hover:bg-gray-50 transition-colors"
+                      >
+                        Reject
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
