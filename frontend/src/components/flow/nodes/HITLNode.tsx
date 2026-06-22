@@ -14,18 +14,16 @@ export function HITLNode(props: NodeProps) {
       </div>
       <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1">
         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-amber-100 text-amber-700">⏸ pause → route</span>
-        <span className="text-[9px] text-gray-400 ml-auto">{labels.length} path{labels.length !== 1 ? 's' : ''}{maxIter > 0 && ` · max ${maxIter} iters`}</span>
+        <span className="text-[9px] text-gray-400 ml-auto">{labels.length} path{labels.length !== 1 ? 's' : ''}{maxIter > 0 ? ` · max ${maxIter} iters` : ' · unlimited'}</span>
       </div>
-      {maxIter > 0 && (
-        <Handle
-          type="source"
-          position={Position.Right}
-          id={`output-${labels.length}`}
-          style={{ top: '100%', background: '#dc2626' }}
-          className="!w-3 !h-3 !border-2 !border-white"
-          title="Max iterations reached — exit"
-        />
-      )}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id={`output-${labels.length}`}
+        style={{ top: '100%', background: '#dc2626' }}
+        className="!w-3 !h-3 !border-2 !border-white"
+        title="Max iterations reached — exit"
+      />
     </BaseNode>
   );
 }

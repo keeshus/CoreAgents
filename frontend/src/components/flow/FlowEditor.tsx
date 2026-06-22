@@ -322,13 +322,17 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     (connection: Connection) => {
       // Tool input handles can have multiple connections
       if (connection.targetHandle?.startsWith('tool-input')) return true;
+      // Feedback edges (backward connections): allow even if target already has input
+      const sourceNode = nodes.find(n => n.id === connection.source);
+      const targetNode = nodes.find(n => n.id === connection.target);
+      if (sourceNode && targetNode && targetNode.position.x < sourceNode.position.x) return true;
       // Check if target already has an incoming connection on this handle
       const existing = edges.find(
         e => e.target === connection.target && e.targetHandle === connection.targetHandle
       );
       return !existing;
     },
-    [edges]
+    [edges, nodes]
   );
 
   return (
