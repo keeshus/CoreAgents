@@ -89,7 +89,7 @@ export function AssistantPanel() {
               ) : m.role === 'user' ? (
                 m.content
               ) : (
-                <div className="prose prose-sm max-w-none prose-code:bg-gray-200 prose-code:px-1 prose-code:rounded">
+                <div className="prose prose-sm max-w-none prose-code:bg-gray-200 prose-code:px-1 prose-code:rounded overflow-x-auto [&_table]:text-left [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}>{m.content}</ReactMarkdown>
                 </div>
               )}
@@ -101,7 +101,7 @@ export function AssistantPanel() {
         {streaming && streamingContent && (
           <div className="flex justify-start">
             <div className="max-w-[85%] rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-900">
-              <div className="prose prose-sm max-w-none">
+              <div className="prose prose-sm max-w-none overflow-x-auto [&_table]:text-left [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1">
                 <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}>{streamingContent}</ReactMarkdown>
               </div>
             </div>

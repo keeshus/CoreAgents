@@ -1,12 +1,12 @@
 import { useCallback } from 'react';
-import type { AssistantMessage } from './AssistantContext';
+import type { Message } from './AssistantContext';
 
 const STORAGE_KEY = 'copilot:history';
 const MAX_MESSAGES_PER_PAGE = 30;
 const MAX_TOTAL_CONVERSATIONS = 50;
 
 interface StoredConversation {
-  messages: AssistantMessage[];
+  messages: Message[];
   updatedAt: number;
 }
 
@@ -28,7 +28,7 @@ function writeAll(data: Record<string, StoredConversation>) {
 }
 
 export function useConversationMemory() {
-  const save = useCallback((key: string, messages: AssistantMessage[]) => {
+  const save = useCallback((key: string, messages: Message[]) => {
     if (!key) return;
     const all = readAll();
     all[key] = { messages: messages.slice(-MAX_MESSAGES_PER_PAGE), updatedAt: Date.now() };
@@ -46,7 +46,7 @@ export function useConversationMemory() {
     }
   }, []);
 
-  const load = useCallback((key: string): AssistantMessage[] => {
+  const load = useCallback((key: string): Message[] => {
     if (!key) return [];
     const all = readAll();
     return all[key]?.messages || [];

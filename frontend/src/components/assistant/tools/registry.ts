@@ -137,7 +137,7 @@ const getNodeConfig: AssistantTool = {
     const buttonItems = modal.querySelectorAll('.space-y-2 .flex.items-center.gap-2 input');
     if (buttonItems.length > 0) {
       const buttons: { label: string; value: string }[] = [];
-      buttonItems.forEach((input: HTMLInputElement, i: number) => {
+      buttonItems.forEach((el, i) => { const input = el as HTMLInputElement;
         if (i % 2 === 0) buttons.push({ label: input.value, value: '' });
         else buttons[buttons.length - 1].value = input.value;
       });
