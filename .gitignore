@@ -3,6 +3,10 @@ node_modules
 out
 build
 dist
+**/src/**/*.js
+**/src/**/*.d.ts
+**/src/**/*.js.map
+**/src/**/*.d.ts.map
 *.tsbuildinfo
 .DS_Store
 .env
