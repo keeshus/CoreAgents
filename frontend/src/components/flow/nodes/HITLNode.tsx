@@ -1,10 +1,11 @@
-import { type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { BaseNode } from './BaseNode';
 
 export function HITLNode(props: NodeProps) {
   const config = props.data?.config as Record<string, any> | undefined;
   const buttons = config?.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }];
   const labels = buttons.map((b: any) => b.value);
+  const maxIter = config?.maxIterations || 0;
   return (
     <BaseNode label={(props.data?.label as string) || 'Human in the Loop'} nodeType="HITL" category="processing" selected={props.selected || false} inputs={1} outputs={labels.length} outputLabels={labels}>
       <div className="space-y-1">
@@ -13,8 +14,18 @@ export function HITLNode(props: NodeProps) {
       </div>
       <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1">
         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-amber-100 text-amber-700">⏸ pause → route</span>
-        <span className="text-[9px] text-gray-400 ml-auto">{labels.length} path{labels.length !== 1 ? 's' : ''}</span>
+        <span className="text-[9px] text-gray-400 ml-auto">{labels.length} path{labels.length !== 1 ? 's' : ''}{maxIter > 0 && ` · max ${maxIter} iters`}</span>
       </div>
+      {maxIter > 0 && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          id={`output-${labels.length}`}
+          style={{ top: '100%', background: '#dc2626' }}
+          className="!w-3 !h-3 !border-2 !border-white"
+          title="Max iterations reached — exit"
+        />
+      )}
     </BaseNode>
   );
 }

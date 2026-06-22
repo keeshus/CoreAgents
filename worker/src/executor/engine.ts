@@ -85,7 +85,11 @@ export class FlowExecutor {
 
     const steps: ExecutionStep[] = [];
 
-    for (const node of sorted) {
+    let feedbackIterCount = 0;
+    const MAX_FEEDBACK_ITERS = 10;
+
+    for (let i = 0; i < sorted.length; i++) {
+      const node = sorted[i];
       if (this.abortController.signal.aborted) break;
 
       // Skip nodes before the HITL node when replaying
@@ -142,9 +146,14 @@ export class FlowExecutor {
             if (sourceNode && (sourceNode.data as any)?.type === 'hitl') {
               const buttons: Array<{ value: string }> = (sourceNode.data as any).config?.buttons || [];
               const handleIndex = parseInt((e.sourceHandle as string).replace('output-', ''), 10);
-              const buttonValue = buttons[handleIndex]?.value;
               const decision = (src as any)?.decision;
-              if (buttonValue && decision && buttonValue !== decision) return true;
+              // Max iterations exit handle (index >= buttons.length): only follow if max iterations reached
+              if (handleIndex >= buttons.length) {
+                if (decision !== 'max_iterations') return true;
+              } else {
+                const buttonValue = buttons[handleIndex]?.value;
+                if (buttonValue && decision && buttonValue !== decision) return true;
+              }
             }
           }
 
@@ -264,6 +273,57 @@ export class FlowExecutor {
           startedAt: null,
           completedAt: null,
         });
+
+        // ── Feedback loop detection ──────────────────────────────────────────
+        // After a HITL node completes (approve/replay path), check if any
+        // outgoing edge targets an already-executed node (feedback loop).
+        if ((node.data as any)?.type === 'hitl') {
+          const hitlOutput = output as Record<string, unknown> | undefined;
+          const decision = hitlOutput?.decision as string | undefined;
+          if (decision) {
+            const hitlConfig = (node.data as any)?.config || {};
+            const buttons: Array<{ value: string }> = hitlConfig.buttons || [];
+            for (const edge of flow.edges.filter(e => e.source === node.id)) {
+              const handleIdx = parseInt((edge.sourceHandle || 'output-0').replace('output-', ''), 10);
+              const buttonValue = buttons[handleIdx]?.value;
+              const targetIdx = sorted.findIndex(n => n.id === edge.target);
+
+              if (decision === buttonValue && targetIdx >= 0 && targetIdx < i) {
+                // This is a feedback edge — re-execute from target
+                const isMaxIter = hitlConfig.maxIterations > 0 && (feedbackIterCount + 1) >= hitlConfig.maxIterations;
+                if (isMaxIter) {
+                  // Max iterations reached — override output so the exit handle edge is followed
+                  nodeOutputs.set(node.id, { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: feedbackIterCount + 1 });
+                  nodeOutputs.set(slugify(node.data?.label || node.id), { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: feedbackIterCount + 1 });
+                  break;
+                }
+
+                feedbackIterCount++;
+                if (feedbackIterCount >= MAX_FEEDBACK_ITERS) break;
+
+                // Reset outputs for all nodes after the loop target
+                for (let r = targetIdx; r <= i; r++) {
+                  const resetNode = sorted[r];
+                  nodeOutputs.delete(resetNode.id);
+                  nodeOutputs.delete(slugify(resetNode.data?.label || resetNode.id));
+                }
+
+                // Clear HITL flags from accumulated input
+                const flowInput = nodeOutputs.get('__input__') as Record<string, unknown> || {};
+                delete flowInput._approved;
+                delete flowInput._decision;
+                delete flowInput._feedback;
+
+                // Inject feedback + iteration count for the re-execution
+                flowInput._iterationCount = feedbackIterCount;
+
+                // Rewind loop to execute from the target node again
+                i = targetIdx - 1;
+                break;
+              }
+            }
+          }
+        }
       } catch (err) {
         // If HITL node paused, populate saved outputs before re-throwing
         if (err instanceof HitlPauseError) {
@@ -686,7 +746,7 @@ export class FlowExecutor {
       case 'hitl': {
         const inp = input as Record<string, unknown> | undefined;
         if (inp?._approved) {
-          return { decision: inp._decision || 'approved', feedback: inp._feedback || '', reviewedContent: inp._reviewedContent || inp };
+          return { decision: inp._decision || 'approved', feedback: inp._feedback || '', reviewedContent: inp._reviewedContent || inp, _iterationCount: (inp as any)._iterationCount || 0 };
         }
         // First run: pause for human input with resolved prompt
         const hitlCfg = (nodeData as any).config || {};

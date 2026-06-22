@@ -218,6 +218,17 @@ export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLN
         <span className="text-sm text-gray-700">Allow reviewer feedback</span>
         <span className="text-xs text-gray-400">(text input field)</span>
       </label>
+      <label className="block">
+        <span className="text-xs font-medium text-gray-700">Max iterations <span className="text-gray-400 font-normal">(0 = unlimited)</span></span>
+        <input
+          type="number"
+          min={0}
+          value={config?.maxIterations ?? 0}
+          onChange={(e) => onChange({ maxIterations: Math.max(0, parseInt(e.target.value) || 0) })}
+          className="mt-1 block w-24 rounded border border-gray-300 p-2 text-sm"
+        />
+        <p className="text-[10px] text-gray-400 mt-1">When exceeded, flow exits through the red &quot;max iterations&quot; handle.</p>
+      </label>
       {/* Assignment picker */}
       <div className="border-t border-gray-100 pt-3 mt-3">
         <span className="text-sm font-medium text-gray-700 block mb-2">Assignment</span>

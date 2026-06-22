@@ -285,9 +285,16 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
 
   const connectNodes = useCallback(
     (source: string, target: string, sourceHandle?: string) => {
-      setEdges((eds) => addEdge({ source, target, sourceHandle } as Connection, eds));
+      const sourceNode = nodes.find(n => n.id === source);
+      const targetNode = nodes.find(n => n.id === target);
+      const isFeedback = sourceNode && targetNode && targetNode.position.x < sourceNode.position.x;
+      setEdges((eds) => addEdge({
+        source, target, sourceHandle,
+        style: isFeedback ? { strokeDasharray: '5,5', stroke: '#f97316', strokeWidth: 2 } : undefined,
+        animated: isFeedback,
+      } as Connection, eds));
     },
-    [setEdges]
+    [setEdges, nodes]
   );
 
   useEffect(() => {
@@ -297,8 +304,18 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
   }, [connectNodes]);
 
   const onConnect: OnConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
-    [setEdges]
+    (connection: Connection) => {
+      // Detect feedback edges: target is positioned left of source (upstream)
+      const sourceNode = nodes.find(n => n.id === connection.source);
+      const targetNode = nodes.find(n => n.id === connection.target);
+      const isFeedback = sourceNode && targetNode && targetNode.position.x < sourceNode.position.x;
+      setEdges((eds) => addEdge({
+        ...connection,
+        style: isFeedback ? { strokeDasharray: '5,5', stroke: '#f97316', strokeWidth: 2 } : undefined,
+        animated: isFeedback,
+      }, eds));
+    },
+    [setEdges, nodes]
   );
 
   const isValidConnection = useCallback(
