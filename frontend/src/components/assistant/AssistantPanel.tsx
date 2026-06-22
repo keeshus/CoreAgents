@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useAssistant } from './AssistantContext';
 import { Send, Loader2, AlertTriangle, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 
 const sanitizeSchema = {
@@ -89,7 +90,7 @@ export function AssistantPanel() {
                 m.content
               ) : (
                 <div className="prose prose-sm max-w-none prose-code:bg-gray-200 prose-code:px-1 prose-code:rounded">
-                  <ReactMarkdown rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}>{m.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}>{m.content}</ReactMarkdown>
                 </div>
               )}
             </div>
@@ -101,7 +102,7 @@ export function AssistantPanel() {
           <div className="flex justify-start">
             <div className="max-w-[85%] rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-900">
               <div className="prose prose-sm max-w-none">
-                <ReactMarkdown rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}>{streamingContent}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}>{streamingContent}</ReactMarkdown>
               </div>
             </div>
           </div>
