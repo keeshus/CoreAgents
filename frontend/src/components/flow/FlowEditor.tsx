@@ -25,6 +25,9 @@ import { OutputNode } from './nodes/OutputNode';
 import { ParallelNode } from './nodes/ParallelNode';
 import { HITLNode } from './nodes/HITLNode';
 import { StopNode } from './nodes/StopNode';
+import { DeletableEdge } from './DeletableEdge';
+
+const edgeTypes = { default: DeletableEdge };
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -354,6 +357,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           onConnect={onConnect}
           isValidConnection={isValidConnection}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
