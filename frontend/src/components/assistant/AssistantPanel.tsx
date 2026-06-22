@@ -33,15 +33,15 @@ export function AssistantPanel() {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [open, messages, streamingContent]);
 
-  if (!open) return null;
-
-  // Auto-resize textarea on input
+  // Auto-resize textarea on input (must be before early return)
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 160) + 'px';
   }, [input]);
+
+  if (!open) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
