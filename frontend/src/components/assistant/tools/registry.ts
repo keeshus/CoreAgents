@@ -303,6 +303,36 @@ const deleteNode: AssistantTool = {
   },
 };
 
+const removeEdge: AssistantTool = {
+  name: 'remove_edge',
+  description: 'Remove an edge (connection) between two nodes on the flow canvas by their labels.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      source: { type: 'string', description: 'Label of the source node' },
+      target: { type: 'string', description: 'Label of the target node' },
+      sourceHandle: { type: 'string', description: 'Optional handle id on the source node (e.g. "output-1")' },
+    },
+    required: ['source', 'target'],
+  },
+  async execute({ source, target, sourceHandle }) {
+    const removeFn = (window as any).__removeFlowEdge;
+    if (!removeFn) return 'Remove edge function not available. Make sure FlowEditor is loaded.';
+    const nodes = document.querySelectorAll('.react-flow__node');
+    let sourceId: string | null = null;
+    let targetId: string | null = null;
+    for (const node of nodes) {
+      const text = node.textContent?.toLowerCase() || '';
+      if (text.includes((source as string).toLowerCase())) sourceId = node.getAttribute('data-id');
+      if (text.includes((target as string).toLowerCase())) targetId = node.getAttribute('data-id');
+    }
+    if (!sourceId) return `Source node "${source}" not found.`;
+    if (!targetId) return `Target node "${target}" not found.`;
+    removeFn(sourceId, targetId, sourceHandle || undefined);
+    return `Removed edge from "${source}" → "${target}".`;
+  },
+};
+
 const closeNodeConfig: AssistantTool = {
   name: 'close_node_config',
   description: 'Close the currently open node configuration panel.',
@@ -633,7 +663,7 @@ const getExecutionDetails: AssistantTool = {
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
-  'flow-editor': [openNode, getFlowJson, updateFlow, addNode, deleteNode, connectNodes, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
+  'flow-editor': [openNode, getFlowJson, updateFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],

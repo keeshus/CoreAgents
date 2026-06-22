@@ -292,16 +292,24 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
         source, target, sourceHandle,
         style: isFeedback ? { strokeDasharray: '5,5', stroke: '#f97316', strokeWidth: 2 } : undefined,
         animated: isFeedback,
-      } as Connection, eds));
+      } as any, eds));
     },
     [setEdges, nodes]
+  );
+
+  const removeEdge = useCallback(
+    (source: string, target: string, sourceHandle?: string) => {
+      setEdges((eds) => eds.filter(e => !(e.source === source && e.target === target && (!sourceHandle || e.sourceHandle === sourceHandle))));
+    },
+    [setEdges]
   );
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__connectFlowNodes = connectNodes;
+      (window as any).__removeFlowEdge = removeEdge;
     }
-  }, [connectNodes]);
+  }, [connectNodes, removeEdge]);
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => {
