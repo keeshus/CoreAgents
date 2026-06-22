@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores } from '../db/schema.js';
 import { FlowExecutor, HitlPauseError, FlowStopError } from '../../../worker/src/executor/engine.js';
@@ -497,12 +497,13 @@ router.get(
   '/flows/:flowId/executions',
   asyncHandler(async (req, res) => {
     const flowId = req.params.flowId as string;
-    const result = await db
-      .select()
-      .from(executions)
-      .where(eq(executions.flow_id, flowId))
-      .orderBy(desc(executions.created_at));
-    res.json(result);
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const [result, countResult] = await Promise.all([
+      db.select().from(executions).where(eq(executions.flow_id, flowId)).orderBy(desc(executions.created_at)).limit(limit).offset(offset),
+      db.select({ count: sql<number>`count(*)` }).from(executions).where(eq(executions.flow_id, flowId)),
+    ]);
+    res.json({ data: result, total: Number(countResult[0].count), limit, offset });
   }),
 );
 

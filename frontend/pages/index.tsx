@@ -10,8 +10,11 @@ export default function FlowsListPage() {
   const { user, loading: authLoading, logout } = useAuth();
   const authConfig = useAuthConfig();
   const [flows, setFlows] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<Record<string, 'running' | 'ok' | 'error' | null>>({});
+  const PAGE_SIZE = 20;
   const router = useRouter();
 
   useAssistantContext({ pageKey: 'flows-list', description: 'Viewing all flows' });
@@ -40,8 +43,8 @@ export default function FlowsListPage() {
       setLoading(false);
       return;
     }
-    api.flows.list().then(setFlows).catch(() => setFlows([])).finally(() => setLoading(false));
-  }, [user, authLoading, isReader]);
+    api.flows.list({ limit: PAGE_SIZE, offset: page * PAGE_SIZE }).then(({ data, total }) => { setFlows(data); setTotal(total); }).catch(() => { setFlows([]); setTotal(0); }).finally(() => setLoading(false));
+  }, [user, authLoading, isReader, page]);
 
   const handleLogout = async () => {
     await logout();
@@ -155,7 +158,8 @@ export default function FlowsListPage() {
             )}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div>
+            <div className="space-y-3">
             {flows.map((flow) => (
               <div key={flow.id} className="bg-white rounded-lg border p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
                 <div>
@@ -201,6 +205,15 @@ export default function FlowsListPage() {
                 </div>
               </div>
             ))}
+            </div>
+            <div className="flex items-center justify-between mt-4 text-sm">
+              <span className="text-gray-500">{total} flow{total !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-2">
+                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1 rounded border text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Previous</button>
+                <span className="text-gray-500">Page {page + 1} of {Math.ceil(total / PAGE_SIZE) || 1}</span>
+                <button disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)} className="px-3 py-1 rounded border text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next</button>
+              </div>
+            </div>
           </div>
         )}
       </div>

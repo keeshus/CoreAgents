@@ -51,10 +51,13 @@ export default function ExecutionHistoryPage() {
   useAssistantContext({ pageKey: 'executions:' + flowId, description: 'Viewing execution history' });
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [executions, setExecutions] = useState<Execution[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Execution | null>(null);
   const [steps, setSteps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const PAGE_SIZE = 20;
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   const cancel = async (execId: string, e: React.MouseEvent) => {
@@ -62,19 +65,18 @@ export default function ExecutionHistoryPage() {
     setCancelling(execId);
     try {
       await fetch(`${API_URL}/executions/${execId}/cancel`, { method: 'POST' });
-      const res = await fetch(`${API_URL}/flows/${flowId}/executions`);
-      setExecutions(await res.json());
+      setPage(0);
     } catch { /* */ } finally { setCancelling(null); }
   };
 
   useEffect(() => {
     if (!flowId) return;
-    fetch(`${API_URL}/flows/${flowId}/executions`, { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setExecutions(Array.isArray(data) ? data : []))
-      .catch(() => setExecutions([]))
+    fetch(`${API_URL}/flows/${flowId}/executions?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : { data: [], total: 0 })
+      .then(({ data, total }) => { setExecutions(data || []); setTotal(total || 0); })
+      .catch(() => { setExecutions([]); setTotal(0); })
       .finally(() => setLoading(false));
-  }, [flowId]);
+  }, [flowId, page]);
 
   const viewDetails = async (execId: string) => {
     const exec = executions.find(e => e.id === execId);
@@ -102,7 +104,8 @@ export default function ExecutionHistoryPage() {
             <p className="text-gray-400">No executions yet</p>
           </div>
         ) : (
-          <div className="space-y-2">{executions.map(exec => {
+          <div>
+            <div className="space-y-2">{executions.map(exec => {
             const cfg = statusConfig[exec.status] || statusConfig.pending;
             const Icon = cfg.icon;
             const pausedTotal = exec.output?._pausedTotal || 0;
@@ -134,6 +137,15 @@ export default function ExecutionHistoryPage() {
               </div>
             );
           })}</div>
+            <div className="flex items-center justify-between mt-4 text-sm">
+              <span className="text-gray-500">{total} execution{total !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-2">
+                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1 rounded border text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Previous</button>
+                <span className="text-gray-500">Page {page + 1} of {Math.ceil(total / PAGE_SIZE) || 1}</span>
+                <button disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)} className="px-3 py-1 rounded border text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next</button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -146,7 +158,7 @@ export default function ExecutionHistoryPage() {
   const waitingSince = selected?.output?._pausedAt
     ? Math.floor((Date.now() - selected.output._pausedAt) / 1000) + 's'
     : null;
-  const total = selected ? dur(selected.started_at, selected.completed_at, pausedTotal) : null;
+  const execDuration = selected ? dur(selected.started_at, selected.completed_at, pausedTotal) : null;
   const isDebug = selected?.input?._debug;
 
   return (
@@ -160,7 +172,7 @@ export default function ExecutionHistoryPage() {
               {isDebug && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium flex items-center gap-1"><Bug className="w-3 h-3" /> Debug</span>}
               {selected && <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>}
             </div>
-            {selected && <p className="text-sm text-gray-500 mt-1">{fmtTime(selected.created_at)}{total && <span className="ml-2 text-gray-400">· run: {total}</span>}{pausedTotal > 0 && <span className="ml-2 text-amber-500">· paused: {(pausedTotal / 1000).toFixed(0)}s</span>}{selected.status === 'awaiting_approval' && waitingSince && <span className="ml-2 text-amber-500">· waiting: {waitingSince}</span>}</p>}
+            {selected && <p className="text-sm text-gray-500 mt-1">{fmtTime(selected.created_at)}{execDuration && <span className="ml-2 text-gray-400">· run: {execDuration}</span>}{pausedTotal > 0 && <span className="ml-2 text-amber-500">· paused: {(pausedTotal / 1000).toFixed(0)}s</span>}{selected.status === 'awaiting_approval' && waitingSince && <span className="ml-2 text-amber-500">· waiting: {waitingSince}</span>}</p>}
           </div>
           {flowId && <Link href={`/flows/${flowId}/edit`} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Open Editor</Link>}
         </div>

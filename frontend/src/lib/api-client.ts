@@ -60,7 +60,10 @@ export async function* streamSSE(url: string, body: unknown, signal?: AbortSigna
 
 export const api = {
   flows: {
-    list: () => request<any[]>('/flows'),
+    list: (params?: { limit?: number; offset?: number }) => {
+      const qs = params ? `?${new URLSearchParams({ limit: String(params.limit || 20), offset: String(params.offset || 0) })}` : '';
+      return request<{ data: any[]; total: number }>(`/flows${qs}`);
+    },
     get: (id: string) => request<any>(`/flows/${id}`),
     create: (data: { name: string; description?: string }) =>
       request<any>('/flows', { method: 'POST', body: JSON.stringify(data) }),

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions, userAssignments } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -10,9 +10,14 @@ const router = Router();
 // GET /api/flows — list all flows, ordered by updatedAt desc
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
-    const result = await db.select().from(flows).orderBy(desc(flows.updated_at));
-    res.json(result);
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const [result, countResult] = await Promise.all([
+      db.select().from(flows).orderBy(desc(flows.updated_at)).limit(limit).offset(offset),
+      db.select({ count: sql<number>`count(*)` }).from(flows),
+    ]);
+    res.json({ data: result, total: Number(countResult[0].count), limit, offset });
   }),
 );
 
