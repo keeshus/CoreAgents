@@ -265,6 +265,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     if (deleteNodeCallbackRef) {
       deleteNodeCallbackRef.current = deleteNode;
     }
+    if (typeof window !== 'undefined') {
+      (window as any).__deleteFlowNode = deleteNode;
+    }
   }, [deleteNode, deleteNodeCallbackRef]);
 
   const onConnect: OnConnect = useCallback(

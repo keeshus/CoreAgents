@@ -2,6 +2,8 @@ import type { AssistantTool } from '../AssistantContext';
 
 const API = process.env.NEXT_PUBLIC_API_URL || '/api';
 
+const norm = (s: string) => s.replace(/\u001b\[\d*m/g, '').trim();
+
 // ── Helper: authenticated API call ─────────────────────────────────────────────
 
 async function apiFetch(path: string, options?: RequestInit): Promise<string> {
@@ -48,32 +50,6 @@ const replaceCode: AssistantTool = {
       return 'Code updated in the editor.';
     }
     return 'No code editor found. Open a Code Node configuration panel first.';
-  },
-};
-
-// ── Navigation tool ───────────────────────────────────────────────────────────
-
-const navigateTo: AssistantTool = {
-  name: 'navigate_to',
-  description: 'Navigate to a page or a specific flow editor in the app',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      page: { type: 'string', enum: ['flows', 'approvals', 'settings', 'settings/endpoints', 'settings/mcp-servers', 'settings/knowledge', 'settings/users', 'profile'] },
-      flowId: { type: 'string', description: 'Flow ID to navigate directly into its editor (e.g. "f30fa521-...")' },
-    },
-    required: [],
-  },
-  async execute({ page, flowId }) {
-    if (flowId) {
-      if (typeof window !== 'undefined') window.location.href = `/flows/${flowId}/edit`;
-      return `Navigated to flow editor for ${flowId}`;
-    }
-    if (page) {
-      if (typeof window !== 'undefined') window.location.href = `/${page}`;
-      return `Navigated to /${page}`;
-    }
-    return 'Please provide a page or flowId to navigate to.';
   },
 };
 
@@ -130,7 +106,7 @@ const getNodeConfig: AssistantTool = {
     modal.querySelectorAll('input, textarea, select').forEach((el: any) => {
       const name = getFieldLabel(el) || el.placeholder || el.name || 'unknown';
       if (el.type === 'checkbox') fields[name] = el.checked ? 'true' : 'false';
-      else fields[name] = el.value || '';
+      else fields[name] = norm(el.value || '');
     });
 
     // Also read the button list for HITL nodes
@@ -167,12 +143,25 @@ const updateNodeField: AssistantTool = {
       const cb = field as HTMLInputElement;
       const checked = value === 'true' || value === '1';
       if (cb.checked !== checked) {
-        cb.click(); // React handles checkbox changes via click
+        cb.click();
       }
       return `Set checkbox "${label}" to ${checked}.`;
     }
 
-    reactSetValue(field as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value);
+    if (field.tagName === 'SELECT') {
+      const sel = field as HTMLSelectElement;
+      const cleanValue = norm(value);
+      const matchingOption = Array.from(sel.options).find(o => norm(o.value) === cleanValue);
+      if (!matchingOption) {
+        const available = Array.from(sel.options).map(o => norm(o.value) || '(empty)').filter(Boolean).join(', ');
+        return `Value "${value}" is not a valid option for "${label}". Available options: ${available}`;
+      }
+      sel.value = matchingOption.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return `Set select "${label}" to "${matchingOption.value}".`;
+    }
+
+    reactSetValue(field as HTMLInputElement | HTMLTextAreaElement, value);
     return `Updated "${label}".`;
   },
 };
@@ -183,29 +172,6 @@ const getAvailableNodes: AssistantTool = {
   inputSchema: { type: 'object', properties: {} },
   async execute() {
     return 'Available node types: trigger (starts a flow), llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval), stop (terminates), output (returns result), parallel (concurrent branches). Click a node type button in the catalog panel on the left to add it.';
-  },
-};
-
-// ── Flow listing tool ────────────────────────────────────────────────────────
-
-const findFlow: AssistantTool = {
-  name: 'find_flow',
-  description: 'Search for a flow by name or list all flows. Returns flow IDs and names that can be used with navigate_to.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: { type: 'string', description: 'Flow name to search for (partial match). Leave empty to list all flows.' },
-    },
-  },
-  async execute({ name }) {
-    const data = await apiFetch('/flows');
-    const flows = JSON.parse(data);
-    if (!Array.isArray(flows)) return 'No flows found.';
-    const matching = name
-      ? flows.filter((f: any) => f.name?.toLowerCase().includes((name as string).toLowerCase()))
-      : flows;
-    if (matching.length === 0) return `No flow found matching "${name}".`;
-    return matching.slice(0, 10).map((f: any) => `- ${f.name} (id: ${f.id})`).join('\n');
   },
 };
 
@@ -296,6 +262,50 @@ const addNode: AssistantTool = {
     required: ['type'],
   },
   async execute() { return 'Not available — open a flow in the editor first'; },
+};
+
+const deleteNode: AssistantTool = {
+  name: 'delete_node',
+  description: 'Delete a node from the flow canvas by its label.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      label: { type: 'string', description: 'The label or type of the node to delete (e.g. "stop", "llm-agent", "trigger")' },
+    },
+    required: ['label'],
+  },
+  async execute({ label }) {
+    const nodes = document.querySelectorAll('.react-flow__node');
+    if (nodes.length === 0) return 'No nodes found on the canvas. Open a flow in the editor first.';
+    for (const node of nodes) {
+      if (node.textContent?.toLowerCase().includes((label as string).toLowerCase())) {
+        const deleteFn = (window as any).__deleteFlowNode;
+        if (!deleteFn) return 'Delete function not available. Make sure FlowEditor is loaded.';
+        const nodeId = node.getAttribute('data-id');
+        if (!nodeId) return 'Could not find node ID for the selected node.';
+        deleteFn(nodeId);
+        return `Deleted node matching "${label}".`;
+      }
+    }
+    return `No node found matching "${label}". Available nodes: ${[...nodes].map(n => n.textContent?.trim()).join(', ')}`;
+  },
+};
+
+const closeNodeConfig: AssistantTool = {
+  name: 'close_node_config',
+  description: 'Close the currently open node configuration panel.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() {
+    // Try clicking the close/X button in the modal
+    const closeBtn = document.querySelector('.fixed.inset-0.z-50 button[aria-label="Close"], .fixed.inset-0.z-50 svg.lucide-x, .fixed.inset-0.z-50 .lucide-x')?.closest('button');
+    if (closeBtn) {
+      (closeBtn as HTMLElement).click();
+      return 'Closed the node config panel.';
+    }
+    // Fallback: try Escape key
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return 'Sent Escape key to close the node config panel.';
+  },
 };
 
 // ── LLM Endpoints CRUD ───────────────────────────────────────────────────────
@@ -399,12 +409,12 @@ const listEmbeddingProviders: AssistantTool = {
 
 const createEmbeddingProvider: AssistantTool = {
   name: 'create_embedding_provider',
-  description: 'Add a new embedding provider. Requires name, providerType (anthropic/openai/litellm), apiKey.',
+  description: 'Add a new embedding provider. Requires name, providerType (openai/litellm), apiKey. Note: the worker always uses the OpenAI SDK, so litellm only works when configured as an OpenAI-compatible proxy. Anthropic is not supported for embeddings.',
   inputSchema: {
     type: 'object',
     properties: {
       name: { type: 'string' },
-      providerType: { type: 'string', enum: ['anthropic', 'openai', 'litellm'] },
+      providerType: { type: 'string', enum: ['openai', 'litellm'] },
       apiKey: { type: 'string' },
       model: { type: 'string', description: 'Model name (default: text-embedding-ada-002)' },
     },
@@ -580,8 +590,7 @@ const getExecutionDetails: AssistantTool = {
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
-  'navigation': [navigateTo, findFlow],
-  'flow-editor': [openNode, getFlowJson, updateFlow, addNode, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
+  'flow-editor': [openNode, getFlowJson, updateFlow, addNode, deleteNode, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],

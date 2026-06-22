@@ -30,8 +30,8 @@ export function AssistantPanel() {
   }, [open]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [open, messages, streamingContent]);
 
   if (!open) return null;
 
