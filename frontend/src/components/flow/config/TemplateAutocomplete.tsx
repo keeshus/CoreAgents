@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { getUpstreamNodeIds, getNodeFields } from './InputPreview';
 import { validateTemplates } from '@/lib/validateTemplates';
 
+const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
+
 interface TemplateAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
@@ -46,11 +48,12 @@ export function TemplateAutocomplete({
     for (const upId of upstreamIds) {
       const upNode = nodes.find((n: any) => n.id === upId);
       if (!upNode) continue;
-      const label = upNode.data?.label || upNode.data?.type || upId;
+      const rawLabel = upNode.data?.label || upNode.data?.type || upId;
+      const label = slugify(rawLabel);
       const fields = getNodeFields(upNode);
-      result.push({ path: `input.${label}`, label: `${label} (all)` });
+      result.push({ path: `input.${label}`, label: `${rawLabel} (all)` });
       for (const f of fields) {
-        result.push({ path: `input.${label}.${f.name}`, label: `${label}.${f.name} : ${f.type}` });
+        result.push({ path: `input.${label}.${f.name}`, label: `${rawLabel}.${f.name} : ${f.type}` });
       }
     }
     setAllSuggestions(result);
@@ -64,7 +67,7 @@ export function TemplateAutocomplete({
     for (const upId of upstreamIds) {
       const upNode = nodes.find((n: any) => n.id === upId);
       if (!upNode) continue;
-      names.add(upNode.data?.label || upNode.data?.type || upId);
+      names.add(slugify(upNode.data?.label || upNode.data?.type || upId));
     }
     return Array.from(names);
   }, [nodeId, nodes, edges]);

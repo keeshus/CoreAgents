@@ -10,6 +10,8 @@ import type {
 import { topologicalSort } from './dag.js';
 import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
 
+const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
+
 export class HitlPauseError extends Error {
   public nodeId: string;
   public savedOutputs: Record<string, unknown>;
@@ -92,7 +94,7 @@ export class FlowExecutor {
           beforeHitl = false;
         } else if (replayOutputs[node.id] !== undefined) {
           nodeOutputs.set(node.id, replayOutputs[node.id]);
-          const labelKey = (node.data.label || node.id).replace(/\s+/g, '_').replace(/\./g, '_');
+          const labelKey = slugify(node.data.label || node.id);
           nodeOutputs.set(labelKey, replayOutputs[node.id]);
           continue; // skip already-completed nodes
         }
@@ -118,7 +120,7 @@ export class FlowExecutor {
           if (byId !== undefined) return byId;
           const srcNode = flow.nodes.find(n => n.id === e.source);
           if (srcNode) {
-            const labelKey = (srcNode.data?.label || srcNode.id).replace(/\s+/g, '_');
+            const labelKey = slugify(srcNode.data?.label || srcNode.id);
             return nodeOutputs.get(labelKey);
           }
           return undefined;
@@ -238,7 +240,7 @@ export class FlowExecutor {
           nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
         }
         const output = await this.executeNode(node, nodeInput, context, onEvent);
-        const outputKey = (node.data.label || node.id).replace(/[\s.]+/g, '_');
+        const outputKey = slugify(node.data.label || node.id);
         nodeOutputs.set(outputKey, output);
         nodeOutputs.set(node.id, output); // Also store under node ID for edge routing
 

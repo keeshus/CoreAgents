@@ -2,6 +2,8 @@
  * Validates {{input.path.to.field}} template variables against accumulated upstream data.
  */
 
+const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
+
 export interface TemplateError {
   match: string;       // The full {{...}} match
   path: string;        // The path inside (e.g. "input.Summarizer.content")
@@ -76,7 +78,10 @@ export function buildAvailablePaths(
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const label of upstreamLabels) {
-    const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
+    const upNode = nodes.find(n => {
+      const raw = n.data?.label || n.data?.type || n.id;
+      return raw === label || slugify(raw) === label;
+    });
     if (!upNode) continue;
     const type = upNode.data?.type as string;
     const fields = NODE_OUTPUT_SHAPES[type] || [];
@@ -149,7 +154,10 @@ export function validateTemplates(
       }
 
       // Check field exists (only if the node type has known fields)
-      const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
+      const upNode = nodes.find(n => {
+        const raw = n.data?.label || n.data?.type || n.id;
+        return raw === label || slugify(raw) === label;
+      });
       if (upNode) {
         const type = upNode.data?.type as string;
         const knownFields = NODE_OUTPUT_SHAPES[type] || [];
