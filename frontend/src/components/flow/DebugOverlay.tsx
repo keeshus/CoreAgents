@@ -20,6 +20,7 @@ interface StepEvent {
 interface StepInfo {
   nodeId: string;
   nodeType: string;
+  nodeLabel?: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   input: any;
   output: any;
@@ -121,6 +122,7 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
             setSteps(prev => [...prev, {
               nodeId,
               nodeType: d.nodeType || '',
+              nodeLabel: d.nodeLabel || '',
               status: 'running',
               input: d.input,
               output: null,
@@ -324,7 +326,7 @@ export function DebugOverlay({ flowId, onClose }: DebugOverlayProps) {
                 const isLLM = step.nodeType === 'llm-agent';
                 const hasSystemPrompt = step.input?.systemPrompt;
                 const hasTokens = step.tokens.length > 0;
-                const stepLabel = NODE_LABELS[step.nodeType] || step.nodeType;
+                const stepLabel = step.nodeLabel || step.input?._nodeLabel || NODE_LABELS[step.nodeType] || step.nodeType;
 
                 return (
                   <div key={step.nodeId + i} className="bg-white rounded-lg border overflow-hidden">

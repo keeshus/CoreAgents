@@ -181,7 +181,7 @@ export default function ExecutionHistoryPage() {
               const sc = statusConfig[step.status] || statusConfig.pending;
               const SIcon = sc.icon;
               const sd = dur(step.started_at, step.completed_at);
-              const label = NODE_LABELS[step.node_type] || step.node_type;
+              const label = step.node_label || step.input?._nodeLabel || NODE_LABELS[step.node_type] || step.node_type;
               const open = expanded[step.id] || false;
               const has = step.input || step.output || step.error;
               const isLLM = step.node_type === 'llm-agent';

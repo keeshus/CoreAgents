@@ -194,6 +194,7 @@ router.post(
               execution_id: exec.id,
               node_id: resolvedNodeId,
               node_type: resolvedNodeType,
+              node_label: data.nodeLabel as string | null,
               status: 'running',
               input: data.input as any,
               started_at: new Date(),

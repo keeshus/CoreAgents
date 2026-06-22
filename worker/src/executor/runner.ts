@@ -48,7 +48,7 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
         try {
           if (event.type === 'step.started') {
             await database.insert(executionStepsTable).values({
-              execution_id: executionId, node_id: nid, node_type: ntype,
+              execution_id: executionId, node_id: nid, node_type: ntype, node_label: d.nodeLabel as string | null,
               status: 'running', input: d.input as any, started_at: new Date(),
             });
           } else if (event.type === 'step.completed') {
