@@ -42,7 +42,7 @@ export type EventCallback = (nodeId: string, event: SSEEvent) => void | Promise<
 
 // Database lookups the executor needs at runtime
 export interface ExecutionContext {
-  getEndpoint: (endpointId: string) => Promise<ResolvedEndpoint | null>;
+  getEndpoint?: (endpointId: string) => Promise<ResolvedEndpoint | null>;
   getMCPServer?: (serverId: string) => Promise<any>;
   getEmbeddingProvider?: (providerId: string) => Promise<{ providerType: string; apiKey: string; baseUrl: string | null; model: string } | null>;
   getVectorStore?: (storeId: string) => Promise<{ name: string; url: string; apiKey: string | null } | null>;
@@ -139,7 +139,7 @@ export class FlowExecutor {
           // doesn't match the button at the sourceHandle index, filter this edge.
           if (!e.condition?.label && e.sourceHandle) {
             const sourceNode = flow.nodes.find(n => n.id === e.source);
-            if (sourceNode?.data?.type === 'hitl') {
+            if (sourceNode && (sourceNode.data as any)?.type === 'hitl') {
               const buttons: Array<{ value: string }> = (sourceNode.data as any).config?.buttons || [];
               const handleIndex = parseInt((e.sourceHandle as string).replace('output-', ''), 10);
               const buttonValue = buttons[handleIndex]?.value;
@@ -223,7 +223,7 @@ export class FlowExecutor {
       try {
         // For HITL replay: separate what was displayed vs what gets forwarded
         let nodeInput = filteredInput;
-        if (node.data.type === 'hitl' && replayFrom && node.id === replayFrom) {
+        if ((node.data as any).type === 'hitl' && replayFrom && node.id === replayFrom) {
           const cfg = (node.data as any)?.config || {};
           const displayFields: string[] = cfg.displayFields || [];
           const forwardFields: string[] = cfg.forwardFields || [];
@@ -330,8 +330,9 @@ export class FlowExecutor {
     onEvent: EventCallback,
   ): Promise<unknown> {
     const nodeData = node.data as NodeData;
+    const nodeType = (nodeData as any).type as string;
 
-    switch (nodeData.type) {
+    switch (nodeType) {
       case 'trigger': {
         return input;
       }
@@ -342,6 +343,9 @@ export class FlowExecutor {
           throw new Error('LLM Agent: no endpoint configured');
         }
 
+        if (!context.getEndpoint) {
+          throw new Error('LLM Agent: execution context missing getEndpoint');
+        }
         const endpoint = await context.getEndpoint(config.endpointId);
         if (!endpoint) {
           throw new Error(`LLM Agent: endpoint ${config.endpointId} not found`);

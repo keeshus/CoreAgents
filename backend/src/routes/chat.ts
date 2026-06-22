@@ -148,7 +148,7 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
     },
     flowNodes: flow.nodes as any[],
     flowEdges: flow.edges as any[],
-    searchSimilar: async (collectionName, queryEmbedding, topK, minScore) => {
+    searchSimilar: async (collectionName: string, queryEmbedding: number[], topK: number, minScore: number) => {
       const store = getStore('qdrant') || getStore('pgvector');
       if (!store) return [];
       return store.search(collectionName, queryEmbedding, topK, minScore);

@@ -102,10 +102,10 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<LL
   const response = await client.chat.completions.create(createParams);
   const msg = response.choices[0]?.message;
 
-  const toolCalls = msg?.tool_calls?.map(tc => ({
+  const toolCalls = msg?.tool_calls?.filter(tc => tc.type === 'function').map(tc => ({
     id: tc.id,
-    name: tc.function.name,
-    input: (() => { try { return JSON.parse(tc.function.arguments); } catch { return {}; } })(),
+    name: (tc as any).function?.name || '',
+    input: (() => { try { return JSON.parse((tc as any).function?.arguments); } catch { return {}; } })(),
   }));
 
   return {

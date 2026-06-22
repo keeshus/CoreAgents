@@ -2,8 +2,8 @@
   "extends": "../shared/tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": ".."
   },
-  "include": ["src"],
+  "include": ["src", "../backend/src/db"],
   "references": [{ "path": "../shared" }]
 }

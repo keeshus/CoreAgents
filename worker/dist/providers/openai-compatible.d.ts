@@ -1,3 +1,4 @@
+import type { ToolDefinition, LLMResponse } from './anthropic.js';
 export interface OpenAICallParams {
     apiKey: string;
     baseUrl?: string;
@@ -10,6 +11,11 @@ export interface OpenAICallParams {
     temperature: number;
     maxTokens: number;
     onToken?: (token: string) => void;
+    responseFormat?: 'text' | 'json_object';
+    outputSchema?: string;
+    tools?: ToolDefinition[];
+    signal?: AbortSignal;
 }
-export declare function callOpenAICompatible(params: OpenAICallParams): Promise<string>;
+export { type ToolDefinition, type LLMResponse };
+export declare function callOpenAICompatible(params: OpenAICallParams): Promise<LLMResponse>;
 //# sourceMappingURL=openai-compatible.d.ts.map

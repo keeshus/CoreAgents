@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FlowExecutor, HitlPauseError } from '../executor/engine.js';
-import type { FlowDefinition, FlowNode, FlowEdge, ExecutionContext } from 'core-agents-shared';
+import type { FlowDefinition, FlowNode, FlowEdge } from 'core-agents-shared';
+import type { ExecutionContext } from '../executor/engine.js';
 
 // Mock callLLM to avoid real API calls in LLM agent node tests
 vi.mock('../providers/index.js', () => ({
@@ -47,7 +48,7 @@ function makeFlow(nodes: FlowNode[], edges: FlowEdge[]): FlowDefinition {
 
 describe('FlowExecutor', () => {
   let executor: FlowExecutor;
-  let onEvent: ReturnType<typeof vi.fn>;
+  let onEvent: any;
   let context: ExecutionContext;
 
   beforeEach(() => {
@@ -202,13 +203,14 @@ describe('FlowExecutor', () => {
     );
 
     const result = await executor.execute(flow, { start: true }, onEvent, context);
+    const parallelOutput = (result.output as any).parallel as Record<string, any>;
 
     // The parallel node has its own output
-    expect(result.output.parallel).toBeDefined();
-    expect(Object.keys(result.output.parallel)).toContain('sub-a');
-    expect(result.output.parallel['sub-a']).toEqual({ value: 1 });
-    expect(result.output.parallel['sub-b']).toEqual({ value: 2 });
-    expect(result.output.parallel['sub-c']).toEqual({ value: 3 });
+    expect(parallelOutput).toBeDefined();
+    expect(Object.keys(parallelOutput)).toContain('sub-a');
+    expect(parallelOutput['sub-a']).toEqual({ value: 1 });
+    expect(parallelOutput['sub-b']).toEqual({ value: 2 });
+    expect(parallelOutput['sub-c']).toEqual({ value: 3 });
   });
 
   it('stops execution when abort is called', async () => {

@@ -11,19 +11,13 @@ export async function callLLM(params, endpoint) {
                 temperature: params.temperature,
                 maxTokens: params.maxTokens,
                 onToken: params.onToken,
+                responseFormat: params.responseFormat,
+                outputSchema: params.outputSchema,
+                tools: params.tools,
+                signal: params.signal,
             });
         case 'openai':
-            return callOpenAICompatible({
-                apiKey: endpoint.apiKey,
-                model: params.model,
-                systemPrompt: params.systemPrompt,
-                messages: params.messages,
-                temperature: params.temperature,
-                maxTokens: params.maxTokens,
-                onToken: params.onToken,
-            });
         case 'litellm':
-            // LiteLLM uses OpenAI-compatible API at a custom base URL
             return callOpenAICompatible({
                 apiKey: endpoint.apiKey,
                 baseUrl: endpoint.baseUrl || undefined,
@@ -33,6 +27,10 @@ export async function callLLM(params, endpoint) {
                 temperature: params.temperature,
                 maxTokens: params.maxTokens,
                 onToken: params.onToken,
+                responseFormat: params.responseFormat,
+                outputSchema: params.outputSchema,
+                tools: params.tools,
+                signal: params.signal,
             });
         default:
             throw new Error(`Unknown provider type: ${endpoint.providerType}`);

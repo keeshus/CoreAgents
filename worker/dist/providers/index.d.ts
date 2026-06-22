@@ -1,3 +1,4 @@
+import { type LLMResponse, type ToolDefinition } from './anthropic.js';
 export interface LLMCallParams {
     endpointId: string;
     model: string;
@@ -9,11 +10,16 @@ export interface LLMCallParams {
     temperature: number;
     maxTokens: number;
     onToken?: (token: string) => void;
+    responseFormat?: 'text' | 'json_object';
+    outputSchema?: string;
+    tools?: ToolDefinition[];
+    signal?: AbortSignal;
 }
 export interface ResolvedEndpoint {
     providerType: 'anthropic' | 'openai' | 'litellm';
     apiKey: string;
     baseUrl: string | null;
 }
-export declare function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint): Promise<string>;
+export type { LLMResponse, ToolDefinition };
+export declare function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint): Promise<LLMResponse>;
 //# sourceMappingURL=index.d.ts.map

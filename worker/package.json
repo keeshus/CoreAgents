@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/run.js",
+"build": "tsc",
+"start": "node dist/worker/src/run.js",
     "dev": "tsx watch --env-file=../.env src/index.ts",
     "dev:worker": "tsx --env-file=../.env src/run.ts",
     "dev:scheduler": "tsx --env-file=../.env src/scheduler-run.ts",
