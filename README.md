@@ -22,7 +22,7 @@
 ## ✨ Features
 
 | | |
-|---|---|
+|---|---|---|
 | 🎨 **Visual Flow Editor** | Drag-and-drop canvas with React Flow v12. Connect triggers, LLM agents, tools, conditions, and outputs. |
 | 🤖 **Multi-Provider LLM** | Anthropic, OpenAI, and LiteLLM. Select models per node. JSON output mode for structured data. |
 | 🔀 **Agent Routing** | Branch nodes route execution based on conditions. LLM classifiers determine the path automatically. |
@@ -30,38 +30,57 @@
 | 📚 **RAG Pipeline** | Qdrant vector search with configurable embedding providers. Retriever nodes inject context into prompts. |
 | ⚡ **Parallel Execution** | Run sub-nodes concurrently inside Parallel containers. Results merged by label. |
 | 👤 **Human-in-the-Loop** | Flow pauses for approval with custom buttons, feedback, and role/user assignments. |
-| 🧩 **Template Variables** | `{{input.Trigger.message}}`, `{{input.Summarizer.transactions[0].amount}}`. Autocomplete with suggestions. |
+| 🧩 **Template Variables** | `{{input.Trigger.message}}`, `{{input.Summarizer.transactions[0]}}`. Autocomplete with suggestions. |
 | 💬 **Chat Interface** | User-facing chat with SSE streaming, conversation history, and agent routing. |
 | ⏰ **Scheduling** | Cron-based triggers via BullMQ queue. Scalable worker pool for background execution. |
-| 🛡️ **Role-Based Access** | Admin, editor, and viewer roles with granular permissions. SSO/OIDC support. |
+| 🛡️ **Role-Based Access** | Admin, editor, and approver roles with granular domain permissions. SSO/OIDC support. |
 | 🔍 **Execution History** | Step-by-step trace with inputs, outputs, tool calls, and timing breakdown. |
+| 🤖 **Co-Pilot AI Assistant** | Page-aware AI assistant with SSE streaming, 30+ tools, tool call loop, and per-page conversation memory. |
+| 🧠 **Smart Tool System** | 30+ tools across 9 groups — navigation, flow editor, endpoints, MCP servers, embeddings, vector stores, users, approvals, and executions. Tools auto-filtered by user permissions. |
 
 ## 🏗️ Architecture
 
 ```
-┌──────────────┐     HTTP / SSE     ┌──────────────────────┐
-│   Frontend    │◄──────────────────►│  Backend (Express 5) │
-│  Next.js 16   │                    │  Flow CRUD, Chat     │
-│  React Flow   │                    │  Auth, SSE Streaming  │
-│  Tailwind v4  │                    │  Drizzle ORM (PG)    │
-└──────────────┘                    └──────┬───────────────┘
-                                          │
-                              ┌───────────▼───────────┐
-                              │   Worker (Node.js)     │
-                              │  FlowExecutor (DAG)    │
-                              │  LLM Providers         │
-                              │  Direct Tool Execution  │
-                              │  Scheduler / Queue     │
-                              └───────────┬───────────┘
-                                          │
-                    ┌─────────────────────┼─────────────────────┐
-                    │                     │                     │
-              ┌─────▼─────┐        ┌──────▼──────┐       ┌────▼────┐
-              │ PostgreSQL │        │   Qdrant    │       │  Valkey  │
-              │ (flows,    │        │ (vector     │       │ (queue)  │
-              │  execs,    │        │  search)    │       │          │
-              │  store)    │        │             │       │          │
-              └───────────┘        └─────────────┘       └─────────┘
+┌──────────────────────────────┐
+│        Frontend              │
+│  ┌──────────────────────┐    │
+│  │  Co-Pilot AI         │    │
+│  │  (Page-aware tools,  │    │
+│  │  30+ tools, SSE      │    │
+│  │  chat, tool loop)    │    │
+│  └──────────┬───────────┘    │
+│  Next.js 16 · React Flow     │
+│  Tailwind v4                  │
+└──────┬───────────────────────┘
+       │ HTTP / SSE
+       ▼
+┌──────────────────────────────┐
+│  Backend (Express 5)         │
+│  Flow CRUD · Chat · Auth     │
+│  Co-Pilot LLM Proxy (SSE)    │
+│  Drizzle ORM (PostgreSQL)    │
+│  Domain RBAC · SSO/OIDC      │
+└──────┬───────────────────────┘
+       │
+       ▼
+┌──────────────────────────────┐
+│  Worker (Node.js)            │
+│  FlowExecutor (DAG)          │
+│  LLM Providers (Anthropic,   │
+│    OpenAI, LiteLLM)          │
+│  MCP Tool Executor           │
+│  RAG Pipeline (Qdrant)       │
+│  Scheduler / BullMQ Queue    │
+└──────┬───────────────────────┘
+       │
+       ├─────────────┬──────────┐
+       ▼             ▼          ▼
+┌──────────┐ ┌──────────┐ ┌────────┐
+│PostgreSQL│ │  Qdrant  │ │ Valkey │
+│(flows,   │ │(vector   │ │(queue) │
+│ execs,   │ │ search)  │ │        │
+│ store)   │ │          │ │        │
+└──────────┘ └──────────┘ └────────┘
 ```
 
 ## 🚀 Getting Started
@@ -153,6 +172,34 @@ Type **`{{`** for autocomplete with arrow-key navigation and mouse selection.
 
 Check the **Select Input Nodes** checkboxes to control which upstream data a node receives. Select entire labels or individual fields using dot-notation paths.
 
+### 🤖 Co-Pilot AI Assistant
+
+Co-Pilot is a page-aware AI assistant embedded in every screen. It understands the current page context and has access to 30+ tools across 9 groups, auto-filtered by your role permissions.
+
+**Tool Groups:**
+
+| Group | Tools | Page |
+|-------|-------|------|
+| **Navigation** | `navigate_to`, `find_flow` | All pages |
+| **Flow Editor** | `open_node`, `get_flow_json`, `update_flow`, `get_node_config`, `update_node_field`, `get_available_nodes`, `read_code`, `replace_code` | Flow editor |
+| **LLM Endpoints** | `list_endpoints`, `create_endpoint`, `delete_endpoint` | Settings → Endpoints |
+| **MCP Servers** | `list_mcp_servers`, `create_mcp_server`, `delete_mcp_server`, `refresh_mcp_tools` | Settings → MCP Servers |
+| **Embedding Providers** | `list_embedding_providers`, `create_embedding_provider`, `delete_embedding_provider` | Settings → Knowledge |
+| **Vector Stores** | `list_vector_stores`, `create_vector_store`, `delete_vector_store` | Settings → Knowledge |
+| **User Management** | `list_users`, `create_user`, `delete_user`, `update_user_role` | Settings → Users |
+| **Approvals** | `get_pending_approvals`, `approve_execution`, `reject_execution` | Approvals |
+| **Executions** | `list_executions`, `get_execution_details` | Execution history |
+
+**Features:**
+- **Tool Call Loop** — up to 5 rounds of tool execution per message, supporting chained operations (e.g., `find_flow` → `navigate_to` → `get_flow_json` → `update_flow`)
+- **Page-Aware Memory** — conversation history is saved per-page in localStorage, scoped by user ID. Switching pages preserves the conversation for when you return.
+- **Role-Based Tool Filtering** — tools are only exposed if your role has the required domain permission (admin, editor, or approver).
+- **SSE Streaming** — responses stream token-by-token via Server-Sent Events.
+- **Anti-Hallucination** — grounded system prompts with accurate page capability descriptions prevent feature fabrication.
+- **Node Configuration** — read and update any field in any open node config panel (text, textarea, select, checkbox, code, buttons).
+
+**Setup:** Set a default LLM endpoint in Settings → LLM Endpoints. Co-Pilot uses this endpoint for all requests.
+
 ## 🧪 Tests
 
 ```bash
@@ -165,8 +212,8 @@ npm test
 | **shared** | 24 | ✅ |
 | **worker** | 55 | ✅ |
 | **backend** | 45 | ✅ |
-| **frontend** | 9 | ✅ |
-| **Total** | **133** | ✅ |
+| **frontend** | 42 | ✅ |
+| **Total** | **166** | ✅ |
 
 ## 🗂️ Project Structure
 
@@ -174,11 +221,17 @@ npm test
 core-agents/
 ├── frontend/                 # Next.js 16 Pages Router
 │   ├── pages/                # Flow editor, chat, settings, executions
-│   └── src/components/       # Shared UI components
+│   ├── src/components/assistant/  # Co-Pilot AI assistant
+│   │   ├── AssistantContext.tsx   # SSE chat, tool loop, page context
+│   │   ├── AssistantPanel.tsx     # Chat panel UI
+│   │   ├── AssistantButton.tsx    # Floating toggle button
+│   │   ├── tools/registry.ts      # 30+ tools across 9 groups
+│   │   └── useConversationMemory.ts # Per-page localStorage memory
+│   └── src/__tests__/        # 22 assistant tool permission tests
 ├── backend/                  # Express 5 API server
 │   └── src/
-│       ├── routes/           # Flows, chat, webhook, auth, admin
-│       ├── middleware/        # JWT auth, permission checking
+│       ├── routes/           # Flows, chat, webhook, auth, admin, LLM proxy
+│       ├── middleware/        # JWT auth, domain RBAC
 │       └── db/               # Drizzle schema, migrations
 ├── worker/                   # Flow executor + BullMQ consumer
 │   └── src/
