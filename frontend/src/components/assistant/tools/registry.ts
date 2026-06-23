@@ -683,6 +683,21 @@ const listFlows: AssistantTool = {
   },
 };
 
+const searchFlows: AssistantTool = {
+  name: 'search_flows',
+  description: 'Search flows by name or description. Returns matching flows with IDs.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Search term to match against flow name or description' },
+    },
+    required: ['query'],
+  },
+  async execute({ query }) {
+    return apiFetch(`/flows?limit=100&search=${encodeURIComponent(query as string)}`);
+  },
+};
+
 // ── Profile ──────────────────────────────────────────────────────────────────
 
 const updateProfile: AssistantTool = {
@@ -723,14 +738,14 @@ const getExecutionDetails: AssistantTool = {
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
-  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows],
+  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
   'store-crud': [listVectorStores, createVectorStore, deleteVectorStore],
   'user-crud': [listUsers, createUser, deleteUser, updateUserRole],
   'profile-crud': [updateProfile],
-  'flows-list': [listFlows],
+  'flows-list': [listFlows, searchFlows],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails],
 };
