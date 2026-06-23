@@ -306,11 +306,14 @@ export class FlowExecutor {
                   }
 
                   const flowInput = nodeOutputs.get('__input__') as Record<string, unknown> || {};
+                  const prevFeedback = hitlOutput?.feedback || '';
                   delete flowInput._approved;
                   delete flowInput._decision;
                   delete flowInput._feedback;
 
                   flowInput._iterationCount = feedbackIterCount;
+                  flowInput._feedback = prevFeedback;
+                  nodeOutputs.set('_lastFeedback', prevFeedback);
 
                   i = targetIdx - 1;
                   break;
