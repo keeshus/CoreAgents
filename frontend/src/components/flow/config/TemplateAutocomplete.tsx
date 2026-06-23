@@ -75,8 +75,22 @@ export function TemplateAutocomplete({
   // Validate templates in the current value
   const validationErrors = useMemo(() => {
     if (!value.includes('{{')) return [];
-    return validateTemplates(value, upstreamLabels, nodes);
-  }, [value, upstreamLabels, nodes]);
+    const errors = validateTemplates(value, upstreamLabels, nodes);
+    // Also check if template vars reference fields that are filtered out by input selection
+    if (selectedFields && selectedFields.length > 0) {
+      const slugFields = selectedFields.map(f => slugify(f));
+      const regex = /\{\{input\.([^}]+)\}\}/g;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(value)) !== null) {
+        const path = m[1].trim();
+        const label = path.split('.')[0];
+        if (!slugFields.some(f => f === label || f.startsWith(label + '.'))) {
+          errors.push({ match: m[0], path: `input.${path}`, message: `Field "${path}" is not included in the selected input fields`, suggestions: [] });
+        }
+      }
+    }
+    return errors;
+  }, [value, upstreamLabels, nodes, selectedFields]);
 
   const getCursorPos = useCallback((textarea: HTMLTextAreaElement, text: string) => {
     const pos = textarea.selectionStart || 0;
