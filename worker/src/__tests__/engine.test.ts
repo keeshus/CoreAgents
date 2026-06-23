@@ -262,8 +262,8 @@ describe('FlowExecutor', () => {
       ],
     );
 
-    await expect(
-      executor.execute(flow, {}, onEvent, context),
-    ).rejects.toThrow(/cycle/i);
+    // Cycles are now allowed (feedback loops) — engine warns and processes them
+    const result = await executor.execute(flow, {}, onEvent, context);
+    expect(result.output).toBeDefined();
   });
 });

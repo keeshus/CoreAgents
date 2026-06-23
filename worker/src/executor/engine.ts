@@ -488,10 +488,30 @@ export class FlowExecutor {
         let finalContent = '';
 
         // Resolve {{input.path.to.field}} template variables in system prompt
-        const resolvedPrompt = resolveTemplate(config.systemPrompt || '', input);
+        let resolvedPrompt = resolveTemplate(config.systemPrompt || '', input);
+
+        // Inject structured output tool when JSON output is selected
+        const allTools = [...(toolDefs || [])];
+        let structuredOutputUsed = false;
+        if (config.responseFormat === 'json_object') {
+          const outputDesc = 'Call this tool to output structured data. Use it to respond — do not output text, only call this tool.';
+          if (config.outputSchema) {
+            try {
+              const schema = JSON.parse(config.outputSchema);
+              allTools.push({ name: 'structured_output', description: outputDesc, input_schema: schema });
+            } catch {}
+          } else {
+            allTools.push({ name: 'structured_output', description: outputDesc, input_schema: { type: 'object', properties: {}, additionalProperties: true } as any });
+          }
+        }
+        // Tell the LLM to use the structured_output tool when JSON output is selected
+        if (allTools.some(t => t.name === 'structured_output')) {
+          resolvedPrompt += (resolvedPrompt ? '\n\n' : '') + 'You must use the structured_output tool to respond — call it with your structured data. Do not output plain text.';
+        }
 
         // Track all tool calls for the execution log
         const executedTools: Array<{ name: string; input: any; result: string }> = [];
+        const result: Record<string, unknown> = { content: '' };
 
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           if (this.abortController.signal.aborted) break;
@@ -505,9 +525,7 @@ export class FlowExecutor {
               temperature: config.temperature ?? 0.7,
               maxTokens: config.maxTokens ?? 4096,
               onToken,
-              responseFormat: config.responseFormat || 'text',
-              outputSchema: config.outputSchema || undefined,
-              tools: toolDefs.length > 0 ? toolDefs : undefined,
+              tools: allTools.length > 0 ? allTools : undefined,
               signal: this.abortController.signal,
             },
             endpoint,
@@ -527,6 +545,17 @@ export class FlowExecutor {
 
           // Execute each tool call and add results
           for (const tc of response.toolCalls) {
+            // structured_output is a carrier for the output schema, not a real tool
+            if (tc.name === 'structured_output') {
+              structuredOutputUsed = true;
+              Object.assign(result, tc.input as Record<string, unknown>);
+              conversation.push({
+                role: 'user' as const,
+                content: `Structured output produced: ${JSON.stringify(tc.input)}`,
+              });
+              executedTools.push({ name: tc.name, input: tc.input, result: 'used as node output' });
+              continue;
+            }
             try {
               // Find the MCP config from the connected tool nodes
               const toolEdges = context.flowEdges?.filter(
@@ -586,9 +615,9 @@ export class FlowExecutor {
         }
 
         
-        const result: Record<string, unknown> = { content: finalContent };
+        result.content = finalContent;
         if (executedTools.length > 0) result.toolCalls = executedTools;
-        if (config?.responseFormat === 'json_object' && finalContent) {
+        if (!structuredOutputUsed && finalContent && config.responseFormat === 'json_object') {
           try {
             const parsed = JSON.parse(finalContent);
             if (typeof parsed === 'object' && parsed !== null) Object.assign(result, parsed);

@@ -10,8 +10,6 @@ export interface OpenAICallParams {
   temperature: number;
   maxTokens: number;
   onToken?: (token: string) => void;
-  responseFormat?: 'text' | 'json_object';
-  outputSchema?: string;
   tools?: ToolDefinition[];
   signal?: AbortSignal;
 }
@@ -24,9 +22,7 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<LL
     baseURL: params.baseUrl || undefined,
   });
 
-  const jsonSuffix = params.responseFormat === 'json_object' ? '\n\nYou must respond with valid JSON.' : '';
-  const systemContent = params.systemPrompt ? params.systemPrompt + jsonSuffix : (jsonSuffix || '');
-  const systemMessage = systemContent ? [{ role: 'system' as const, content: systemContent }] : [];
+  const systemMessage = params.systemPrompt ? [{ role: 'system' as const, content: params.systemPrompt }] : [];
 
   // Convert tools to OpenAI function format
   const openaiTools = params.tools?.map(t => ({
@@ -46,12 +42,6 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<LL
     tools: openaiTools,
     tool_choice: openaiTools?.length ? 'auto' : undefined,
   };
-
-  if (params.responseFormat === 'json_object') {
-    // Use json_object for broad compatibility (DeepSeek, LiteLLM, etc.)
-    // The schema is enforced via the system prompt — json_schema isn't universally supported
-    createParams.response_format = { type: 'json_object' };
-  }
 
   if (params.onToken) {
     const stream = await client.chat.completions.create({

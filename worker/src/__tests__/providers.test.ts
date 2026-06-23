@@ -21,7 +21,6 @@ const baseParams: LLMCallParams = {
   messages: [{ role: 'user', content: 'Hello!' }],
   temperature: 0.7,
   maxTokens: 1024,
-  responseFormat: 'text',
 };
 
 beforeEach(() => {
@@ -85,29 +84,6 @@ describe('callLLM', () => {
     // litellm uses the same openai-compatible path
     expect(callOpenAICompatible).toHaveBeenCalledTimes(1);
     expect(callAnthropic).not.toHaveBeenCalled();
-  });
-
-  it('passes through responseFormat properly', async () => {
-    const endpoint: ResolvedEndpoint = {
-      providerType: 'openai',
-      apiKey: 'sk-openai-xxx',
-      baseUrl: null,
-    };
-
-    const params: LLMCallParams = {
-      ...baseParams,
-      responseFormat: 'json_object',
-      outputSchema: '{"type":"object","properties":{"name":{"type":"string"}}}',
-    };
-
-    await callLLM(params, endpoint);
-
-    expect(callOpenAICompatible).toHaveBeenCalledWith(
-      expect.objectContaining({
-        responseFormat: 'json_object',
-        outputSchema: params.outputSchema,
-      }),
-    );
   });
 
   it('passes through tools properly', async () => {

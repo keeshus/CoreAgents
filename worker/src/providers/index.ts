@@ -9,8 +9,6 @@ export interface LLMCallParams {
   temperature: number;
   maxTokens: number;
   onToken?: (token: string) => void;
-  responseFormat?: 'text' | 'json_object';
-  outputSchema?: string;
   tools?: ToolDefinition[];
   signal?: AbortSignal;
 }
@@ -34,8 +32,6 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         temperature: params.temperature,
         maxTokens: params.maxTokens,
         onToken: params.onToken,
-        responseFormat: params.responseFormat,
-        outputSchema: params.outputSchema,
         tools: params.tools,
         signal: params.signal,
       });
@@ -50,8 +46,6 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
         temperature: params.temperature,
         maxTokens: params.maxTokens,
         onToken: params.onToken,
-        responseFormat: params.responseFormat,
-        outputSchema: params.outputSchema,
         tools: params.tools,
         signal: params.signal,
       });

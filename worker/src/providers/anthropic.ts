@@ -14,8 +14,6 @@ export interface AnthropicCallParams {
   temperature: number;
   maxTokens: number;
   onToken?: (token: string) => void;
-  responseFormat?: 'text' | 'json_object';
-  outputSchema?: string;
   tools?: ToolDefinition[];
   signal?: AbortSignal;
 }
@@ -28,16 +26,8 @@ export interface LLMResponse {
 export async function callAnthropic(params: AnthropicCallParams): Promise<LLMResponse> {
   const client = new Anthropic({ apiKey: params.apiKey });
 
-  let fullSystemPrompt = params.systemPrompt || '';
-  if (params.responseFormat === 'json_object') {
-    fullSystemPrompt += '\n\nYou MUST respond with valid JSON only. No other text.';
-    if (params.outputSchema) {
-      fullSystemPrompt += `\n\nUse this JSON schema:\n${params.outputSchema}`;
-    }
-  }
-
-  const systemMessages = fullSystemPrompt
-    ? [{ type: 'text' as const, text: fullSystemPrompt }]
+  const systemMessages = params.systemPrompt
+    ? [{ type: 'text' as const, text: params.systemPrompt }]
     : undefined;
 
   // Convert tools to Anthropic format
