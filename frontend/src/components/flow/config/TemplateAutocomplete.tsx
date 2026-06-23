@@ -23,7 +23,7 @@ interface Suggestion {
 }
 
 export function TemplateAutocomplete({
-  value,
+  value = '',
   onChange,
   placeholder,
   rows = 3,
