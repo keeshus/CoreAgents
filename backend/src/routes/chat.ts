@@ -193,9 +193,11 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
       const slugLabel = label.toLowerCase().replace(/[\s.]+/g, '_');
       outputNodeResult = (result.output as any)?.[outputDef.id] || (result.output as any)?.[slugLabel] || null;
     }
-    const assistantContent = outputNodeResult && typeof outputNodeResult === 'object'
-      ? JSON.stringify(outputNodeResult)
-      : String(outputNodeResult || result.output);
+    const assistantContent = typeof outputNodeResult === 'string'
+      ? outputNodeResult
+      : outputNodeResult && typeof outputNodeResult === 'object'
+        ? JSON.stringify(outputNodeResult)
+        : String(outputNodeResult || result.output);
 
     const [assistantMsg] = await db.insert(chatMessages).values({
       session_id: sessionId,

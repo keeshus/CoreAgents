@@ -401,17 +401,14 @@ export function NodeConfigModal({
 
           {node.data.type === 'output' && (
             <div className="space-y-3">
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700">Output Format</span>
-                <select
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-                  value={node.data.config.format || 'json'}
-                  onChange={(e) => onConfigChange({ format: e.target.value })}
-                >
-                  <option value="json">JSON</option>
-                  <option value="text">Text</option>
-                </select>
-              </label>
+              <div className="text-xs text-gray-500 bg-gray-50 rounded border p-2">
+                <p className="font-medium text-gray-700 mb-1">Output behavior</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>No fields selected → all accumulated data returned</li>
+                  <li>One field selected → just the field value returned</li>
+                  <li>Multiple fields selected → JSON object returned</li>
+                </ul>
+              </div>
             </div>
           )}
 
