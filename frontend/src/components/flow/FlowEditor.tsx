@@ -290,7 +290,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     (source: string, target: string, sourceHandle?: string) => {
       const sourceNode = nodes.find(n => n.id === source);
       const targetNode = nodes.find(n => n.id === target);
-      const isFeedback = sourceNode && targetNode && targetNode.position.x < sourceNode.position.x;
+      const isFeedback = sourceNode && targetNode && (sourceNode.data as any)?.type === 'hitl' && targetNode.position.x < sourceNode.position.x;
       setEdges((eds) => addEdge({
         source, target, sourceHandle,
         style: isFeedback ? { strokeDasharray: '5,5', stroke: '#f97316', strokeWidth: 2 } : undefined,
@@ -316,10 +316,9 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => {
-      // Detect feedback edges: target is positioned left of source (upstream)
       const sourceNode = nodes.find(n => n.id === connection.source);
       const targetNode = nodes.find(n => n.id === connection.target);
-      const isFeedback = sourceNode && targetNode && targetNode.position.x < sourceNode.position.x;
+      const isFeedback = sourceNode && targetNode && (sourceNode.data as any)?.type === 'hitl' && targetNode.position.x < sourceNode.position.x;
       setEdges((eds) => addEdge({
         ...connection,
         style: isFeedback ? { strokeDasharray: '5,5', stroke: '#f97316', strokeWidth: 2 } : undefined,
@@ -333,10 +332,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
     (connection: Connection) => {
       // Tool input handles can have multiple connections
       if (connection.targetHandle?.startsWith('tool-input')) return true;
-      // Feedback edges (backward connections): allow even if target already has input
+      // Feedback edges (backward connections from HITL): allow even if target already has input
       const sourceNode = nodes.find(n => n.id === connection.source);
       const targetNode = nodes.find(n => n.id === connection.target);
-      if (sourceNode && targetNode && targetNode.position.x < sourceNode.position.x) return true;
+      if (sourceNode && targetNode && (sourceNode.data as any)?.type === 'hitl' && targetNode.position.x < sourceNode.position.x) return true;
       // Check if target already has an incoming connection on this handle
       const existing = edges.find(
         e => e.target === connection.target && e.targetHandle === connection.targetHandle
