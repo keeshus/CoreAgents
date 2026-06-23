@@ -24,10 +24,9 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<LL
     baseURL: params.baseUrl || undefined,
   });
 
-  const systemContent = params.responseFormat === 'json_object'
-    ? (params.systemPrompt || '') + '\n\nYou must respond with valid JSON.'
-    : params.systemPrompt || 'You are a helpful assistant.';
-  const systemMessage = [{ role: 'system' as const, content: systemContent }];
+  const jsonSuffix = params.responseFormat === 'json_object' ? '\n\nYou must respond with valid JSON.' : '';
+  const systemContent = params.systemPrompt ? params.systemPrompt + jsonSuffix : (jsonSuffix || '');
+  const systemMessage = systemContent ? [{ role: 'system' as const, content: systemContent }] : [];
 
   // Convert tools to OpenAI function format
   const openaiTools = params.tools?.map(t => ({
