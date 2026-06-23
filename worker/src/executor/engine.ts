@@ -187,16 +187,18 @@ export class FlowExecutor {
             for (const path of inputFields) {
               const dot = path.indexOf('.');
               if (dot === -1) {
-                // Whole label: copy all data under this label
-                if (input[path] !== undefined) result[path] = input[path];
+                // Whole label: slugify to match stored output keys
+                const slugKey = slugify(path);
+                if (input[slugKey] !== undefined) result[slugKey] = input[slugKey];
               } else {
-                // Dot-path: extract specific field from within this label
-                const label = path.slice(0, dot);
+                // Dot-path: slugify the label part
+                const rawLabel = path.slice(0, dot);
                 const field = path.slice(dot + 1);
-                const labelData = input[label] as Record<string, unknown> | undefined;
+                const slugLabel = slugify(rawLabel);
+                const labelData = input[slugLabel] as Record<string, unknown> | undefined;
                 if (labelData && field in labelData) {
-                  if (!result[label]) result[label] = {};
-                  (result[label] as Record<string, unknown>)[field] = labelData[field];
+                  if (!result[slugLabel]) result[slugLabel] = {};
+                  (result[slugLabel] as Record<string, unknown>)[field] = labelData[field];
                 }
               }
             }
@@ -801,8 +803,14 @@ function resolveTemplate(template: string, data: unknown): string {
       } else if (current && typeof current === 'object' && part in (current as Record<string, unknown>)) {
         current = (current as Record<string, unknown>)[part];
       } else {
-        console.warn(`Template variable ${match} could not be resolved`);
-        return '';
+        // Try slugified version of the part (labels are stored under slugified keys)
+        const slugPart = slugify(part);
+        if (current && typeof current === 'object' && slugPart in (current as Record<string, unknown>)) {
+          current = (current as Record<string, unknown>)[slugPart];
+        } else {
+          console.warn(`Template variable ${match} could not be resolved`);
+          return '';
+        }
       }
     }
     if (typeof current === 'object') return JSON.stringify(current);

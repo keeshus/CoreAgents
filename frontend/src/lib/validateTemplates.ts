@@ -11,7 +11,7 @@ export interface TemplateError {
   suggestions: string[];  // Possible correct paths
 }
 
-/** Known node output field structures indexed by node type */
+/** Known node output field structures indexed by node type (fallback) */
 const NODE_OUTPUT_SHAPES: Record<string, string[]> = {
   trigger: ['message'],
   'llm-agent': ['content'],
@@ -23,6 +23,25 @@ const NODE_OUTPUT_SHAPES: Record<string, string[]> = {
   hitl: ['decision', 'feedback', 'reviewedContent'],
   code: [],
 };
+
+function getFieldsForNode(node: any): string[] {
+  // Try dynamic field lookup first (handles custom schemas)
+  const type = node?.data?.type;
+  const config = node?.data?.config || {};
+  if (type === 'trigger' && config?.triggerType === 'webhook' && config?.inputSchema) {
+    try {
+      const schema = typeof config.inputSchema === 'string' ? JSON.parse(config.inputSchema) : config.inputSchema;
+      if (typeof schema === 'object' && !Array.isArray(schema)) return Object.keys(schema);
+    } catch {}
+  }
+  if ((type === 'llm-agent' || type === 'code') && config?.outputSchema) {
+    try {
+      const schema = typeof config.outputSchema === 'string' ? JSON.parse(config.outputSchema) : config.outputSchema;
+      if (schema?.properties) return Object.keys(schema.properties).concat(NODE_OUTPUT_SHAPES[type] || []);
+    } catch {}
+  }
+  return NODE_OUTPUT_SHAPES[type] || [];
+}
 
 /** Extract path parts from a full path, supporting bracket indexing */
 function parsePath(path: string): string[] {
@@ -83,8 +102,7 @@ export function buildAvailablePaths(
       return raw === label || slugify(raw) === label;
     });
     if (!upNode) continue;
-    const type = upNode.data?.type as string;
-    const fields = NODE_OUTPUT_SHAPES[type] || [];
+    const fields = getFieldsForNode(upNode);
 
     map.set(`input.${label}`, 'label');
     for (const f of fields) {
@@ -153,14 +171,13 @@ export function validateTemplates(
         continue;
       }
 
-      // Check field exists (only if the node type has known fields)
+      // Check field exists
       const upNode = nodes.find(n => {
         const raw = n.data?.label || n.data?.type || n.id;
         return raw === label || slugify(raw) === label;
       });
       if (upNode) {
-        const type = upNode.data?.type as string;
-        const knownFields = NODE_OUTPUT_SHAPES[type] || [];
+        const knownFields = getFieldsForNode(upNode);
         if (knownFields.length > 0 && !knownFields.includes(field)) {
           const suggestions = closest(field, knownFields);
           errors.push({

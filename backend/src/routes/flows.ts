@@ -24,7 +24,8 @@ router.get(
     const dataPromise = (whereClause ? baseQuery.where(whereClause) : baseQuery).orderBy(orderDir(sortBy)).limit(limit).offset(offset);
     const countPromise = whereClause ? countQuery.where(whereClause) : countQuery;
     const [result, countResult] = await Promise.all([dataPromise, countPromise]);
-    res.json({ data: result, total: Number(countResult[0].count), limit, offset, search: search || undefined, sort: sortBy });
+    const sortParam = (req.query.sort as string) === 'created_at' ? 'created_at' : 'updated_at';
+    res.json({ data: result, total: Number(countResult[0].count), limit, offset, search: search || undefined, sort: sortParam });
   }),
 );
 
