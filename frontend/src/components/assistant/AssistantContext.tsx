@@ -90,13 +90,12 @@ function buildSystemPrompt(pageContext: PageContext | null, tools: AssistantTool
   const toolList = tools.map(t => `- ${t.name}: ${t.description}`).join('\n');
   const capabilities = pageContext?.pageKey ? getPageCapabilities(pageContext.pageKey) : '';
   let redirectNote = '';
-  try { redirectNote = sessionStorage.getItem('copilot:redirect') || ''; sessionStorage.removeItem('copilot:redirect'); } catch {}
+  try { redirectNote = sessionStorage.getItem('copilot:redirect') || ''; } catch {}
   return [
     'You are Co-Pilot, an AI assistant for Core Agents — a visual LLM agent builder.',
     '',
     `Current page: ${pageContext?.description || 'Unknown page'}`,
     ...(redirectNote ? ['', redirectNote, ''] : []),
-    '',
     'Available tools:',
     toolList || '  (none for this page)',
     '',
@@ -139,9 +138,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   // Generate welcome message for a page — keep it grounded, no feature lists
   const welcomeMessage = useCallback((description: string): Message => {
-    // Check if user was redirected here
     let redirectNote = '';
-    try { redirectNote = sessionStorage.getItem('copilot:redirect') || ''; sessionStorage.removeItem('copilot:redirect'); } catch {}
+    try { redirectNote = sessionStorage.getItem('copilot:redirect') || ''; } catch {}
     const greeting = redirectNote
       ? `👋 Welcome! You've just navigated to the **${description}** page.\n\n${redirectNote}\n\nHow can I help you here?`
       : `👋 Hi! I'm Co-Pilot, your AI assistant.\n\nYou're on the **${description}** page. I can answer questions and help you with tasks using the tools I have available.\n\nWhat would you like to do?`;
@@ -172,6 +170,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       // Show welcome message on first visit to this page
       setMessages([welcomeMessage(pageContext.description)]);
     }
+    // Clear redirect context to prevent stale context on future navigations
+    try { sessionStorage.removeItem('copilot:redirect'); } catch {}
   }, [pageContext?.pageKey]);
 
   // Permission check: tool → required permission map
