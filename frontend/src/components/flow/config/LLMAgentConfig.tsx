@@ -155,7 +155,13 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
             placeholder='{"type":"object","properties":{"summary":{"type":"string"},"sentiment":{"type":"string"}},"required":["summary","sentiment"]}'
             rows={3}
           />
-          <p className="mt-1 text-[10px] text-gray-400">JSON Schema for the LLM response. The next node will receive structured JSON it can rely on.</p>
+          <p className="mt-1 text-[10px] text-gray-400">Describes the expected JSON structure in the system prompt. Not all providers support strict schema enforcement.</p>
+          {config.outputSchema && selectedEndpoint?.provider_type === 'openai' && (
+            <p className="mt-1 text-[10px] text-amber-600">Note: OpenAI is the only provider that supports strict json_schema. Other providers will receive the schema as part of the prompt instead.</p>
+          )}
+          {config.outputSchema && selectedEndpoint?.provider_type !== 'openai' && selectedEndpoint && (
+            <p className="mt-1 text-[10px] text-amber-600">This provider doesn't support strict json_schema. The schema will be included in the system prompt as guidance, but the API won't enforce it.</p>
+          )}
         </label>
       )}
     </div>

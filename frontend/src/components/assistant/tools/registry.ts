@@ -672,6 +672,25 @@ const rejectExecution: AssistantTool = {
 
 // ── Executions ────────────────────────────────────────────────────────────────
 
+// ── Profile ──────────────────────────────────────────────────────────────────
+
+const updateProfile: AssistantTool = {
+  name: 'update_profile',
+  description: 'Update your profile name and/or email.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'New display name' },
+      email: { type: 'string', description: 'New email address' },
+    },
+  },
+  async execute({ name, email }) {
+    return apiFetch('/auth/profile', { method: 'PUT', body: JSON.stringify({ name, email }) });
+  },
+};
+
+// ── Executions ────────────────────────────────────────────────────────────────
+
 const listExecutions: AssistantTool = {
   name: 'list_executions',
   description: 'Get execution history (last 100 executions across all flows)',
@@ -699,6 +718,7 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
   'store-crud': [listVectorStores, createVectorStore, deleteVectorStore],
   'user-crud': [listUsers, createUser, deleteUser, updateUserRole],
+  'profile-crud': [updateProfile],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails],
 };
@@ -715,6 +735,7 @@ export function getToolGroupNames(pageKey: string, nodeType?: string): string[] 
   else if (pageKey === 'settings:users') groups.push('user-crud');
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
+  else if (pageKey === 'profile') groups.push('profile-crud');
 
   return groups;
 }
