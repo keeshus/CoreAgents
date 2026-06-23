@@ -4,7 +4,8 @@ import { db } from '../db/connection.js';
 import { vectorStores } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
-import { registerStore, createQdrantStore } from '../vector-stores/index.js';
+import neo4j from 'neo4j-driver';
+import { registerStore, createQdrantStore, createNeo4jStore } from '../vector-stores/index.js';
 
 const router = Router();
 
@@ -17,9 +18,10 @@ registerStore('pgvector', createQdrantStore('')); // placeholder, real one uses 
     const stores = await db.select().from(vectorStores);
     for (const s of stores) {
       try {
-        const store = createQdrantStore(s.url, s.api_key || undefined);
+        const factory = s.store_type === 'neo4j' ? createNeo4jStore : createQdrantStore;
+        const store = factory(s.url, s.api_key || undefined);
         registerStore(s.name, store);
-        console.log(`Vector store loaded: ${s.name} (${s.url})`);
+        console.log(`Vector store loaded: ${s.name} (${s.store_type})`);
       } catch (err) {
         console.warn(`Failed to load vector store ${s.name}:`, (err as Error).message);
       }
@@ -27,19 +29,26 @@ registerStore('pgvector', createQdrantStore('')); // placeholder, real one uses 
   } catch { /* DB not ready yet */ }
 })();
 
-// GET /api/vector-stores/:id/collections — list collections from Qdrant
+// GET /api/vector-stores/:id/collections — list collections
 import { QdrantClient } from '@qdrant/js-client-rest';
 router.get('/vector-stores/:id/collections', asyncHandler(async (req, res) => {
   const id = req.params.id as string;
-  const [store] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
-  if (!store) { res.status(404).json({ error: 'Not found' }); return; }
+  const [rs] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
+  if (!rs) { res.status(404).json({ error: 'Not found' }); return; }
   try {
-    const client = new QdrantClient({ url: store.url, apiKey: store.api_key || undefined });
-    const result = await client.getCollections();
-    res.json(result.collections.map((c: any) => c.name));
-  } catch (err: any) {
-    res.json([]);
-  }
+    if (rs.store_type === 'neo4j') {
+      const driver = neo4j.driver(rs.url, neo4j.auth.basic('', rs.api_key || ''));
+      const session = driver.session();
+      try {
+        const result = await session.run('MATCH (d:Document) RETURN DISTINCT d.collectionName AS name');
+        res.json(result.records.map(r => r.get('name')));
+      } finally { await session.close(); await driver.close(); }
+    } else {
+      const client = new QdrantClient({ url: rs.url, apiKey: rs.api_key || undefined });
+      const result = await client.getCollections();
+      res.json(result.collections.map((c: any) => c.name));
+    }
+  } catch { res.json([]); }
 }));
 
 router.get('/vector-stores', asyncHandler(async (_req, res) => {
@@ -59,7 +68,8 @@ router.post('/vector-stores', requirePermission('store:write'), asyncHandler(asy
 
   // Test connection
   try {
-    const store = createQdrantStore(url, apiKey || undefined);
+    const factory = storeType === 'neo4j' ? createNeo4jStore : createQdrantStore;
+    const store = factory(url, apiKey || undefined);
     registerStore(name, store);
   } catch (err: any) {
     res.status(400).json({ error: `Connection failed: ${err.message}` }); return;
@@ -84,7 +94,8 @@ router.put('/vector-stores/:id', requirePermission('store:write'), asyncHandler(
     const [existing] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
     if (existing) {
       try {
-        registerStore(existing.name, createQdrantStore(url, apiKey || undefined));
+        const factory = existing.store_type === 'neo4j' ? createNeo4jStore : createQdrantStore;
+        registerStore(existing.name, factory(url, apiKey || undefined));
       } catch {}
     }
   }

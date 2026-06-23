@@ -4,6 +4,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import neo4j from 'neo4j-driver';
 
 export interface VectorSearchResult {
   documentId: string;
@@ -125,6 +126,62 @@ export function createQdrantStore(url: string, apiKey?: string): VectorStore {
     async deleteCollection(collectionName) {
       const safeName = collectionName.replace(/[^a-zA-Z0-9_-]/g, '_');
       try { await client.deleteCollection(safeName); } catch {}
+    },
+  };
+}
+
+// ── Neo4j implementation ────────────────────────────────────
+
+export function createNeo4jStore(uri: string, apiKey?: string): VectorStore {
+  const driver = neo4j.driver(uri, neo4j.auth.basic('', apiKey || ''));
+
+  return {
+    async search(collectionName, queryEmbedding, topK, minScore) {
+      const session = driver.session();
+      try {
+        const result = await session.run(
+          `MATCH (d:Document {collectionName: $collectionName})
+           WITH d, gds.similarity.cosine(d.embedding, $embedding) AS sim
+           WHERE sim >= $minScore
+           RETURN d.documentId AS documentId, d.chunkText AS chunkText,
+                  d.chunkIndex AS chunkIndex, sim AS similarity
+           ORDER BY sim DESC LIMIT $topK`,
+          { collectionName, embedding: queryEmbedding, topK, minScore }
+        );
+        return result.records.map(r => ({
+          documentId: r.get('documentId'),
+          chunkText: r.get('chunkText'),
+          chunkIndex: r.get('chunkIndex'),
+          similarity: r.get('similarity'),
+        })) as VectorSearchResult[];
+      } finally {
+        await session.close();
+      }
+    },
+
+    async upsert(collectionName, points) {
+      const session = driver.session();
+      try {
+        for (const p of points) {
+          await session.run(
+            `MERGE (d:Document {id: $id, collectionName: $collectionName})
+             SET d.documentId = $documentId, d.chunkText = $chunkText,
+                 d.chunkIndex = $chunkIndex, d.embedding = $embedding`,
+            { id: p.id, collectionName, documentId: p.payload.documentId, chunkText: p.payload.chunkText, chunkIndex: p.payload.chunkIndex, embedding: p.embedding }
+          );
+        }
+      } finally {
+        await session.close();
+      }
+    },
+
+    async deleteCollection(collectionName) {
+      const session = driver.session();
+      try {
+        await session.run(`MATCH (d:Document {collectionName: $collectionName}) DETACH DELETE d`, { collectionName });
+      } finally {
+        await session.close();
+      }
     },
   };
 }
