@@ -24,9 +24,10 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<LL
     baseURL: params.baseUrl || undefined,
   });
 
-  const systemMessage = params.systemPrompt
-    ? [{ role: 'system' as const, content: params.systemPrompt }]
-    : [];
+  const systemContent = params.responseFormat === 'json_object'
+    ? (params.systemPrompt || '') + '\n\nYou must respond with valid JSON.'
+    : params.systemPrompt || 'You are a helpful assistant.';
+  const systemMessage = [{ role: 'system' as const, content: systemContent }];
 
   // Convert tools to OpenAI function format
   const openaiTools = params.tools?.map(t => ({
