@@ -70,7 +70,7 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
       {outputLabels && outputLabels.length > 0 ? (
         outputLabels.map((lbl, i) => (
           <Handle
-            key={`output-${i}`}
+            key={`${outputLabels.length}-output-${i}`}
             type="source"
             position={Position.Right}
             id={`output-${i}`}
@@ -79,7 +79,7 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
         ))
       ) : (
         Array.from({ length: outputs }).map((_, i) => (
-          <Handle key={`output-${i}`} type="source" position={Position.Right} id={`output-${i}`} style={{ top: '50%' }} />
+          <Handle key={`${outputs}-output-${i}`} type="source" position={Position.Right} id={`output-${i}`} style={{ top: '50%' }} />
         ))
       )}
     </div>
