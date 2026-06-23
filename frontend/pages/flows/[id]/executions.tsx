@@ -189,7 +189,31 @@ export default function ExecutionHistoryPage() {
         ) : (
           <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Step Trace ({steps.length} steps)</h2>
-            <div className="space-y-2">{steps.map((step: any) => {
+            <div className="space-y-2">{(function() {
+              // Group steps by iteration using the __N suffix in node_id
+              const groups: { iter: number; steps: any[] }[] = [];
+              for (const step of steps) {
+                const base = (step.node_id || '').replace(/__\d+$/, '');
+                const iterMatch = (step.node_id || '').match(/__(\d+)$/);
+                const iter = iterMatch ? parseInt(iterMatch[1]) : 0;
+                let group = groups.find(g => g.iter === iter);
+                if (!group) { group = { iter, steps: [] }; groups.push(group); }
+                group.steps.push({ ...step, _baseNodeId: base, _iter: iter });
+              }
+              // Sort groups by iteration
+              groups.sort((a, b) => a.iter - b.iter);
+              const elements: any[] = [];
+              groups.forEach((group, gi) => {
+                if (gi > 0) {
+                  elements.push(
+                    <div key={`sep-${group.iter}`} className="flex items-center gap-2 py-1">
+                      <div className="flex-1 border-t border-dashed border-orange-300" />
+                      <span className="text-[10px] font-medium text-orange-500 uppercase tracking-wider">⟳ Loop iteration {gi}</span>
+                      <div className="flex-1 border-t border-dashed border-orange-300" />
+                    </div>
+                  );
+                }
+                group.steps.forEach((step: any) => {
               const sc = statusConfig[step.status] || statusConfig.pending;
               const SIcon = sc.icon;
               const sd = dur(step.started_at, step.completed_at);
@@ -197,7 +221,7 @@ export default function ExecutionHistoryPage() {
               const open = expanded[step.id] || false;
               const has = step.input || step.output || step.error;
               const isLLM = step.node_type === 'llm-agent';
-              return (
+              elements.push(
                 <div key={step.id} className="bg-white rounded-lg border overflow-hidden">
                   <button onClick={() => toggle(step.id)} className="w-full p-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors">
                     {step.status === 'running' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />}
@@ -207,7 +231,7 @@ export default function ExecutionHistoryPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900">{label}</span>
-                        {step.node_id && <span className="text-[10px] text-gray-400 font-mono">{trunc(step.node_id, 12)}</span>}
+                        {gi > 0 && <span className="text-[9px] px-1 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">⟳ {gi}</span>}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-[10px] px-1 rounded capitalize ${sc.bg} ${sc.color}`}>{sc.label}</span>
@@ -258,7 +282,10 @@ export default function ExecutionHistoryPage() {
                   )}
                 </div>
               );
-            })}</div>
+              });
+              });
+              return elements;
+            })()}</div>
             {selected?.output && <div className="mt-6 bg-white rounded-lg border p-4"><h3 className="text-sm font-semibold text-gray-900 mb-2">Final Output</h3><pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all">{JSON.stringify(selected.output, null, 2)}</pre></div>}
           </div>
         )}
