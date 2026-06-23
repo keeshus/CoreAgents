@@ -711,15 +711,11 @@ const navigateTo: AssistantTool = {
     },
   },
   async execute({ page, flowId }) {
-    if (flowId) {
-      if (typeof window !== 'undefined') window.location.href = `/flows/${flowId}/edit`;
-      return `Navigated to flow editor for ${flowId}`;
-    }
-    if (page) {
-      if (typeof window !== 'undefined') window.location.href = `/${page}`;
-      return `Navigated to /${page}`;
-    }
-    return 'Provide a page or flowId to navigate to.';
+    if (typeof window === 'undefined') return 'Navigation not available.';
+    const dest = flowId ? `/flows/${flowId}/edit` : `/${page}`;
+    try { sessionStorage.setItem('copilot:redirect', `The user was redirected from the current page. Ask them what they'd like to do here.`); } catch {}
+    window.location.href = dest;
+    return `Navigated to ${dest}.`;
   },
 };
 

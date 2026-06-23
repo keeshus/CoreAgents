@@ -89,12 +89,14 @@ function getPageCapabilities(pageKey: string): string {
 function buildSystemPrompt(pageContext: PageContext | null, tools: AssistantTool[]): string {
   const toolList = tools.map(t => `- ${t.name}: ${t.description}`).join('\n');
   const capabilities = pageContext?.pageKey ? getPageCapabilities(pageContext.pageKey) : '';
+  let redirectNote = '';
+  try { redirectNote = sessionStorage.getItem('copilot:redirect') || ''; sessionStorage.removeItem('copilot:redirect'); } catch {}
   return [
     'You are Co-Pilot, an AI assistant for Core Agents — a visual LLM agent builder.',
     '',
     `Current page: ${pageContext?.description || 'Unknown page'}`,
+    ...(redirectNote ? ['', redirectNote, ''] : []),
     '',
-    ...(capabilities ? [`Page capabilities:\n${capabilities}`, ''] : ['']),
     'Available tools:',
     toolList || '  (none for this page)',
     '',
@@ -136,12 +138,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const toggle = useCallback(() => handleSetOpen(!open), [open]);
 
   // Generate welcome message for a page — keep it grounded, no feature lists
-  const welcomeMessage = useCallback((description: string): Message => ({
-    id: `welcome_${Date.now()}`,
-    role: 'assistant',
-    content: `👋 Hi! I'm Co-Pilot, your AI assistant.\n\nYou're on the **${description}** page. I can answer questions and help you with tasks using the tools I have available.\n\nWhat would you like to do?`,
-    timestamp: Date.now(),
-  }), []);
+  const welcomeMessage = useCallback((description: string): Message => {
+    // Check if user was redirected here
+    let redirectNote = '';
+    try { redirectNote = sessionStorage.getItem('copilot:redirect') || ''; sessionStorage.removeItem('copilot:redirect'); } catch {}
+    const greeting = redirectNote
+      ? `👋 Welcome! You've just navigated to the **${description}** page.\n\n${redirectNote}\n\nHow can I help you here?`
+      : `👋 Hi! I'm Co-Pilot, your AI assistant.\n\nYou're on the **${description}** page. I can answer questions and help you with tasks using the tools I have available.\n\nWhat would you like to do?`;
+    return { id: `welcome_${Date.now()}`, role: 'assistant', content: greeting, timestamp: Date.now() };
+  }, []);
 
   // Load default endpoint on mount
   useEffect(() => {
