@@ -698,6 +698,31 @@ const searchFlows: AssistantTool = {
   },
 };
 
+// ── Navigation ────────────────────────────────────────────────────────────────
+
+const navigateTo: AssistantTool = {
+  name: 'navigate_to',
+  description: 'Navigate to a page or open a specific flow editor in the app.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      page: { type: 'string', enum: ['flows', 'approvals', 'settings', 'settings/endpoints', 'settings/mcp-servers', 'settings/knowledge', 'settings/users', 'profile'] },
+      flowId: { type: 'string', description: 'Flow ID to open directly in the editor (e.g. "f30fa521-...")' },
+    },
+  },
+  async execute({ page, flowId }) {
+    if (flowId) {
+      if (typeof window !== 'undefined') window.location.href = `/flows/${flowId}/edit`;
+      return `Navigated to flow editor for ${flowId}`;
+    }
+    if (page) {
+      if (typeof window !== 'undefined') window.location.href = `/${page}`;
+      return `Navigated to /${page}`;
+    }
+    return 'Provide a page or flowId to navigate to.';
+  },
+};
+
 // ── Profile ──────────────────────────────────────────────────────────────────
 
 const updateProfile: AssistantTool = {
@@ -738,6 +763,7 @@ const getExecutionDetails: AssistantTool = {
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
+  'navigation': [navigateTo],
   'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
