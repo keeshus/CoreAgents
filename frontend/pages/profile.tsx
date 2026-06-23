@@ -11,7 +11,6 @@ export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const backHref = user && !can('flow:create') ? '/approvals' : '/';
-  const backLabel = user && !can('flow:create') ? 'Back to approvals' : 'Back to flows';
   useAssistantContext({ pageKey: 'profile', description: 'Editing profile' });
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -169,7 +168,7 @@ export default function ProfilePage() {
         </div>
 
         <div className="mt-6 text-center">
-          <Link href={backHref} className="text-sm text-blue-600 hover:underline">← {backLabel}</Link>
+
         </div>
       </div>
     </div>

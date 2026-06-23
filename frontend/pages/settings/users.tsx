@@ -194,9 +194,6 @@ export default function UsersSettingsPage() {
           </div>
         )}
 
-        <div className="mt-6 text-center">
-          <Link href="/settings" className="text-sm text-blue-600 hover:underline">← Back to settings</Link>
-        </div>
       </div>
 
       {/* Create User Modal */}

@@ -213,11 +213,6 @@ export default function ApprovalsPage() {
           </div>
         )}
 
-        {!isReader && (
-          <div className="mt-6 text-center">
-            <Link href="/" className="text-sm text-blue-600 hover:underline">← Back to flows</Link>
-          </div>
-        )}
       </div>
     </div>
   );
