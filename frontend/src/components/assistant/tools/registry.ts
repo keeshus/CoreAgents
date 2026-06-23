@@ -672,6 +672,17 @@ const rejectExecution: AssistantTool = {
 
 // ── Executions ────────────────────────────────────────────────────────────────
 
+// ── Flow listing ──────────────────────────────────────────────────────────────
+
+const listFlows: AssistantTool = {
+  name: 'list_flows',
+  description: 'List all flows with their names, descriptions, and IDs.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() {
+    return apiFetch('/flows?limit=100');
+  },
+};
+
 // ── Profile ──────────────────────────────────────────────────────────────────
 
 const updateProfile: AssistantTool = {
@@ -712,13 +723,14 @@ const getExecutionDetails: AssistantTool = {
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
-  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode],
+  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
   'store-crud': [listVectorStores, createVectorStore, deleteVectorStore],
   'user-crud': [listUsers, createUser, deleteUser, updateUserRole],
   'profile-crud': [updateProfile],
+  'flows-list': [listFlows],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails],
 };
@@ -736,6 +748,7 @@ export function getToolGroupNames(pageKey: string, nodeType?: string): string[] 
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
   else if (pageKey === 'profile') groups.push('profile-crud');
+  else if (pageKey === 'flows-list') groups.push('flows-list');
 
   return groups;
 }
