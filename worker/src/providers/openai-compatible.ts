@@ -48,16 +48,9 @@ export async function callOpenAICompatible(params: OpenAICallParams): Promise<LL
   };
 
   if (params.responseFormat === 'json_object') {
-    createParams.response_format = params.outputSchema
-      ? {
-          type: 'json_schema',
-          json_schema: {
-            name: 'output',
-            strict: true,
-            schema: (() => { try { return JSON.parse(params.outputSchema!); } catch { return {}; } })(),
-          },
-        }
-      : { type: 'json_object' };
+    // Use json_object for broad compatibility (DeepSeek, LiteLLM, etc.)
+    // The schema is enforced via the system prompt — json_schema isn't universally supported
+    createParams.response_format = { type: 'json_object' };
   }
 
   if (params.onToken) {
