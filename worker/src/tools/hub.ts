@@ -7,6 +7,7 @@ interface MCPServerConfig {
   name: string;
   url: string;
   transport?: 'auto' | 'streamable-http' | 'sse';
+  headers?: Record<string, string>;
   tools?: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>;
   enabled: boolean;
 }
@@ -45,25 +46,26 @@ export class MCPHub {
 
     let client: Client | null = null;
 
+    const transportOpts = server.headers ? { requestInit: { headers: server.headers } } : {};
+
     if (transportType === 'streamable-http') {
       client = await tryTransport(
-        new StreamableHTTPClientTransport(new URL(server.url)),
+        new StreamableHTTPClientTransport(new URL(server.url), transportOpts),
         'Streamable HTTP'
       );
     } else if (transportType === 'sse') {
       client = await tryTransport(
-        new SSEClientTransport(new URL(server.url)),
+        new SSEClientTransport(new URL(server.url), transportOpts),
         'SSE'
       );
     } else {
-      // Auto-detect: try Streamable HTTP first (newer standard), then SSE
       client = await tryTransport(
-        new StreamableHTTPClientTransport(new URL(server.url)),
+        new StreamableHTTPClientTransport(new URL(server.url), transportOpts),
         'Streamable HTTP'
       );
       if (!client) {
         client = await tryTransport(
-          new SSEClientTransport(new URL(server.url)),
+          new SSEClientTransport(new URL(server.url), transportOpts),
           'SSE'
         );
       }
