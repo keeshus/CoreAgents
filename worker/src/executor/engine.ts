@@ -299,7 +299,7 @@ export class FlowExecutor {
                   feedbackIterCount++;
                   if (feedbackIterCount >= MAX_FEEDBACK_ITERS) break;
 
-                  for (let r = targetIdx; r <= i; r++) {
+                  for (let r = targetIdx; r < i; r++) {
                     const resetNode = sorted[r];
                     nodeOutputs.delete(resetNode.id);
                     nodeOutputs.delete(slugify(resetNode.data?.label || resetNode.id));
