@@ -365,6 +365,9 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       const iter = (data as any).iteration ?? 0;
       try {
         if (event.type === 'step.started') {
+          // Complete any existing running rows for this node (e.g., from a prior HITL pause)
+          await db.update(executionSteps).set({ status: 'completed', completed_at: new Date() })
+            .where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId), eq(executionSteps.status, 'running')));
           // Upsert: update existing row for this (exec, node, iteration) or insert new
           const [existing] = await db.select({ id: executionSteps.id })
             .from(executionSteps)
