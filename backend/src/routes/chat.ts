@@ -185,10 +185,17 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
       executionContext,
     );
 
-    // Save assistant message using the output node's result
-    const assistantContent = typeof result.output === 'object'
-      ? JSON.stringify(result.output)
-      : String(result.output);
+    // Extract only the output node's result
+    const outputDef = (flow.nodes as any[]).find((n: any) => n.data?.type === 'output');
+    let outputNodeResult = null;
+    if (outputDef) {
+      const label = outputDef.data?.label || '';
+      const slugLabel = label.toLowerCase().replace(/[\s.]+/g, '_');
+      outputNodeResult = (result.output as any)?.[outputDef.id] || (result.output as any)?.[slugLabel] || null;
+    }
+    const assistantContent = outputNodeResult && typeof outputNodeResult === 'object'
+      ? JSON.stringify(outputNodeResult)
+      : String(outputNodeResult || result.output);
 
     const [assistantMsg] = await db.insert(chatMessages).values({
       session_id: sessionId,
