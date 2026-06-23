@@ -672,26 +672,37 @@ export class FlowExecutor {
 
       case 'branch': {
         const config = (nodeData as BranchNodeData).config;
-        const condition = config.condition;
+        const rawCondition = config.condition;
         const labels = config.outputLabels || ['true', 'false'];
 
-        // Simple condition evaluation
         let verdict = false;
+        let matchedLabel = '';
+        const inputObj = input as Record<string, unknown> | undefined;
         try {
-          const inputObj = input as Record<string, unknown> | undefined;
-          // Support simple conditions like "input.score > 0.5"
-          // For MVP, evaluate a simple truthy check
-          if (condition && condition.trim()) {
-            // Try to evaluate as a JS expression with the input in scope
-            const fn = new Function('input', `return Boolean(${condition})`);
-            verdict = fn(inputObj);
+          if (rawCondition && rawCondition.trim()) {
+            // Resolve {{input.var}} templates to actual values
+            const resolved = resolveTemplate(rawCondition, input);
+            // Try evaluating as JS expression first
+            let result: unknown;
+            try {
+              result = new Function('input', `return ${resolved}`)(inputObj);
+            } catch {
+              // JS evaluation failed — treat resolved string as the value itself
+              result = resolved;
+            }
+            const strVal = String(result).trim();
+            // Try to match the value against an output label
+            matchedLabel = labels.find(l => l && l.toLowerCase() === strVal.toLowerCase()) || '';
+            if (!matchedLabel) {
+              // Fall back to truthy/falsy routing
+              verdict = Boolean(result);
+            }
           }
         } catch {
           verdict = false;
         }
 
-        
-        return { verdict, label: verdict ? labels[0] : labels[1] };
+        return { verdict, label: matchedLabel || (verdict ? labels[0] : labels[1]) };
       }
 
       case 'code': {
