@@ -86,6 +86,7 @@ export const executionSteps = pgTable('execution_steps', {
   node_id: text('node_id').notNull(),
   node_type: text('node_type').notNull(),
   node_label: text('node_label'),
+  iteration: integer('iteration').notNull().default(0),
   status: executionStepStatusEnum('status').notNull().default('pending'),
   input: jsonb('input'),
   output: jsonb('output'),

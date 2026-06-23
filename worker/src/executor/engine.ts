@@ -225,7 +225,7 @@ export class FlowExecutor {
         type: 'step.started',
         executionId: '',
         nodeId: node.id,
-        data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label || node.data.type, input: enrichedInput },
+        data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label || node.data.type, input: enrichedInput, iteration: feedbackIterCount },
         timestamp: new Date().toISOString(),
       });
 
@@ -257,7 +257,7 @@ export class FlowExecutor {
           type: 'step.completed',
           executionId: '',
           nodeId: node.id,
-          data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label, output: output as Record<string, unknown> },
+          data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label, output: output as Record<string, unknown>, iteration: feedbackIterCount },
           timestamp: new Date().toISOString(),
         });
 
@@ -334,7 +334,7 @@ export class FlowExecutor {
           type: 'step.failed',
           executionId: '',
           nodeId: node.id,
-          data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label, error },
+          data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label, error, iteration: feedbackIterCount },
           timestamp: new Date().toISOString(),
         });
 

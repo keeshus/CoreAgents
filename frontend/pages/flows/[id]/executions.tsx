@@ -190,15 +190,12 @@ export default function ExecutionHistoryPage() {
           <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Step Trace ({steps.length} steps)</h2>
             <div className="space-y-2">{(function() {
-              // Group steps by iteration using the __N suffix in node_id
               const groups: { iter: number; steps: any[] }[] = [];
               for (const step of steps) {
-                const base = (step.node_id || '').replace(/__\d+$/, '');
-                const iterMatch = (step.node_id || '').match(/__(\d+)$/);
-                const iter = iterMatch ? parseInt(iterMatch[1]) : 0;
+                const iter = step.iteration ?? 0;
                 let group = groups.find(g => g.iter === iter);
                 if (!group) { group = { iter, steps: [] }; groups.push(group); }
-                group.steps.push({ ...step, _baseNodeId: base, _iter: iter });
+                group.steps.push(step);
               }
               // Sort groups by iteration
               groups.sort((a, b) => a.iter - b.iter);

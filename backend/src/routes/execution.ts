@@ -188,45 +188,28 @@ router.post(
           const data = event.data;
           const resolvedNodeId = (data.nodeId as string) || nodeId;
           const resolvedNodeType = (data.nodeType as string) || '';
+          const iter = (data as any).iteration ?? 0;
 
           if (event.type === 'step.started') {
             await db.insert(executionSteps).values({
-              execution_id: exec.id,
-              node_id: resolvedNodeId,
-              node_type: resolvedNodeType,
-              node_label: data.nodeLabel as string | null,
-              status: 'running',
-              input: data.input as any,
-              started_at: new Date(),
+              execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+              node_label: data.nodeLabel as string | null, iteration: iter,
+              status: 'running', input: data.input as any, started_at: new Date(),
             });
           } else if (event.type === 'step.completed') {
-            await db
-              .update(executionSteps)
-              .set({
-                status: 'completed',
-                output: data.output as any,
-                completed_at: new Date(),
-              })
-              .where(
-                and(
-                  eq(executionSteps.execution_id, exec.id),
-                  eq(executionSteps.node_id, resolvedNodeId),
-                ),
-              );
+            await db.insert(executionSteps).values({
+              execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+              node_label: data.nodeLabel as string | null, iteration: iter,
+              status: 'completed', output: data.output as any,
+              started_at: new Date(), completed_at: new Date(),
+            });
           } else if (event.type === 'step.failed') {
-            await db
-              .update(executionSteps)
-              .set({
-                status: 'failed',
-                error: data.error as string,
-                completed_at: new Date(),
-              })
-              .where(
-                and(
-                  eq(executionSteps.execution_id, exec.id),
-                  eq(executionSteps.node_id, resolvedNodeId),
-                ),
-              );
+            await db.insert(executionSteps).values({
+              execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+              node_label: data.nodeLabel as string | null, iteration: iter,
+              status: 'failed', error: data.error as string,
+              started_at: new Date(), completed_at: new Date(),
+            });
           }
 
           // Stream event to the SSE client
@@ -380,30 +363,36 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
   const savedOutputs = hitlEntry.savedOutputs || {};
   const mergedInput = { ...(exec.input || {}), _approved: true, _feedback: feedback, _decision: decision, ...userData };
 
-  let stepSeq = 0;
   try {
     const persistStep = async (_nodeId: string, event: SSEEvent) => {
       const data = event.data;
-      const resolvedNodeIdBase = (data.nodeId as string) || _nodeId;
+      const resolvedNodeId = (data.nodeId as string) || _nodeId;
       const resolvedNodeType = (data.nodeType as string) || '';
-      // Each step event gets a unique sequence number so feedback loop iterations
-      // produce separate step records instead of overwriting
-      const stepSeqId = `${resolvedNodeIdBase}__${stepSeq++}`;
+      const iter = (data as any).iteration ?? 0;
       try {
         if (event.type === 'step.started') {
           await db.insert(executionSteps).values({
-            execution_id: exec.id, node_id: stepSeqId, node_type: resolvedNodeType,
+            execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
             node_label: data.nodeLabel as string | null,
+            iteration: iter,
             status: 'running', input: data.input as any, started_at: new Date(),
           });
         } else if (event.type === 'step.completed') {
-          await db.update(executionSteps).set({
-            status: 'completed', output: data.output as any, completed_at: new Date(),
-          }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, stepSeqId)));
+          await db.insert(executionSteps).values({
+            execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+            node_label: data.nodeLabel as string | null,
+            iteration: iter,
+            status: 'completed', output: data.output as any,
+            started_at: new Date(), completed_at: new Date(),
+          });
         } else if (event.type === 'step.failed') {
-          await db.update(executionSteps).set({
-            status: 'failed', error: data.error as string, completed_at: new Date(),
-          }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, stepSeqId)));
+          await db.insert(executionSteps).values({
+            execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+            node_label: data.nodeLabel as string | null,
+            iteration: iter,
+            status: 'failed', error: data.error as string,
+            started_at: new Date(), completed_at: new Date(),
+          });
         }
       } catch (e) { console.error('Failed to persist step:', e); }
     };
