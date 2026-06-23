@@ -3,7 +3,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores } from '../db/schema.js';
 import { FlowExecutor, HitlPauseError, FlowStopError } from '../../../worker/src/executor/engine.js';
-import { getStore } from '../vector-stores/index.js';
+import { getStore, listStores } from '../vector-stores/index.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
@@ -159,7 +159,7 @@ router.post(
     executionContext.flowNodes = flowDef.nodes as any;
     executionContext.flowEdges = flowDef.edges as any;
     executionContext.searchSimilar = async (collectionName, queryEmbedding, topK, minScore) => {
-      const store = getStore('qdrant') || getStore('pgvector');
+      const store = getStore('qdrant') || getStore('pgvector') || listStores().length > 0 ? getStore(listStores()[0]) : undefined;
       if (!store) return [];
       return store.search(collectionName, queryEmbedding, topK, minScore);
     };

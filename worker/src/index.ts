@@ -1,8 +1,7 @@
 export { FlowExecutor } from './executor/engine.js';
 export type { ExecutionContext, EventCallback } from './executor/engine.js';
 export { topologicalSort } from './executor/dag.js';
-export { callAnthropic } from './providers/anthropic.js';
-export { callOpenAICompatible } from './providers/openai-compatible.js';
+export { callLLMGeneric } from './providers/provider.js';
 export { callLLM } from './providers/index.js';
 export type { ResolvedEndpoint } from './providers/index.js';
 export { MCPHub, mcpHub } from './tools/hub.js';

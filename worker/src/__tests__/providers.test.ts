@@ -1,17 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock the actual SDK calls so we only test routing logic
-vi.mock('../providers/anthropic.js', () => ({
-  callAnthropic: vi.fn(),
-}));
-
-vi.mock('../providers/openai-compatible.js', () => ({
-  callOpenAICompatible: vi.fn(),
+vi.mock('../providers/provider.js', () => ({
+  callLLMGeneric: vi.fn(),
 }));
 
 import { callLLM } from '../providers/index.js';
-import { callAnthropic } from '../providers/anthropic.js';
-import { callOpenAICompatible } from '../providers/openai-compatible.js';
+import { callLLMGeneric } from '../providers/provider.js';
 import type { LLMCallParams, ResolvedEndpoint } from '../providers/index.js';
 
 const baseParams: LLMCallParams = {
@@ -25,133 +19,47 @@ const baseParams: LLMCallParams = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(callAnthropic).mockResolvedValue({ text: 'anthropic response' });
-  vi.mocked(callOpenAICompatible).mockResolvedValue({ text: 'openai response' });
+  vi.mocked(callLLMGeneric).mockResolvedValue({ text: 'generic response' });
 });
 
 describe('callLLM', () => {
-  it('routes to anthropic provider when providerType is anthropic', async () => {
-    const endpoint: ResolvedEndpoint = {
-      providerType: 'anthropic',
-      apiKey: 'sk-ant-xxx',
-      baseUrl: null,
-    };
-
+  it('routes to anthropic provider', async () => {
+    const endpoint: ResolvedEndpoint = { providerType: 'anthropic', apiKey: 'sk-ant-xxx', baseUrl: null };
     const result = await callLLM(baseParams, endpoint);
-
-    expect(callAnthropic).toHaveBeenCalledTimes(1);
-    expect(callAnthropic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiKey: 'sk-ant-xxx',
-        model: baseParams.model,
-        systemPrompt: baseParams.systemPrompt,
-      }),
-    );
-    expect(callOpenAICompatible).not.toHaveBeenCalled();
-    expect(result.text).toBe('anthropic response');
+    expect(callLLMGeneric).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'sk-ant-xxx' }), 'anthropic');
+    expect(result.text).toBe('generic response');
   });
 
-  it('routes to openai-compatible when providerType is openai', async () => {
-    const endpoint: ResolvedEndpoint = {
-      providerType: 'openai',
-      apiKey: 'sk-openai-xxx',
-      baseUrl: 'https://api.openai.com/v1',
-    };
-
-    const result = await callLLM(baseParams, endpoint);
-
-    expect(callOpenAICompatible).toHaveBeenCalledTimes(1);
-    expect(callOpenAICompatible).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiKey: 'sk-openai-xxx',
-        baseUrl: 'https://api.openai.com/v1',
-        model: baseParams.model,
-      }),
-    );
-    expect(callAnthropic).not.toHaveBeenCalled();
-    expect(result.text).toBe('openai response');
-  });
-
-  it('routes to litellm provider (same code path as openai-compatible)', async () => {
-    const endpoint: ResolvedEndpoint = {
-      providerType: 'litellm',
-      apiKey: 'sk-litellm-xxx',
-      baseUrl: 'https://litellm.example.com/v1',
-    };
-
+  it('routes to openai provider', async () => {
+    const endpoint: ResolvedEndpoint = { providerType: 'openai', apiKey: 'sk-openai-xxx', baseUrl: 'https://api.openai.com/v1' };
     await callLLM(baseParams, endpoint);
-
-    // litellm uses the same openai-compatible path
-    expect(callOpenAICompatible).toHaveBeenCalledTimes(1);
-    expect(callAnthropic).not.toHaveBeenCalled();
+    expect(callLLMGeneric).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'sk-openai-xxx', baseUrl: 'https://api.openai.com/v1' }), 'openai');
   });
 
-  it('passes through tools properly', async () => {
-    const endpoint: ResolvedEndpoint = {
-      providerType: 'anthropic',
-      apiKey: 'sk-ant-xxx',
-      baseUrl: null,
-    };
-
-    const tools = [
-      { name: 'get_weather', description: 'Get the current weather', input_schema: { type: 'object', properties: { location: { type: 'string' } } } },
-    ];
-
-    const params: LLMCallParams = {
-      ...baseParams,
-      tools,
-    };
-
-    await callLLM(params, endpoint);
-
-    expect(callAnthropic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tools,
-      }),
-    );
+  it('routes to litellm provider', async () => {
+    const endpoint: ResolvedEndpoint = { providerType: 'litellm', apiKey: 'sk-litellm-xxx', baseUrl: 'https://litellm.example.com/v1' };
+    await callLLM(baseParams, endpoint);
+    expect(callLLMGeneric).toHaveBeenCalledWith(expect.any(Object), 'litellm');
   });
 
-  it('passes through onToken callback', async () => {
-    const endpoint: ResolvedEndpoint = {
-      providerType: 'anthropic',
-      apiKey: 'sk-ant-xxx',
-      baseUrl: null,
-    };
+  it('passes through tools', async () => {
+    const endpoint: ResolvedEndpoint = { providerType: 'anthropic', apiKey: 'sk-ant-xxx', baseUrl: null };
+    const tools = [{ name: 'get_weather', description: 'Get weather', input_schema: { type: 'object', properties: {} } }];
+    await callLLM({ ...baseParams, tools }, endpoint);
+    expect(callLLMGeneric).toHaveBeenCalledWith(expect.objectContaining({ tools }), 'anthropic');
+  });
 
+  it('passes through onToken', async () => {
+    const endpoint: ResolvedEndpoint = { providerType: 'anthropic', apiKey: 'sk-ant-xxx', baseUrl: null };
     const onToken = vi.fn();
-    const params: LLMCallParams = {
-      ...baseParams,
-      onToken,
-    };
-
-    await callLLM(params, endpoint);
-
-    expect(callAnthropic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        onToken,
-      }),
-    );
+    await callLLM({ ...baseParams, onToken }, endpoint);
+    expect(callLLMGeneric).toHaveBeenCalledWith(expect.objectContaining({ onToken }), 'anthropic');
   });
 
   it('passes through AbortSignal', async () => {
-    const endpoint: ResolvedEndpoint = {
-      providerType: 'openai',
-      apiKey: 'sk-openai-xxx',
-      baseUrl: null,
-    };
-
+    const endpoint: ResolvedEndpoint = { providerType: 'openai', apiKey: 'sk-openai-xxx', baseUrl: null };
     const controller = new AbortController();
-    const params: LLMCallParams = {
-      ...baseParams,
-      signal: controller.signal,
-    };
-
-    await callLLM(params, endpoint);
-
-    expect(callOpenAICompatible).toHaveBeenCalledWith(
-      expect.objectContaining({
-        signal: controller.signal,
-      }),
-    );
+    await callLLM({ ...baseParams, signal: controller.signal }, endpoint);
+    expect(callLLMGeneric).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }), 'openai');
   });
 });

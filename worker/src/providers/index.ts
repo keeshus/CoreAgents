@@ -1,5 +1,4 @@
-import { callAnthropic, type AnthropicCallParams, type LLMResponse, type ToolDefinition } from './anthropic.js';
-import { callOpenAICompatible, type OpenAICallParams } from './openai-compatible.js';
+import { callLLMGeneric, type ToolDefinition, type LLMResponse } from './provider.js';
 
 export interface LLMCallParams {
   endpointId: string;
@@ -22,34 +21,19 @@ export interface ResolvedEndpoint {
 export type { LLMResponse, ToolDefinition };
 
 export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint): Promise<LLMResponse> {
-  switch (endpoint.providerType) {
-    case 'anthropic':
-      return callAnthropic({
-        apiKey: endpoint.apiKey,
-        model: params.model,
-        systemPrompt: params.systemPrompt,
-        messages: params.messages,
-        temperature: params.temperature,
-        maxTokens: params.maxTokens,
-        onToken: params.onToken,
-        tools: params.tools,
-        signal: params.signal,
-      });
-    case 'openai':
-    case 'litellm':
-      return callOpenAICompatible({
-        apiKey: endpoint.apiKey,
-        baseUrl: endpoint.baseUrl || undefined,
-        model: params.model,
-        systemPrompt: params.systemPrompt,
-        messages: params.messages,
-        temperature: params.temperature,
-        maxTokens: params.maxTokens,
-        onToken: params.onToken,
-        tools: params.tools,
-        signal: params.signal,
-      });
-    default:
-      throw new Error(`Unknown provider type: ${endpoint.providerType}`);
-  }
+  return callLLMGeneric(
+    {
+      apiKey: endpoint.apiKey,
+      baseUrl: endpoint.baseUrl || undefined,
+      model: params.model,
+      systemPrompt: params.systemPrompt,
+      messages: params.messages,
+      temperature: params.temperature,
+      maxTokens: params.maxTokens,
+      onToken: params.onToken,
+      tools: params.tools,
+      signal: params.signal,
+    },
+    endpoint.providerType,
+  );
 }
