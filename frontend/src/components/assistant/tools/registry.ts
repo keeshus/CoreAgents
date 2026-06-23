@@ -708,12 +708,13 @@ const navigateTo: AssistantTool = {
     properties: {
       page: { type: 'string', enum: ['flows', 'approvals', 'settings', 'settings/endpoints', 'settings/mcp-servers', 'settings/knowledge', 'settings/users', 'profile'] },
       flowId: { type: 'string', description: 'Flow ID to open directly in the editor (e.g. "f30fa521-...")' },
+      reason: { type: 'string', description: 'What the user wants to do on the target page (e.g. "add an MCP server", "edit endpoint settings")' },
     },
   },
-  async execute({ page, flowId }) {
+  async execute({ page, flowId, reason }) {
     if (typeof window === 'undefined') return 'Navigation not available.';
     const dest = flowId ? `/flows/${flowId}/edit` : `/${page}`;
-    try { sessionStorage.setItem('copilot:redirect', `The user was redirected from the current page. Ask them what they'd like to do here.`); } catch {}
+    try { sessionStorage.setItem('copilot:redirect', reason ? `The user wants to: ${reason}. Help them with that.` : `The user was redirected here. Ask what they'd like to do.`); } catch {}
     window.location.href = dest;
     return `Navigated to ${dest}.`;
   },
