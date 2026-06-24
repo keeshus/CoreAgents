@@ -172,7 +172,7 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
         createdAt: flow.created_at?.toISOString() || '',
         updatedAt: flow.updated_at?.toISOString() || '',
       },
-      { message, history: historyMessages },
+      { chat_input: { message, history: historyMessages } },
       async (nodeId, event) => {
         // Stream tokens to the chat UI
         if (event.type === 'stream.token') {
@@ -185,13 +185,29 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
       executionContext,
     );
 
-    // Extract only the output node's result
-    const outputDef = (flow.nodes as any[]).find((n: any) => n.data?.type === 'output');
+    // Find the output node that actually produced a result (skip skipped ones)
+    const outputNodes = (flow.nodes as any[]).filter((n: any) => n.data?.type === 'output');
     let outputNodeResult = null;
-    if (outputDef) {
-      const label = outputDef.data?.label || '';
+    for (const node of outputNodes) {
+      const label = node.data?.label || '';
       const slugLabel = label.toLowerCase().replace(/[\s.]+/g, '_');
-      outputNodeResult = (result.output as any)?.[outputDef.id] || (result.output as any)?.[slugLabel] || null;
+      const val = (result.output as any)?.[node.id] ?? (result.output as any)?.[slugLabel] ?? null;
+      if (val !== null && val !== undefined) {
+        const isSkipped = typeof val === 'object' && val !== null && val.skipped === true;
+        if (!isSkipped) {
+          outputNodeResult = val;
+          break;
+        }
+      }
+    }
+    // Fallback to first non-skipped output
+    if (!outputNodeResult && outputNodes.length > 0) {
+      for (const node of outputNodes) {
+        const label = node.data?.label || '';
+        const slugLabel = label.toLowerCase().replace(/[\s.]+/g, '_');
+        const val = (result.output as any)?.[node.id] || (result.output as any)?.[slugLabel] || null;
+        if (val) { outputNodeResult = val; break; }
+      }
     }
     const assistantContent = typeof outputNodeResult === 'string'
       ? outputNodeResult

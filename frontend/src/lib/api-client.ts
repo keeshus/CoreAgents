@@ -70,7 +70,7 @@ export const api = {
       return request<{ data: any[]; total: number }>(`/flows${qs}`);
     },
     get: (id: string) => request<any>(`/flows/${id}`),
-    create: (data: { name: string; description?: string }) =>
+    create: (data: { name: string; description?: string; nodes?: any[]; edges?: any[] }) =>
       request<any>('/flows', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
       request<any>(`/flows/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

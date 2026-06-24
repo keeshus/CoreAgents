@@ -2,7 +2,7 @@ import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Zap, StopCircle, Bug } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Zap, StopCircle, Bug, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
@@ -59,6 +59,19 @@ export default function ExecutionHistoryPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const PAGE_SIZE = 20;
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [hideDebug, setHideDebug] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const deleteExec = async (execId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Delete this execution?')) return;
+    setDeleting(execId);
+    try {
+      await fetch(`${API_URL}/executions/${execId}`, { method: 'DELETE' });
+      setExecutions(prev => prev.filter(e => e.id !== execId));
+      setTotal(prev => prev - 1);
+    } catch { /* */ } finally { setDeleting(null); }
+  };
 
   const cancel = async (execId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -105,7 +118,11 @@ export default function ExecutionHistoryPage() {
           </div>
         ) : (
           <div>
-            <div className="space-y-2">{executions.map(exec => {
+            <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 mb-3 cursor-pointer select-none">
+              <input type="checkbox" checked={hideDebug} onChange={(e) => setHideDebug(e.target.checked)} className="rounded" />
+              Hide debug runs
+            </label>
+            <div className="space-y-2">{(hideDebug ? executions.filter(e => !e.input?._debug) : executions).map(exec => {
             const cfg = statusConfig[exec.status] || statusConfig.pending;
             const Icon = cfg.icon;
             const pausedTotal = exec.output?._pausedTotal || 0;
@@ -132,6 +149,7 @@ export default function ExecutionHistoryPage() {
                   {exec.status === 'running' && (
                     <button onClick={(e) => cancel(exec.id, e)} disabled={cancelling === exec.id} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 disabled:opacity-50 shrink-0"><StopCircle className="w-3 h-3" />{cancelling === exec.id ? '...' : 'Stop'}</button>
                   )}
+                  <button onClick={(e) => deleteExec(exec.id, e)} disabled={deleting === exec.id} className="p-1.5 text-gray-300 hover:text-red-500 disabled:opacity-30 shrink-0" title="Delete execution"><Trash2 className="w-3.5 h-3.5" /></button>
                   <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
                 </div>
               </div>
@@ -226,9 +244,18 @@ export default function ExecutionHistoryPage() {
                     {step.status === 'failed' && <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
                     {step.status === 'pending' && <Clock className="w-4 h-4 text-yellow-500 shrink-0" />}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900">{label}</span>
-
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-gray-900 shrink-0">{label}</span>
+                        {step.output?.toolCalls?.length > 0 && (
+                          <span className="text-[10px] text-gray-400 font-mono truncate" title={step.output.toolCalls.map((t: any) => `${t.name}(${JSON.stringify(t.input)}) → ${typeof t.result === 'string' ? t.result.slice(0, 80) : JSON.stringify(t.result).slice(0, 80)}`).join(' | ')}>
+                            {step.output.toolCalls.map((t: any, i: number) => (
+                              <span key={i}>{i > 0 && ', '}{t.name}({typeof t.input === 'object' ? Object.keys(t.input || {}).join(',') : '…'})</span>
+                            ))}
+                          </span>
+                        )}
+                        {step.output?.decision && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-600 capitalize">{step.output.decision}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-[10px] px-1 rounded capitalize ${sc.bg} ${sc.color}`}>{sc.label}</span>
@@ -262,17 +289,30 @@ export default function ExecutionHistoryPage() {
                         <div>
                           <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{isLLM ? 'LLM Response' : 'Output'}</h4>
                           {isLLM && typeof step.output.content === 'string' && (
-                            <div className="text-xs text-gray-800 whitespace-pre-wrap break-all bg-green-50/50 rounded p-2 border border-green-100">{step.output.content}</div>
+                            <div className="text-xs text-gray-800 whitespace-pre-wrap break-all bg-green-50/50 rounded p-2 border border-green-100 mb-2">{step.output.content}</div>
                           )}
-                          {isLLM && step.output.toolCalls && (
-                            <div className="mt-2">
-                              <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Tool Calls</h4>
+                          {step.output.toolCalls && step.output.toolCalls.length > 0 && (
+                            <div className="mb-2">
+                              <h5 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Tool Calls ({step.output.toolCalls.length})</h5>
                               <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{JSON.stringify(step.output.toolCalls, null, 2)}</pre>
                             </div>
                           )}
-                          {(!isLLM || typeof step.output.content !== 'string') && (
-                            <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{JSON.stringify(step.output, null, 2)}</pre>
+                          {step.output.decision && (
+                            <div className="mb-2">
+                              <h5 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Decision</h5>
+                              <div className="text-xs bg-amber-50 border border-amber-200 rounded p-2">
+                                <span className="font-medium capitalize">{step.output.decision}</span>
+                                {step.output.feedback && <p className="text-gray-600 mt-1">{step.output.feedback}</p>}
+                              </div>
+                            </div>
                           )}
+                          {step.output.reviewedContent && (
+                            <div className="mb-2">
+                              <h5 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Reviewed Content</h5>
+                              <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{JSON.stringify(step.output.reviewedContent, null, 2)}</pre>
+                            </div>
+                          )}
+                          <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{JSON.stringify(step.output, null, 2)}</pre>
                         </div>
                       )}
                     </div>

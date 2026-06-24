@@ -60,7 +60,7 @@ router.post(
   requirePermission('flow:create'),
   asyncHandler(async (req, res) => {
     const flowId = req.params.flowId as string;
-    const { input = {} } = req.body;
+    const { input = {}, nodes: canvasNodes, edges: canvasEdges } = req.body;
 
     // SSE headers ------------------------------------------------
     res.setHeader('Content-Type', 'text/event-stream');
@@ -74,26 +74,38 @@ router.post(
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    // Load flow from DB ------------------------------------------
-    const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
-    if (!flow) {
-      emitSSE({
-        type: 'execution.failed',
-        executionId: '',
-        data: { error: 'Flow not found' },
-        timestamp: new Date().toISOString(),
-      });
-      res.end();
-      return;
+    // Use canvas state if provided (debug runs from editor), otherwise load from DB
+    let flowNodes = canvasNodes;
+    let flowEdges = canvasEdges;
+    let flowName = '';
+
+    if (!flowNodes || !flowEdges) {
+      const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
+      if (!flow) {
+        emitSSE({
+          type: 'execution.failed',
+          executionId: '',
+          data: { error: 'Flow not found' },
+          timestamp: new Date().toISOString(),
+        });
+        res.end();
+        return;
+      }
+      flowNodes = flow.nodes;
+      flowEdges = flow.edges;
+      flowName = flow.name;
     }
 
     // Create execution record ------------------------------------
+    // Store a snapshot of the flow definition so HITL replay uses the original flow
+    const flowSnapshot = { nodes: flowNodes, edges: flowEdges, version: 0 };
     const [exec] = await db
       .insert(executions)
       .values({
         flow_id: flowId,
         status: 'running',
         input,
+        output: { _flowSnapshot: flowSnapshot } as any,
         started_at: new Date(),
       })
       .returning();
@@ -102,7 +114,7 @@ router.post(
     emitSSE({
       type: 'execution.started',
       executionId: exec.id,
-      data: { flowId, flowName: flow.name },
+      data: { flowId, flowName: flowName || 'Debug Run' },
       timestamp: new Date().toISOString(),
     });
 
@@ -145,14 +157,14 @@ router.post(
 
     // Map Drizzle row (snake_case) to FlowDefinition (camelCase) BEFORE building context
     const flowDef: FlowDefinition = {
-      id: flow.id,
-      name: flow.name,
-      description: flow.description || '',
-      nodes: flow.nodes as any,
-      edges: flow.edges as any,
-      version: flow.version,
-      createdAt: flow.created_at?.toISOString() || new Date().toISOString(),
-      updatedAt: flow.updated_at?.toISOString() || new Date().toISOString(),
+      id: flowId,
+      name: flowName,
+      description: '',
+      nodes: flowNodes as any,
+      edges: flowEdges as any,
+      version: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     // Add flowNodes/flowEdges to context now that flowDef exists
@@ -213,11 +225,12 @@ router.post(
       );
 
       // Mark execution as completed in DB
+      const completedOutput = { ...(result.output as object || {}), _flowSnapshot: flowSnapshot };
       await db
         .update(executions)
         .set({
           status: 'completed',
-          output: result.output as any,
+          output: completedOutput as any,
           completed_at: new Date(),
         })
         .where(eq(executions.id, exec.id));
@@ -255,13 +268,13 @@ router.post(
       // Handle HITL pause — save partial outputs and await approval
       if (err instanceof HitlPauseError) {
         activeExecutors.delete(exec.id);
-        const hitlCfg = (flowDef.nodes || []).find((n) => n.id === err.nodeId)?.data?.config || {};
+        const hitlCfg = (flowDef.nodes || []).find((n: any) => n.id === err.nodeId)?.data?.config || {};
         const hitlEntry = { nodeId: err.nodeId, prompt: err.prompt, buttons: err.buttons, savedOutputs: err.savedOutputs };
         await db
           .update(executions)
           .set({
             status: 'awaiting_approval',
-            output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlAllowFeedback: (hitlCfg as any).allowFeedback !== false, _hitlNodeId: err.nodeId, _pausedAt: Date.now(), _nextIteration: 1 } as any,
+            output: { ...err.savedOutputs, _flowSnapshot: flowSnapshot, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlAllowFeedback: (hitlCfg as any).allowFeedback !== false, _hitlNodeId: err.nodeId, _pausedAt: Date.now(), _nextIteration: 1 } as any,
             pending_hitls: JSON.stringify([hitlEntry]) as any,
           })
           .where(eq(executions.id, exec.id));
@@ -318,15 +331,25 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
     : pendingHitls[0];
   if (!hitlEntry) { res.status(400).json({ error: 'No pending HITL found' }); return; }
 
-  // Load the flow
-  const [flow] = await db.select().from(flows).where(eq(flows.id, exec.flow_id));
-  if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
-
-  const flowDef: FlowDefinition = {
-    id: flow.id, name: flow.name, description: flow.description || '',
-    nodes: flow.nodes as any, edges: flow.edges as any, version: flow.version,
-    createdAt: flow.created_at?.toISOString() || '', updatedAt: flow.updated_at?.toISOString() || '',
-  };
+  // Use the flow snapshot from when execution started, not the current flow definition
+  const snapshot = (exec.output as any)?._flowSnapshot;
+  let flowDef: FlowDefinition;
+  if (snapshot) {
+    flowDef = {
+      id: exec.flow_id, name: '', description: '',
+      nodes: snapshot.nodes as any, edges: snapshot.edges as any, version: snapshot.version || 1,
+      createdAt: '', updatedAt: '',
+    };
+  } else {
+    // Fallback to current flow (legacy executions without snapshot)
+    const [flow] = await db.select().from(flows).where(eq(flows.id, exec.flow_id));
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    flowDef = {
+      id: flow.id, name: flow.name, description: flow.description || '',
+      nodes: flow.nodes as any, edges: flow.edges as any, version: flow.version,
+      createdAt: flow.created_at?.toISOString() || '', updatedAt: flow.updated_at?.toISOString() || '',
+    };
+  }
 
   const executionContext = {
     getEndpoint: async (endpointId: string) => {
@@ -463,6 +486,18 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       .where(eq(executions.id, exec.id));
     res.status(500).json({ status: isCancelled ? 'cancelled' : 'failed', error });
   }
+}));
+
+// ── DELETE /api/executions/:executionId — delete an execution ──────────────────
+
+router.delete('/executions/:executionId', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
+  const executionId = req.params.executionId as string;
+
+  // Delete steps first (FK constraint)
+  await db.delete(executionSteps).where(eq(executionSteps.execution_id, executionId));
+  await db.delete(executions).where(eq(executions.id, executionId));
+
+  res.json({ status: 'deleted' });
 }));
 
 // ── POST /api/executions/:executionId/reject — reject HITL ──────────────────────

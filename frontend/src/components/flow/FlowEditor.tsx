@@ -261,6 +261,10 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
 
   // Expose deleteNode to parent via ref
   const deleteNode = useCallback((nodeId: string) => {
+    // Prevent deletion of trigger nodes
+    const target = nodes.find(n => n.id === nodeId);
+    if (target && (target.data as any)?.type === 'trigger') return;
+
     // Collect all IDs to delete: the node itself + all descendants
     const toDelete = new Set([nodeId]);
     const collectChildren = (id: string) => {

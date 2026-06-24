@@ -124,13 +124,15 @@ export function NodeConfigModal({
             />
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={onDelete}
-              className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
-              title="Delete node"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {node.data.type !== 'trigger' && (
+              <button
+                onClick={onDelete}
+                className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+                title="Delete node"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
@@ -401,6 +403,18 @@ export function NodeConfigModal({
 
           {node.data.type === 'output' && (
             <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={node.data.config?.streaming === true}
+                  onChange={(e) => onConfigChange({ streaming: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-blue-500"
+                />
+                <div>
+                  <span className="text-xs font-medium text-gray-700">Streaming</span>
+                  <p className="text-[10px] text-gray-400">Return upstream LLM content directly as plain text for real-time streaming</p>
+                </div>
+              </label>
               <div className="text-xs text-gray-500 bg-gray-50 rounded border p-2">
                 <p className="font-medium text-gray-700 mb-1">Output behavior</p>
                 <ul className="list-disc list-inside space-y-0.5">
@@ -408,6 +422,16 @@ export function NodeConfigModal({
                   <li>One field selected → just the field value</li>
                   <li>Multiple fields selected → combined as JSON object</li>
                 </ul>
+                {nodes.some((n: any) => (n.data?.config?.triggerType === 'chat')) && (
+                  <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+                    <p className="font-medium text-amber-800 text-[11px]">Chat trigger detected</p>
+                    <p className="text-[10px] text-amber-700 mt-0.5">
+                      Chat responses require a single string value. Use <strong>Streaming</strong> or <strong>one field</strong> pointing to the content
+                      (e.g. <code className="bg-amber-100 px-0.5 rounded">Label.content</code>) to return plain text.
+                      JSON objects will be serialized in the chat.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}

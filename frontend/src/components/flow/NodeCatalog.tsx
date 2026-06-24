@@ -1,19 +1,26 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
-import { Puzzle } from 'lucide-react';
+import { ArrowRight, Bot, Wrench, Search, GitBranch, Code, Columns3, Clock, Square, CheckCircle, X, Puzzle } from 'lucide-react';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  input: 'Input',
-  processing: 'Processing',
-  tools: 'Tools & Integrations',
-  output: 'Output',
+const NODE_ICONS: Record<string, any> = {
+  trigger: ArrowRight,
+  'llm-agent': Bot,
+  'mcp-tool': Wrench,
+  retriever: Search,
+  branch: GitBranch,
+  code: Code,
+  parallel: Columns3,
+  hitl: Clock,
+  stop: Square,
+  output: CheckCircle,
 };
 
 interface NodeCatalogProps {
   onAddNode: (type: string, defaultConfig: Record<string, any>) => void;
+  onClose?: () => void;
 }
 
-export function NodeCatalog({ onAddNode }: NodeCatalogProps) {
+export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
   const [catalog, setCatalog] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,32 +28,43 @@ export function NodeCatalog({ onAddNode }: NodeCatalogProps) {
     api.catalog.list().then(setCatalog).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-4 text-sm text-gray-500">Loading catalog...</div>;
+  if (loading) return null;
 
   const categories = ['input', 'processing', 'tools', 'output'] as const;
+  const CATEGORY_LABELS: Record<string, string> = { input: 'Input', processing: 'Processing', tools: 'Tools', output: 'Output' };
 
   return (
-    <div className="w-60 border-r bg-white p-3 space-y-3 overflow-y-auto h-full">
-      <div className="flex items-center gap-2 px-2 pb-2 border-b">
-        <Puzzle className="w-4 h-4 text-blue-600" />
-        <h3 className="text-sm font-semibold">Nodes</h3>
+    <div className="bg-white/95 backdrop-blur border rounded-xl shadow-xl p-3 space-y-3 w-56">
+      <div className="flex items-center justify-between px-1">
+        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add Node</h3>
+        {onClose && (
+          <button onClick={onClose} className="p-0.5 text-gray-300 hover:text-gray-500">
+            <X className="w-3 h-3" />
+          </button>
+        )}
       </div>
       {categories.map((cat) => {
         const items = catalog.filter((e) => e.category === cat);
         if (items.length === 0) return null;
         return (
           <div key={cat}>
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1 px-2">{CATEGORY_LABELS[cat]}</p>
-            {items.map((entry) => (
-              <button
-                key={entry.type}
-                className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer"
-                onClick={() => onAddNode(entry.type, entry.defaultConfig)}
-              >
-                <span className="font-medium">{entry.label}</span>
-                <span className="block text-[11px] text-gray-500 leading-tight">{entry.description}</span>
-              </button>
-            ))}
+            <p className="text-[9px] uppercase tracking-wider text-gray-300 mb-1 px-1">{CATEGORY_LABELS[cat]}</p>
+            <div className="flex flex-wrap gap-1">
+              {items.map((entry) => {
+                const Icon = NODE_ICONS[entry.type] || Puzzle;
+                return (
+                  <button
+                    key={entry.type}
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors text-xs text-gray-700 font-medium"
+                    onClick={() => onAddNode(entry.type, entry.defaultConfig)}
+                    title={entry.description}
+                  >
+                    <Icon className="w-3.5 h-3.5 text-gray-400" />
+                    {entry.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         );
       })}

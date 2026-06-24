@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/auth-context';
@@ -36,8 +36,11 @@ export default function ApprovalsPage() {
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [acting, setActing] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
+  const editingRef = useRef(false);
 
   const fetchPending = useCallback(async () => {
+    // Skip refresh while user is typing in a feedback field
+    if (editingRef.current) return;
     setLoading(true);
     setError('');
     try {
@@ -185,6 +188,8 @@ export default function ApprovalsPage() {
                     <textarea
                       value={feedback[exec.id] || ''}
                       onChange={e => setFeedback(prev => ({ ...prev, [exec.id]: e.target.value }))}
+                      onFocus={() => { editingRef.current = true; }}
+                      onBlur={() => { editingRef.current = false; }}
                       placeholder="Optional feedback..."
                       rows={2}
                       className="w-full mb-3 text-xs border border-gray-300 rounded p-2 resize-none"

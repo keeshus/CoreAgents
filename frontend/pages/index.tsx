@@ -55,7 +55,16 @@ export default function FlowsListPage() {
 
   const handleCreate = async () => {
     try {
-      const flow = await api.flows.create({ name: 'New Flow', description: '' });
+      const flow = await api.flows.create({
+        name: 'New Flow',
+        description: '',
+        nodes: [{
+          id: `node_${Date.now()}_trigger`,
+          type: 'trigger',
+          position: { x: 100, y: 200 },
+          data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual', inputSchema: '' } },
+        }],
+      });
       router.push(`/flows/${flow.id}/edit`);
     } catch (err) {
       console.error('Failed to create flow:', err);

@@ -133,17 +133,38 @@ export class FlowExecutor {
         const allFiltered = incomingEdges.every((e, i) => {
           const src = sourceOutputs[i] as Record<string, unknown> | undefined;
 
+          // Propagate skipped status: if the source node was skipped, skip downstream nodes too
+          if ((src as any)?.skipped === true) {
+            return true;
+          }
+
           // Check explicit edge condition (branch nodes, HITL edges with conditions)
           if (e.condition?.label) {
             const routeLabel = (src as any)?.label ?? (src as any)?.decision;
             if (routeLabel !== e.condition.label) return true;
           }
 
-          // For HITL sources without explicit conditions, filter by sourceHandle
-          // The HITL node has dynamic output handles per button. If the decision
+          // For branch/HITL sources without explicit conditions, filter by sourceHandle
+          // Branch nodes route by comparing the matched label against outputLabels[index].
+          // HITL nodes have dynamic output handles per button — if the decision
           // doesn't match the button at the sourceHandle index, filter this edge.
           if (!e.condition?.label && e.sourceHandle) {
             const sourceNode = flow.nodes.find(n => n.id === e.source);
+            if (sourceNode && (sourceNode.data as any)?.type === 'branch') {
+              const labels: string[] = (sourceNode.data as any).config?.outputLabels || [];
+              const handleIndex = parseInt((e.sourceHandle as string).replace('output-', ''), 10);
+              const matchedLabel = (src as any)?.label;
+              if (matchedLabel) {
+                if (labels[handleIndex]?.toLowerCase() === matchedLabel.toLowerCase()) {
+                  return false;
+                }
+                return true;
+              }
+              // No matched label — fall back to truthy/falsy routing
+              const verdict = (src as any)?.verdict;
+              if (handleIndex === 0) return !verdict;
+              if (handleIndex === 1) return !!verdict;
+            }
             if (sourceNode && (sourceNode.data as any)?.type === 'hitl') {
               const buttons: Array<{ value: string }> = (sourceNode.data as any).config?.buttons || [];
               const handleIndex = parseInt((e.sourceHandle as string).replace('output-', ''), 10);
@@ -162,6 +183,11 @@ export class FlowExecutor {
         });
 
         if (allFiltered) {
+          // Propagated skip: upstream node was skipped, so skip this one too
+          if (incomingEdges.some((e, i) => (sourceOutputs[i] as any)?.skipped === true)) {
+            nodeOutputs.set(node.id, { skipped: true, reason: 'Upstream skipped' });
+            continue;
+          }
           if (incomingEdges.some(e => e.condition?.label || e.sourceHandle)) {
             nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
             continue;
@@ -412,16 +438,22 @@ export class FlowExecutor {
           throw new Error(`LLM Agent: endpoint ${config.endpointId} not found`);
         }
 
-        // Extract message from input
+        // Extract message from input — supports both flat {message, history}
+        // and chat_input-wrapped {chat_input: {message, history}} formats
         const inputObj = input as Record<string, unknown> | undefined;
+        const chatInput = inputObj?.chat_input as Record<string, unknown> | undefined;
         const userMessage = typeof inputObj?.message === 'string'
           ? inputObj.message
-          : typeof inputObj === 'string'
-            ? inputObj
-            : JSON.stringify(inputObj);
+          : typeof chatInput?.message === 'string'
+            ? chatInput.message
+            : typeof inputObj === 'string'
+              ? inputObj
+              : JSON.stringify(inputObj);
 
         const history: Array<{ role: 'user' | 'assistant'; content: string }> =
-          Array.isArray(inputObj?.history) ? inputObj.history as any[] : [];
+          Array.isArray(inputObj?.history) ? inputObj.history as any[]
+          : Array.isArray(chatInput?.history) ? chatInput.history as any[]
+          : [];
 
         const messages = [...history, { role: 'user' as const, content: userMessage }];
 
@@ -549,12 +581,8 @@ export class FlowExecutor {
             if (tc.name === 'structured_output') {
               structuredOutputUsed = true;
               Object.assign(result, tc.input as Record<string, unknown>);
-              conversation.push({
-                role: 'user' as const,
-                content: `Structured output produced: ${JSON.stringify(tc.input)}`,
-              });
               executedTools.push({ name: tc.name, input: tc.input, result: 'used as node output' });
-              continue;
+              break;
             }
             try {
               // Find the MCP config from the connected tool nodes
@@ -612,6 +640,8 @@ export class FlowExecutor {
               });
             }
           }
+          // structured_output is the final response — no more rounds needed
+          if (structuredOutputUsed) break;
         }
 
         
@@ -800,6 +830,15 @@ export class FlowExecutor {
         const inp = input as Record<string, unknown> | undefined;
         const nodeConfig = (nodeData as any)?.config || {};
         const inputFields: string[] = nodeConfig.inputFields || [];
+
+        // Streaming mode: look for upstream LLM agent content in accumulated input
+        if (nodeConfig.streaming && inp && typeof inp === 'object') {
+          for (const val of Object.values(inp)) {
+            if (val && typeof val === 'object' && typeof (val as any).content === 'string') {
+              return (val as any).content;
+            }
+          }
+        }
 
         if (inputFields.length === 0) {
           // No field selection — return all accumulated data as-is
