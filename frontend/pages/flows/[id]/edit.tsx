@@ -6,7 +6,8 @@ import { FlowEditor } from '@/components/flow/FlowEditor';
 import { NodeCatalog } from '@/components/flow/NodeCatalog';
 import { NodeConfigModal } from '@/components/flow/NodeConfigModal';
 import { DebugOverlay } from '@/components/flow/DebugOverlay';
-import { Save, ArrowLeft, Settings, Bug, History, Undo2, Redo2 } from 'lucide-react';
+import { Save, ArrowLeft, Settings, Bug, History, Undo2, Redo2, Sun, Moon } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
 import Link from 'next/link';
 
 export default function FlowEditPage() {
@@ -215,6 +216,7 @@ export default function FlowEditPage() {
     abortRef.current?.abort();
   }, []);
 
+  const { theme, toggle: toggleTheme } = useTheme();
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
 
   if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Loading flow...</div>;
@@ -223,7 +225,7 @@ export default function FlowEditPage() {
   return (
     <div className="h-screen flex flex-col">
       {/* Floating top bar — title & description */}
-      <div className="pointer-events-none fixed inset-x-0 top-3 flex justify-center z-40">
+      <div className="pointer-events-none fixed inset-x-0 top-3 flex justify-center z-[999]">
         <div className="pointer-events-auto flex items-center gap-2 bg-white/90 backdrop-blur border rounded-lg shadow-sm px-3 py-1.5">
           <Link href="/" className="text-gray-400 hover:text-gray-600 shrink-0"><ArrowLeft className="w-3.5 h-3.5" /></Link>
           <input className="text-xs font-semibold border-none outline-none bg-transparent min-w-[80px] max-w-[160px]" value={flow.name} onChange={(e) => setFlow({ ...flow, name: e.target.value })} placeholder="Flow name" />
@@ -264,24 +266,24 @@ export default function FlowEditPage() {
 
       {/* Backdrop for catalog */}
       {showCatalog && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowCatalog(false)} />
+        <div className="fixed inset-0 z-[998]" onClick={() => setShowCatalog(false)} />
       )}
 
       {/* Floating add node — left side */}
-      <div className="pointer-events-none fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center">
-        <button id="add-node-btn" onClick={() => setShowCatalog(p => !p)} className="pointer-events-auto w-10 h-10 bg-white border-2 border-dashed border-gray-300 rounded-xl shadow-md flex items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 hover:shadow-lg transition-all" title="Add node">
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+      <div className="pointer-events-none fixed left-4 top-1/2 -translate-y-1/2 z-[999] flex flex-col items-center">
+        <button id="add-node-btn" onClick={() => setShowCatalog(p => !p)} className="pointer-events-auto w-10 h-10 bg-blue-600 border-2 border-blue-600 rounded-xl shadow-lg flex items-center justify-center text-white hover:bg-blue-700 hover:shadow-xl transition-all" title="Add node">
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
         </button>
-        <span className="pointer-events-auto mt-1.5 text-[9px] text-gray-400 font-medium tracking-wider uppercase">Add Node</span>
+        <span className="pointer-events-auto mt-1.5 text-[9px] text-blue-600 font-bold tracking-wider uppercase">Add Node</span>
         {showCatalog && (
-          <div className="pointer-events-auto fixed left-16 top-1/2 -translate-y-1/2 z-50">
+          <div className="pointer-events-auto fixed left-16 top-1/2 -translate-y-1/2 z-[999]">
             <NodeCatalog onAddNode={(type, config) => { handleAddNode(type, config); setShowCatalog(false); }} onClose={() => setShowCatalog(false)} />
           </div>
         )}
       </div>
 
       {/* Floating bottom bar */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 flex justify-center z-40">
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 flex justify-center z-[999]">
         <div className="pointer-events-auto flex items-center gap-1 bg-white border rounded-lg shadow-lg px-2 py-1.5">
           <button onClick={handleUndo} disabled={!canUndo} className="p-1.5 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded hover:bg-gray-100" title="Undo (Ctrl+Z)">
             <Undo2 className="w-4 h-4" />
@@ -301,7 +303,11 @@ export default function FlowEditPage() {
             <Bug className="w-4 h-4" />
           </button>
           <div className="w-px h-4 bg-gray-200" />
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-900 text-white rounded text-xs font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors">
+          <button onClick={toggleTheme} className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded hover:bg-gray-100" title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+            {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          </button>
+          <div className="w-px h-4 bg-gray-200" />
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
             <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
           </button>
         </div>

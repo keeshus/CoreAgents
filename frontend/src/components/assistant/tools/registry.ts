@@ -171,7 +171,7 @@ const getAvailableNodes: AssistantTool = {
   description: 'List all node types available in the node catalog for adding to the flow.',
   inputSchema: { type: 'object', properties: {} },
   async execute() {
-    return 'Available node types: trigger (starts a flow), llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval), stop (terminates), output (returns result), parallel (concurrent branches). Click a node type button in the catalog panel on the left to add it.';
+    return 'Available node types: llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval), stop (terminates), output (returns result), parallel (concurrent branches). Click the + button on the left to open the catalog, then select a node type. The trigger node is pre-added and cannot be removed.';
   },
 };
 
@@ -264,7 +264,7 @@ const addNode: AssistantTool = {
   inputSchema: {
     type: 'object',
     properties: {
-      type: { type: 'string', enum: ['trigger', 'llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'stop'] },
+      type: { type: 'string', enum: ['llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'stop'] },
     },
     required: ['type'],
   },
@@ -757,6 +757,17 @@ const getExecutionDetails: AssistantTool = {
   async execute({ executionId }) { return apiFetch(`/executions/${executionId}`); },
 };
 
+const deleteExecution: AssistantTool = {
+  name: 'delete_execution',
+  description: 'Delete an execution and all its step data by ID',
+  inputSchema: {
+    type: 'object',
+    properties: { executionId: { type: 'string', description: 'The execution ID to delete' } },
+    required: ['executionId'],
+  },
+  async execute({ executionId }) { return apiFetch(`/executions/${executionId}`, { method: 'DELETE' }); },
+};
+
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
@@ -770,7 +781,7 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'profile-crud': [updateProfile],
   'flows-list': [listFlows, searchFlows],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
-  'executions': [listExecutions, getExecutionDetails],
+  'executions': [listExecutions, getExecutionDetails, deleteExecution],
 };
 
 // ── Registry: page key pattern → tool group names ──────────────────────────────

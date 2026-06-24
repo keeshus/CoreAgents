@@ -91,7 +91,7 @@ export default function SetupPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1">Confirm Password</label>
               <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" required autoComplete="new-password" />
             </div>
-            <button type="submit" disabled={loading} className="w-full bg-gray-900 text-white rounded p-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white rounded p-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {loading ? 'Creating admin account...' : 'Create Admin Account'}
             </button>
           </form>

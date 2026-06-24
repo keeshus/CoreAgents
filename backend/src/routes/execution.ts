@@ -532,6 +532,19 @@ router.get(
   }),
 );
 
+// ── GET /api/executions/:executionId — single execution with steps ────────────
+
+router.get(
+  '/executions/:executionId',
+  asyncHandler(async (req, res) => {
+    const executionId = req.params.executionId as string;
+    const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));
+    if (!exec) { res.status(404).json({ message: 'Execution not found' }); return; }
+    const steps = await db.select().from(executionSteps).where(eq(executionSteps.execution_id, executionId)).orderBy(executionSteps.started_at);
+    res.json({ ...exec, steps });
+  }),
+);
+
 // ── GET /api/flows/:flowId/executions/:executionId — execution with steps ──────
 
 router.get(

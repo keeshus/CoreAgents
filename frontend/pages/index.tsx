@@ -142,7 +142,7 @@ export default function FlowsListPage() {
                 <Link href="/login" className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors" title="Sign In">
                   <LogIn className="w-4 h-4" /> Sign In
                 </Link>
-                <Link href="/register" className="flex items-center gap-1 px-3 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors" title="Create Account">
+                <Link href="/register" className="flex items-center gap-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" title="Create Account">
                   <UserPlus className="w-4 h-4" /> Register
                 </Link>
               </>

@@ -34,11 +34,11 @@ export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
   const CATEGORY_LABELS: Record<string, string> = { input: 'Input', processing: 'Processing', tools: 'Tools', output: 'Output' };
 
   return (
-    <div className="bg-white/95 backdrop-blur border rounded-xl shadow-xl p-3 space-y-3 w-56">
+    <div className="bg-surface/95 backdrop-blur border rounded-xl shadow-m3-4 p-3 space-y-3 w-56">
       <div className="flex items-center justify-between px-1">
-        <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add Node</h3>
+        <h3 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider">Add Node</h3>
         {onClose && (
-          <button onClick={onClose} className="p-0.5 text-gray-300 hover:text-gray-500">
+          <button onClick={onClose} className="p-0.5 text-outline-variant hover:text-on-surface-variant">
             <X className="w-3 h-3" />
           </button>
         )}
@@ -48,18 +48,18 @@ export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
         if (items.length === 0) return null;
         return (
           <div key={cat}>
-            <p className="text-[9px] uppercase tracking-wider text-gray-300 mb-1 px-1">{CATEGORY_LABELS[cat]}</p>
+            <p className="text-[9px] uppercase tracking-wider text-outline-variant mb-1 px-1">{CATEGORY_LABELS[cat]}</p>
             <div className="flex flex-wrap gap-1">
               {items.map((entry) => {
                 const Icon = NODE_ICONS[entry.type] || Puzzle;
                 return (
                   <button
                     key={entry.type}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors text-xs text-gray-700 font-medium"
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors text-xs text-on-surface-variant font-medium"
                     onClick={() => onAddNode(entry.type, entry.defaultConfig)}
                     title={entry.description}
                   >
-                    <Icon className="w-3.5 h-3.5 text-gray-400" />
+                    <Icon className="w-3.5 h-3.5 text-on-surface-variant" />
                     {entry.label}
                   </button>
                 );

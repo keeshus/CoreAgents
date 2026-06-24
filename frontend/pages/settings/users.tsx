@@ -219,7 +219,7 @@ export default function UsersSettingsPage() {
                 <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" />
                 <p className="text-[10px] text-gray-400 mt-1">Minimum 8 characters</p>
               </div>
-              <button onClick={handleCreate} disabled={creating} className="w-full bg-gray-900 text-white rounded p-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
+              <button onClick={handleCreate} disabled={creating} className="w-full bg-blue-600 text-white rounded p-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                 {creating ? 'Creating...' : 'Create User'}
               </button>
             </div>
