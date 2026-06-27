@@ -120,8 +120,10 @@ export function NodeConfigModal({
                 </button>
               </Tooltip>
             )}
-            <Dialog.Close className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors cursor-pointer">
-              <Icon name="close" className="text-base" /> Close
+            <Dialog.Close className="p-1.5 text-on-surface-variant hover:text-on-surface-variant transition-colors cursor-pointer">
+              <span className="flex items-center gap-1 text-xs">
+                <Icon name="close" className="text-base" /> Close
+              </span>
             </Dialog.Close>
           </div>
         </div>
