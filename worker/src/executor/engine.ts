@@ -15,15 +15,21 @@ const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
 export class HitlPauseError extends Error {
   public nodeId: string;
   public savedOutputs: Record<string, unknown>;
-  public buttons: Array<{ label: string; value: string }>;
+  public buttons: Array<{ label: string; value: string; icon?: string }>;
   public prompt: string;
-  constructor(nodeId: string, savedOutputs: Record<string, unknown>, buttons?: Array<{ label: string; value: string }>, prompt?: string) {
+  public assignmentType?: string;
+  public assignees?: { userIds: string[]; roleIds: string[] };
+  public requiredApprovals?: number;
+  constructor(nodeId: string, savedOutputs: Record<string, unknown>, buttons?: Array<{ label: string; value: string; icon?: string }>, prompt?: string, assignmentType?: string, assignees?: { userIds: string[]; roleIds: string[] }, requiredApprovals?: number) {
     super(`HITL: waiting for human input at node ${nodeId}`);
     this.name = 'HitlPauseError';
     this.nodeId = nodeId;
     this.savedOutputs = savedOutputs;
-    this.buttons = buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }];
+    this.buttons = buttons || [{ label: 'Approve', value: 'approved', icon: 'check_circle' }, { label: 'Reject', value: 'rejected', icon: 'cancel' }];
     this.prompt = prompt || '';
+    this.assignmentType = assignmentType;
+    this.assignees = assignees;
+    this.requiredApprovals = requiredApprovals;
   }
 }
 
@@ -73,6 +79,13 @@ export class FlowExecutor {
 
     if (cycles.length > 0) {
       console.warn(`Flow contains feedback loops (cycles): ${JSON.stringify(cycles)}`);
+    }
+
+    // Validate the flow before execution — catch schema/template issues early
+    // Skip validation when there are cycles (feedback loops) — cycle ordering is undefined
+    const validationErrors = cycles.length > 0 ? [] : this.compileFlow(sorted, flow.edges, input);
+    if (validationErrors.length > 0) {
+      throw new Error(`Flow compilation failed:\n${validationErrors.join('\n')}`);
     }
 
     const nodeOutputs = new Map<string, unknown>();
@@ -189,8 +202,23 @@ export class FlowExecutor {
             continue;
           }
           if (incomingEdges.some(e => e.condition?.label || e.sourceHandle)) {
-            nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
-            continue;
+            // Check if an upstream branch node has a default path configured
+            const defaultEdge = incomingEdges.find(e => {
+              if (!e.sourceHandle) return false;
+              const sNode = flow.nodes.find(n => n.id === e.source);
+              if (!sNode || (sNode.data as any)?.type !== 'branch') return false;
+              const cfg = (sNode.data as any).config || {};
+              if (!cfg.defaultPath) return false;
+              const labels: string[] = cfg.outputLabels || [];
+              const handleIdx = parseInt(e.sourceHandle.replace('output-', ''), 10);
+              return labels[handleIdx] === cfg.defaultPath;
+            });
+            if (defaultEdge) {
+              // Default path matched — continue processing instead of skipping
+            } else {
+              nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
+              continue;
+            }
           }
           // All edges have no conditions/sourceHandles — misconfigured flow
           throw new Error(
@@ -278,9 +306,17 @@ export class FlowExecutor {
           nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
         }
         const output = await this.executeNode(node, nodeInput, context, onEvent);
+        // Strip internal metadata from downstream output — only actual content flows between nodes
+        const cleanOutput = output && typeof output === 'object' && !Array.isArray(output)
+          ? Object.fromEntries(
+              Object.entries(output as Record<string, unknown>).filter(
+                ([k]) => !k.startsWith('_') && k !== 'toolCalls' && k !== '_reviewedContent'
+              )
+            )
+          : output;
         const outputKey = slugify(node.data.label || node.id);
-        nodeOutputs.set(outputKey, output);
-        nodeOutputs.set(node.id, output); // Also store under node ID for edge routing
+        nodeOutputs.set(outputKey, cleanOutput);
+        nodeOutputs.set(node.id, cleanOutput);
 
         await onEvent(node.id, {
           type: 'step.completed',
@@ -392,6 +428,57 @@ export class FlowExecutor {
       [...nodeOutputs].filter(([k]) => k === '__input__' || nodeIds.has(k))
     );
     return { output: uniqueOutput, steps };
+  }
+
+  private compileFlow(sorted: FlowNode[], edges: FlowEdge[], flowInput?: Record<string, unknown>): string[] {
+    const errors: string[] = [];
+    const computeSlug = (n: FlowNode) => slugify(n.data?.label || n.id);
+
+    for (let i = 0; i < sorted.length; i++) {
+      const node = sorted[i];
+      const config = (node.data as any)?.config || {};
+
+      // Collect upstream slugs (nodes before this one in topological order)
+      const upstreamSlugs = new Set<string>();
+      for (let j = 0; j < i; j++) {
+        upstreamSlugs.add(computeSlug(sorted[j]));
+      }
+
+      // Validate inputFields: check that path references an upstream slug OR a flow input key
+      const inputFields: string[] = config.inputFields || [];
+      for (const field of inputFields) {
+        const dot = field.indexOf('.');
+        const rawLabel = dot === -1 ? field : field.slice(0, dot);
+        const slugLabel = slugify(rawLabel);
+        const isUpstreamNode = upstreamSlugs.has(slugLabel);
+        const isFlowInputKey = flowInput ? rawLabel in flowInput : false;
+        if (!isUpstreamNode && !isFlowInputKey && slugLabel !== '__input__') {
+          errors.push(`Node "${node.data?.label || node.id}": input field "${field}" references "${rawLabel}" which is not an upstream node nor a flow input key. Available upstream: ${Array.from(upstreamSlugs).join(', ') || '(none)'}`);
+        }
+      }
+
+      // Validate template variables in code/condition/systemPrompt
+      const templates: string[] = [];
+      if (config.code) templates.push(config.code);
+      if (config.condition) templates.push(config.condition);
+      if (config.systemPrompt) templates.push(config.systemPrompt);
+      for (const tpl of templates) {
+        const regex = /\{\{input\.([^}]+)\}\}/g;
+        let match: RegExpExecArray | null;
+        while ((match = regex.exec(tpl)) !== null) {
+          const path = match[1].trim();
+          const label = path.split('.')[0];
+          const slugLabel = slugify(label);
+          const isUpstreamNode = upstreamSlugs.has(slugLabel);
+          const isFlowInputKey = flowInput ? label in flowInput : false;
+          if (!isUpstreamNode && !isFlowInputKey && slugLabel !== '__input__') {
+            errors.push(`Node "${node.data?.label || node.id}": template "{{input.${path}}}" references "${label}" which is not an upstream node nor a flow input key. Available upstream: ${Array.from(upstreamSlugs).join(', ') || '(none)'}`);
+          }
+        }
+      }
+    }
+
+    return errors;
   }
 
   private prepareInput(node: FlowNode, edges: FlowEdge[], nodeOutputs: Map<string, unknown>): unknown {
@@ -753,11 +840,21 @@ export class FlowExecutor {
             // Try to match the value against an output label
             matchedLabel = labels.find(l => l && l.toLowerCase() === strVal.toLowerCase()) || '';
             if (!matchedLabel) {
-              // Fall back to truthy/falsy routing
-              verdict = Boolean(result);
+              // Check if a default path is configured
+              const defaultPath = config.defaultPath;
+              if (defaultPath && labels.includes(defaultPath)) {
+                matchedLabel = defaultPath;
+              } else {
+                throw new Error(
+                  `Branch condition "${rawCondition}" returned "${strVal}", which does not match any output label. ` +
+                  `Available labels: [${labels.filter(Boolean).join(', ')}]. ` +
+                  `Add a matching output label, configure a default path, or fix the condition.`
+                );
+              }
             }
           }
-        } catch {
+        } catch (err) {
+          if (err instanceof Error) throw err;
           verdict = false;
         }
 
@@ -822,8 +919,11 @@ export class FlowExecutor {
         // First run: pause for human input with resolved prompt
         const hitlCfg = (nodeData as any).config || {};
         const resolvedPrompt = resolveTemplate(hitlCfg.prompt || '', input);
-        const buttons = hitlCfg.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }];
-        throw new HitlPauseError(node.id, {}, buttons, resolvedPrompt);
+        const buttons = hitlCfg.buttons || [{ label: 'Approve', value: 'approved', icon: 'check_circle' }, { label: 'Reject', value: 'rejected', icon: 'cancel' }];
+        const assignmentType = hitlCfg.assignmentType;
+        const assignees = hitlCfg.assignees;
+        const requiredApprovals = hitlCfg.requiredApprovals;
+        throw new HitlPauseError(node.id, {}, buttons, resolvedPrompt, assignmentType, assignees, requiredApprovals);
       }
 
       case 'output': {

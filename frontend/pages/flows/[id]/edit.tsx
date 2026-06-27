@@ -1,14 +1,17 @@
 import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { api } from '@/lib/api-client';
 import { FlowEditor } from '@/components/flow/FlowEditor';
 import { NodeCatalog } from '@/components/flow/NodeCatalog';
 import { NodeConfigModal } from '@/components/flow/NodeConfigModal';
 import { DebugOverlay } from '@/components/flow/DebugOverlay';
-import { Save, ArrowLeft, Settings, Bug, History, Undo2, Redo2, Sun, Moon } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
+import * as Separator from '@radix-ui/react-separator';
 import { useTheme } from '@/hooks/useTheme';
 import Link from 'next/link';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 export default function FlowEditPage() {
   const router = useRouter();
@@ -28,6 +31,57 @@ export default function FlowEditPage() {
 
   // Selected node for config editing
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Check name uniqueness via API
+  const [nameAvailable, setNameAvailable] = useState(true);
+  useEffect(() => {
+    if (!flow?.name?.trim()) { setNameAvailable(false); return; }
+    const timer = setTimeout(() => {
+      api.flows.checkName(flow.name.trim(), flow.id).then(r => setNameAvailable(r.available)).catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [flow?.name, flow?.id]);
+
+  // Validation: save button disabled when flow name is empty or not unique
+  const hasErrors = useMemo(() => {
+    return !flow?.name?.trim() || !nameAvailable;
+  }, [flow?.name, nameAvailable]);
+
+  // Duplicate label detection
+  const labelError = useMemo(() => {
+    if (!selectedNodeId) return '';
+    const selectedLabel = nodes.find(n => n.id === selectedNodeId)?.data?.label;
+    if (!selectedLabel) return '';
+    const dupe = nodes.find(n => n.id !== selectedNodeId && n.data?.label === selectedLabel);
+    return dupe ? `Label "${selectedLabel}" is already used by another node` : '';
+  }, [nodes, selectedNodeId]);
+
+  // Compute node warnings (duplicate labels, etc.) and merge into node data
+  useEffect(() => {
+    const labelCounts = new Map<string, string[]>();
+    for (const n of nodes) {
+      const lbl = n.data?.label;
+      if (!lbl) continue;
+      const ids = labelCounts.get(lbl) || [];
+      ids.push(n.id);
+      labelCounts.set(lbl, ids);
+    }
+    const warnings = new Map<string, string[]>();
+    for (const [lbl, ids] of labelCounts) {
+      if (ids.length > 1) {
+        for (const id of ids) {
+          warnings.set(id, (warnings.get(id) || []).concat(`Duplicate label: "${lbl}"`));
+        }
+      }
+    }
+    setNodes(prev => prev.map(n => {
+    const w = warnings.get(n.id);
+    const currentWarnings = n.data?._warnings as string[] | undefined;
+      if (currentWarnings === undefined && !w) return n;
+      if (currentWarnings && w && JSON.stringify(currentWarnings) === JSON.stringify(w)) return n;
+      return { ...n, data: { ...n.data, _warnings: w || undefined } };
+    }));
+  }, [nodes.map(n => n.data?.label).join(',')]);
 
   // Execution state
   const [isRunning, setIsRunning] = useState(false);
@@ -86,16 +140,17 @@ export default function FlowEditPage() {
   }, [handleUndo, handleRedo]);
 
   useEffect(() => {
-    if (id) {
-      api.flows.get(id as string).then((f) => {
-        setFlow(f);
-        // Sort: parallel nodes first (parent before children)
-        const raw = f.nodes || [];
-        const ordered = [...raw.filter((n: any) => n.type === 'parallel'), ...raw.filter((n: any) => n.type !== 'parallel')];
-        setNodes(ordered);
-        setEdges(f.edges || []);
-      }).finally(() => setLoading(false));
-    }
+    if (!id) return;
+    if (typeof id !== 'string') return;
+    api.flows.get(id).then((f) => {
+      setFlow(f);
+      const raw = f.nodes || [];
+      const ordered = [...raw.filter((n: any) => n.type === 'parallel'), ...raw.filter((n: any) => n.type !== 'parallel')];
+      setNodes(ordered);
+      setEdges(f.edges || []);
+    }).catch((err) => {
+      console.error('Failed to load flow:', err);
+    }).finally(() => setLoading(false));
   }, [id]);
 
   // Auto-open debug overlay from ?debug=1
@@ -110,12 +165,6 @@ export default function FlowEditPage() {
     const updated = await api.flows.update(flow.id, { ...flow, ...updates });
     setFlow(updated);
   }, [flow]);
-
-  const autoSaveMeta = useCallback((field: string, value: string) => {
-    setFlow((prev: any) => ({ ...prev, [field]: value }));
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => persistFlow({ [field]: value }), 600);
-  }, [persistFlow]);
 
   const handleSave = useCallback(async () => {
     if (!flow) return;
@@ -169,9 +218,10 @@ export default function FlowEditPage() {
     if (!selectedNodeId) return;
     snapshot();
     setNodeLabelRef.current?.(selectedNodeId, label);
-    setNodes((prev: any[]) => prev.map((n: any) =>
-      n.id === selectedNodeId ? { ...n, data: { ...n.data, label } } : n
-    ));
+    setNodes((prev: any[]) => prev.map((n: any) => {
+      if (n.id !== selectedNodeId) return n;
+      return { ...n, data: { ...n.data, label, _warnings: undefined } };
+    }));
   }, [selectedNodeId, snapshot]);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -219,17 +269,17 @@ export default function FlowEditPage() {
   const { theme, toggle: toggleTheme } = useTheme();
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
 
-  if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Loading flow...</div>;
-  if (!flow) return <div className="flex items-center justify-center h-screen text-gray-500">Flow not found</div>;
+  if (loading) return <div className="flex items-center justify-center h-screen text-on-surface-variant">Loading flow...</div>;
+  if (!flow) return <div className="flex items-center justify-center h-screen text-on-surface-variant">Flow not found</div>;
 
   return (
     <div className="h-screen flex flex-col">
       {/* Floating top bar — title & description */}
-      <div className="pointer-events-none fixed inset-x-0 top-3 flex justify-center z-[999]">
-        <div className="pointer-events-auto flex items-center gap-2 bg-white/90 backdrop-blur border rounded-lg shadow-sm px-3 py-1.5">
-          <Link href="/" className="text-gray-400 hover:text-gray-600 shrink-0"><ArrowLeft className="w-3.5 h-3.5" /></Link>
-          <input className="text-xs font-semibold border-none outline-none bg-transparent min-w-[80px] max-w-[160px]" value={flow.name} onChange={(e) => setFlow({ ...flow, name: e.target.value })} placeholder="Flow name" />
-          <input className="text-[10px] text-gray-500 border-none outline-none bg-transparent min-w-[100px] max-w-[200px] focus:max-w-[400px] transition-all" value={flow.description || ''} onChange={(e) => setFlow({ ...flow, description: e.target.value })} placeholder="Add a description..." />
+      <div className="pointer-events-none fixed inset-x-0 top-3 flex justify-center z-40">
+        <div className="pointer-events-auto flex items-center gap-2 bg-surface/90 backdrop-blur border rounded-lg shadow-sm px-3 py-1.5">
+          <Link href="/" className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant shrink-0"><Icon name="arrow_back" className="text-sm" /> Back</Link>
+          <TextField label="Flow name" value={flow.name} onChange={(v) => setFlow((prev: any) => ({ ...prev, name: v }))} className="min-w-[80px] max-w-[160px]" />
+          <TextField label="Description" value={flow.description || ''} onChange={(v) => setFlow((prev: any) => ({ ...prev, description: v }))} className="min-w-[100px] max-w-[200px] focus:max-w-[400px] transition-all" />
         </div>
       </div>
 
@@ -260,56 +310,79 @@ export default function FlowEditPage() {
             onLabelChange={handleLabelChange}
             onDelete={handleDeleteNode}
             onClose={() => setSelectedNodeId(null)}
+            labelError={labelError}
           />
         )}
       </div>
 
       {/* Backdrop for catalog */}
       {showCatalog && (
-        <div className="fixed inset-0 z-[998]" onClick={() => setShowCatalog(false)} />
+        <div className="fixed inset-0 z-30" onClick={() => setShowCatalog(false)} />
       )}
 
       {/* Floating add node — left side */}
-      <div className="pointer-events-none fixed left-4 top-1/2 -translate-y-1/2 z-[999] flex flex-col items-center">
-        <button id="add-node-btn" onClick={() => setShowCatalog(p => !p)} className="pointer-events-auto w-10 h-10 bg-blue-600 border-2 border-blue-600 rounded-xl shadow-lg flex items-center justify-center text-white hover:bg-blue-700 hover:shadow-xl transition-all" title="Add node">
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-        <span className="pointer-events-auto mt-1.5 text-[9px] text-blue-600 font-bold tracking-wider uppercase">Add Node</span>
+      <div className="pointer-events-none fixed left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center">
+        <Tooltip content="Add node">
+          <button id="add-node-btn" onClick={() => setShowCatalog(p => !p)} className="pointer-events-auto w-10 h-10 bg-primary border-2 border-primary rounded-xl shadow-lg flex items-center justify-center text-white hover:bg-primary hover:shadow-xl transition-all">
+            <Icon name="add" className="text-xl" />
+          </button>
+        </Tooltip>
+        <span className="pointer-events-auto mt-1.5 text-[9px] text-primary font-bold tracking-wider uppercase">Add Node</span>
         {showCatalog && (
-          <div className="pointer-events-auto fixed left-16 top-1/2 -translate-y-1/2 z-[999]">
+          <div className="pointer-events-auto fixed left-16 top-1/2 -translate-y-1/2 z-40">
             <NodeCatalog onAddNode={(type, config) => { handleAddNode(type, config); setShowCatalog(false); }} onClose={() => setShowCatalog(false)} />
           </div>
         )}
       </div>
 
       {/* Floating bottom bar */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 flex justify-center z-[999]">
-        <div className="pointer-events-auto flex items-center gap-1 bg-white border rounded-lg shadow-lg px-2 py-1.5">
-          <button onClick={handleUndo} disabled={!canUndo} className="p-1.5 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded hover:bg-gray-100" title="Undo (Ctrl+Z)">
-            <Undo2 className="w-4 h-4" />
-          </button>
-          <div className="w-px h-4 bg-gray-200" />
-          <button onClick={handleRedo} disabled={!canRedo} className="p-1.5 text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded hover:bg-gray-100" title="Redo (Ctrl+Shift+Z)">
-            <Redo2 className="w-4 h-4" />
-          </button>
-          <div className="w-px h-4 bg-gray-200 mx-0.5" />
-          <Link href="/settings" className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded hover:bg-gray-100" title="Manage LLM endpoints & MCP servers">
-            <Settings className="w-4 h-4" />
-          </Link>
-          <Link href={`/flows/${flow?.id}/executions`} className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded hover:bg-gray-100" title="Execution history & debug traces">
-            <History className="w-4 h-4" />
-          </Link>
-          <button onClick={() => setShowDebug(true)} className="p-1.5 text-gray-400 hover:text-purple-600 transition-colors rounded hover:bg-gray-100" title="Debug run — trace execution step by step">
-            <Bug className="w-4 h-4" />
-          </button>
-          <div className="w-px h-4 bg-gray-200" />
-          <button onClick={toggleTheme} className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded hover:bg-gray-100" title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
-            {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          </button>
-          <div className="w-px h-4 bg-gray-200" />
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
-            <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
-          </button>
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 flex justify-center z-40">
+        <div className="pointer-events-auto flex items-center gap-1 bg-surface border rounded-lg shadow-lg px-2 py-1.5">
+          <Tooltip content="Undo (Ctrl+Z)">
+            <button onClick={handleUndo} disabled={!canUndo} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-on-surface disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded hover:bg-surface-container-high">
+              <Icon name="undo" className="text-sm" /> Undo
+            </button>
+          </Tooltip>
+          <Separator.Root orientation="vertical" className="w-px h-4 bg-outline-variant" />
+          <Tooltip content="Redo (Ctrl+Shift+Z)">
+            <button onClick={handleRedo} disabled={!canRedo} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-on-surface disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded hover:bg-surface-container-high">
+              <Icon name="redo" className="text-sm" /> Redo
+            </button>
+          </Tooltip>
+          <Separator.Root orientation="vertical" className="w-px h-4 bg-outline-variant mx-0.5" />
+          <Tooltip content="Manage LLM endpoints & MCP servers">
+            <Link href="/settings" className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors rounded hover:bg-surface-container-high">
+              <Icon name="settings" className="text-sm" /> Settings
+            </Link>
+          </Tooltip>
+          <Tooltip content="Run history">
+            <Link href={`/flows/${flow?.id}/executions`} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors rounded hover:bg-surface-container-high">
+              <Icon name="history" className="text-sm" /> Runs
+            </Link>
+          </Tooltip>
+          <Tooltip content="Debug run — trace execution step by step">
+            <button onClick={() => setShowDebug(true)} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary transition-colors rounded hover:bg-surface-container-high">
+              <Icon name="bug_report" className="text-sm" /> Debug
+            </button>
+          </Tooltip>
+          <Separator.Root orientation="vertical" className="w-px h-4 bg-outline-variant" />
+          <Tooltip content={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+            <button onClick={toggleTheme} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors rounded hover:bg-surface-container-high">
+              {theme === 'light' ? <Icon name="dark_mode" className="text-sm" /> : <Icon name="light_mode" className="text-sm" />} {theme === 'light' ? 'Dark' : 'Light'}
+            </button>
+          </Tooltip>
+          <Separator.Root orientation="vertical" className="w-px h-4 bg-outline-variant" />
+          {hasErrors ? (
+            <Tooltip content={!flow?.name?.trim() ? 'Flow name is required' : 'Another flow with this name already exists'}>
+              <button onClick={handleSave} disabled={saving || hasErrors} className="m3-button disabled:opacity-50">
+                <Icon name="save" className="text-sm" /> {saving ? 'Saving...' : 'Save'}
+              </button>
+            </Tooltip>
+          ) : (
+            <button onClick={handleSave} disabled={saving || hasErrors} className="m3-button disabled:opacity-50">
+              <Icon name="save" className="text-sm" /> {saving ? 'Saving...' : 'Save'}
+            </button>
+          )}
         </div>
       </div>
 

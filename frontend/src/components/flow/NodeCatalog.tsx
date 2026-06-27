@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
-import { ArrowRight, Bot, Wrench, Search, GitBranch, Code, Columns3, Clock, Square, CheckCircle, X, Puzzle } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { Tooltip } from '@/components/ui/Tooltip';
 
-const NODE_ICONS: Record<string, any> = {
-  trigger: ArrowRight,
-  'llm-agent': Bot,
-  'mcp-tool': Wrench,
-  retriever: Search,
-  branch: GitBranch,
-  code: Code,
-  parallel: Columns3,
-  hitl: Clock,
-  stop: Square,
-  output: CheckCircle,
+const NODE_ICONS: Record<string, string> = {
+  trigger: 'arrow_forward',
+  'llm-agent': 'smart_toy',
+  'mcp-tool': 'build',
+  retriever: 'search',
+  branch: 'call_split',
+  code: 'code',
+  parallel: 'view_column',
+  hitl: 'schedule',
+  stop: 'stop',
+  output: 'check_circle',
 };
 
 interface NodeCatalogProps {
@@ -38,8 +39,8 @@ export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
       <div className="flex items-center justify-between px-1">
         <h3 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider">Add Node</h3>
         {onClose && (
-          <button onClick={onClose} className="p-0.5 text-outline-variant hover:text-on-surface-variant">
-            <X className="w-3 h-3" />
+          <button onClick={onClose} className="flex items-center gap-1 p-0.5 text-outline-variant hover:text-on-surface-variant">
+            <Icon name="close" className="text-xs" /> Close
           </button>
         )}
       </div>
@@ -51,17 +52,18 @@ export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
             <p className="text-[9px] uppercase tracking-wider text-outline-variant mb-1 px-1">{CATEGORY_LABELS[cat]}</p>
             <div className="flex flex-wrap gap-1">
               {items.map((entry) => {
-                const Icon = NODE_ICONS[entry.type] || Puzzle;
+                const iconName = NODE_ICONS[entry.type] || 'extension';
                 return (
-                  <button
-                    key={entry.type}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors text-xs text-on-surface-variant font-medium"
-                    onClick={() => onAddNode(entry.type, entry.defaultConfig)}
-                    title={entry.description}
-                  >
-                    <Icon className="w-3.5 h-3.5 text-on-surface-variant" />
-                    {entry.label}
-                  </button>
+                  <Tooltip content={entry.description}>
+                    <button
+                      key={entry.type}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors text-xs text-on-surface-variant font-medium"
+                      onClick={() => onAddNode(entry.type, entry.defaultConfig)}
+                    >
+                      <Icon name={iconName} className="text-sm text-on-surface-variant" />
+                      {entry.label}
+                    </button>
+                  </Tooltip>
                 );
               })}
             </div>

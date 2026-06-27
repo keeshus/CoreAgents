@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ThumbsUp, AlertTriangle, User, LogOut } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
 import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -36,11 +38,8 @@ export default function ApprovalsPage() {
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [acting, setActing] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
-  const editingRef = useRef(false);
 
   const fetchPending = useCallback(async () => {
-    // Skip refresh while user is typing in a feedback field
-    if (editingRef.current) return;
     setLoading(true);
     setError('');
     try {
@@ -109,106 +108,128 @@ export default function ApprovalsPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+      <div className="min-h-screen bg-surface-container flex items-center justify-center">
+            <Icon name="sync" className="text-2xl text-on-surface-variant animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto p-6">
+    <div className="min-h-screen bg-surface-container">
+      <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center gap-3 mb-6">
           {!isReader && (
-            <Link href="/" className="text-gray-400 hover:text-gray-600">
-              <ArrowLeft className="w-4 h-4" />
+            <Link href="/" className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant">
+              <Icon name="arrow_back" className="text-base" /> Back
             </Link>
           )}
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
-            <p className="text-sm text-gray-500 mt-1">Review and respond to Human-in-the-Loop requests</p>
+            <h1 className="text-2xl font-bold text-on-surface">Pending Approvals</h1>
+            <p className="text-sm text-on-surface-variant mt-1">Review and respond to Human-in-the-Loop requests</p>
           </div>
           <div className="flex items-center gap-2">
             {user && (
               <>
-                <span className="text-xs text-gray-500 mr-1">{user.name}</span>
-                <Link href="/profile" className="p-2 text-gray-400 hover:text-gray-600 transition-colors" title="Profile">
-                  <User className="w-5 h-5" />
-                </Link>
-                <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-600 transition-colors" title="Sign Out">
-                  <LogOut className="w-5 h-5" />
-                </button>
+                <span className="text-xs text-on-surface-variant mr-1">{user.name}</span>
+                <Tooltip content="Profile">
+                  <Link href="/profile" className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors">
+                    <Icon name="person" className="text-xl" /> Profile
+                  </Link>
+                </Tooltip>
+                <Tooltip content="Sign Out">
+                  <button onClick={handleLogout} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors">
+                    <Icon name="logout" className="text-xl" /> Sign Out
+                  </button>
+                </Tooltip>
               </>
             )}
           </div>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+          <div className="bg-error-container border border-red-200 text-error text-sm rounded p-3 mb-4 flex items-center gap-2">
+            <Icon name="warning" className="text-base shrink-0" /> {error}
           </div>
         )}
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+        <Icon name="sync" className="text-2xl text-on-surface-variant animate-spin" />
           </div>
         ) : execs.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border">
-            <ThumbsUp className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">All caught up!</p>
-            <p className="text-xs text-gray-400 mt-1">No pending approvals</p>
+          <div className="text-center py-16 bg-surface rounded-xl border">
+            <Icon name="thumb_up" className="text-5xl text-outline-variant mx-auto mb-3" />
+            <p className="text-on-surface-variant font-medium">All caught up!</p>
+            <p className="text-xs text-on-surface-variant mt-1">No pending approvals</p>
           </div>
         ) : (
           <div className="space-y-4">
             {execs.map(exec => {
-              const buttons = exec.output?._hitlButtons || [{ label: 'Approve', value: 'approved' }];
-              const prompt = exec.output?._hitlPrompt || '';
+              const pendingHitls: any[] = exec.pending_hitls || [];
+              const hitl = pendingHitls[0] || {};
+              const buttons = hitl.buttons || exec.output?._hitlButtons || [{ label: 'Approve', value: 'approved' }];
+              const prompt = hitl.prompt || exec.output?._hitlPrompt || '';
               const allowFeedback = exec.output?._hitlAllowFeedback !== false;
               const isActing = acting[exec.id];
+              const isMulti = hitl.assignmentType === 'multi';
+              const approvals: Array<{ userId: string; decision: string }> = hitl.approvals || [];
+              const approvedCount = approvals.filter(a => a.decision === 'approved').length;
+              const required = hitl.requiredApprovals || 1;
 
               return (
-                <div key={exec.id} className="bg-white rounded-xl border p-5">
+                <div key={exec.id} className="bg-surface rounded-xl border p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-amber-500" />
-                      <span className="text-sm font-semibold text-gray-900">{exec.flow_name || 'Flow'}</span>
-                      <span className="text-[10px] text-gray-400 font-mono">{exec.id?.slice(0, 8)}</span>
+                      <Icon name="schedule" className="text-base text-amber-500" />
+                      <span className="text-sm font-semibold text-on-surface">{exec.flow_name || 'Flow'}</span>
+                      <span className="text-[10px] text-on-surface-variant font-mono">{exec.id?.slice(0, 8)}</span>
                     </div>
-                    <span className="text-[10px] text-gray-400">{new Date(exec.created_at).toLocaleString()}</span>
+                    <span className="text-[10px] text-on-surface-variant">{new Date(exec.created_at).toLocaleString()}</span>
                   </div>
 
+                  {isMulti && (
+                    <div className="mb-3 flex items-center gap-2 text-xs">
+                      <span className="text-on-surface-variant">Approvals:</span>
+                      <div className="flex gap-1">
+                        {Array.from({ length: required }).map((_, i) => (
+                          <span key={i} className={`w-3 h-3 rounded-full ${i < approvedCount ? 'bg-success' : 'bg-outline-variant'}`} />
+                        ))}
+                      </div>
+                      <span className="text-on-surface-variant">{approvedCount}/{required} required</span>
+                    </div>
+                  )}
+
                   {prompt && (
-                    <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm max-h-48 overflow-y-auto prose prose-sm max-w-none">
+                    <div className="mb-3 p-3 bg-secondary-container border border-secondary rounded-lg text-sm max-h-48 overflow-y-auto prose prose-sm max-w-none">
                       <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{prompt}</ReactMarkdown>
                     </div>
                   )}
 
                   {allowFeedback && (
-                    <textarea
-                      value={feedback[exec.id] || ''}
-                      onChange={e => setFeedback(prev => ({ ...prev, [exec.id]: e.target.value }))}
-                      onFocus={() => { editingRef.current = true; }}
-                      onBlur={() => { editingRef.current = false; }}
-                      placeholder="Optional feedback..."
-                      rows={2}
-                      className="w-full mb-3 text-xs border border-gray-300 rounded p-2 resize-none"
-                    />
+                      <TextField
+                        label="Feedback"
+                        value={feedback[exec.id] || ''}
+                        onChange={(v) => setFeedback(prev => ({ ...prev, [exec.id]: v }))}
+                        multiline
+                        rows={2}
+                        className="w-full mb-3"
+                      />
                   )}
 
                   <div className="flex items-center gap-2 justify-end">
                     {buttons.map((btn: any) => (
                       <button
                         key={btn.value}
-                        onClick={() => handleAction(exec.id, btn.value, exec.output?._hitlNodeId)}
+                        onClick={() => handleAction(exec.id, btn.value, hitl.nodeId)}
                         disabled={isActing}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium disabled:opacity-50 ${
+                        className={`m3-button-tonal disabled:opacity-50 flex items-center gap-1 ${
                           btn.value === 'approved'
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            ? '!bg-success-container !text-success'
+                            : ''
                         }`}
                       >
-                        <CheckCircle className="w-3 h-3" /> {btn.label}
+                        {btn.icon ? <Icon name={btn.icon} className="text-xs" /> : <Icon name="check_circle" className="text-xs" />}
+                        {btn.label}
                       </button>
                     ))}
                   </div>

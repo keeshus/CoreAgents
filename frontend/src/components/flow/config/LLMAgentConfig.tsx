@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
+import { TextField } from '@/components/ui/TextField';
+import { SelectField } from '@/components/ui/SelectField';
 import { TemplateAutocomplete } from './TemplateAutocomplete';
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -42,54 +44,48 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
 
   return (
     <div className="space-y-3">
-      <label className="block">
-        <span className="text-xs font-medium text-gray-700">LLM Endpoint</span>
-        <select
-          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
+      <div>
+        <SelectField
+          label="LLM Endpoint"
           value={config.endpointId}
-          onChange={(e) => handleEndpointChange(e.target.value)}
-        >
-          <option value="">Select endpoint...</option>
-          {endpoints.map((ep: any) => (
-            <option key={ep.id} value={ep.id}>
-              {ep.name} ({PROVIDER_LABELS[ep.provider_type] || ep.provider_type})
-            </option>
-          ))}
-        </select>
+          onChange={(v) => handleEndpointChange(v)}
+          options={[
+            { value: '', label: 'Select endpoint...' },
+            ...endpoints.map((ep: any) => ({ value: ep.id, label: `${ep.name} (${PROVIDER_LABELS[ep.provider_type] || ep.provider_type})` })),
+          ]}
+        />
         {selectedEndpoint && (
-          <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+          <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-primary-container text-primary">
             {PROVIDER_LABELS[selectedEndpoint.provider_type]}
           </span>
         )}
-      </label>
+      </div>
 
       {selectedEndpoint && (
-        <label className="block">
-          <span className="text-xs font-medium text-gray-700">Model</span>
+        <div>
           {selectedEndpoint.models?.length > 0 ? (
-            <select
-              className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
+            <SelectField
+              label="Model"
               value={config.model}
-              onChange={(e) => onChange({ ...config, model: e.target.value })}
-            >
-              <option value="">Select model...</option>
-              {selectedEndpoint.models.map((m: string) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
+              onChange={(v) => onChange({ ...config, model: v })}
+              options={[
+                { value: '', label: 'Select model...' },
+                ...selectedEndpoint.models.map((m: string) => ({ value: m, label: m })),
+              ]}
+            />
           ) : (
-            <input
-              className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
+            <TextField
+              label="Model"
               value={config.model}
-              onChange={(e) => onChange({ ...config, model: e.target.value })}
+              onChange={(v) => onChange({ ...config, model: v })}
               placeholder="e.g. claude-sonnet-4-20250514"
             />
           )}
-        </label>
+        </div>
       )}
 
       <label className="block">
-        <span className="text-xs font-medium text-gray-700">System Prompt</span>
+        <span className="text-xs font-medium text-on-surface-variant">System Prompt</span>
         <TemplateAutocomplete
           value={config.systemPrompt}
           onChange={(v) => onChange({ ...config, systemPrompt: v })}
@@ -100,12 +96,12 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
           edges={suggestions?.edges || []}
           selectedFields={(config as any).inputFields}
         />
-        <p className="mt-1 text-[10px] text-gray-400">Use {'{{'}input.Label.field{'}}'} to reference upstream data.</p>
+        <p className="mt-1 text-[10px] text-on-surface-variant">Use {'{{'}input.Label.field{'}}'} to reference upstream data.</p>
       </label>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
-          <span className="text-xs font-medium text-gray-700">Temperature: {config.temperature}</span>
+          <span className="text-xs font-medium text-on-surface-variant">Temperature: {config.temperature}</span>
           <input
             type="range"
             min="0"
@@ -118,53 +114,39 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
             }
           />
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-gray-700">Max Tokens</span>
-          <input
-            type="number"
-            className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-            value={config.maxTokens}
-            onChange={(e) =>
-              onChange({ ...config, maxTokens: parseInt(e.target.value) || 4096 })
-            }
-            min={1}
-            max={200000}
-          />
-        </label>
+        <TextField
+          label="Max Tokens"
+          type="number"
+          value={String(config.maxTokens)}
+          onChange={(v) => onChange({ ...config, maxTokens: parseInt(v) || 4096 })}
+        />
       </div>
 
-      <label className="block">
-        <span className="text-xs font-medium text-gray-700">Response Format</span>
-        <select
-          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-          value={config.responseFormat || 'text'}
-          onChange={(e) => onChange({ ...config, responseFormat: e.target.value })}
-        >
-          <option value="text">Plain Text</option>
-          <option value="json_object">JSON</option>
-        </select>
-      </label>
+      <SelectField
+        label="Response Format"
+        value={config.responseFormat || 'text'}
+        onChange={(v) => onChange({ ...config, responseFormat: v })}
+        options={[
+          { value: 'text', label: 'Plain Text' },
+          { value: 'json_object', label: 'JSON' },
+        ]}
+      />
 
       {config.responseFormat === 'json_object' && (
-        <label className="block">
-          <span className="text-xs font-medium text-gray-700">
-            JSON Schema <span className="text-gray-400">(optional)</span>
+        <div>
+          <span className="text-xs font-medium text-on-surface-variant block mb-1">
+            JSON Schema <span className="text-on-surface-variant">(optional)</span>
           </span>
-          <textarea
-            className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y min-h-[60px] font-mono"
+          <TextField
+            label=""
             value={config.outputSchema || ''}
-            onChange={(e) => onChange({ ...config, outputSchema: e.target.value })}
+            onChange={(v) => onChange({ ...config, outputSchema: v })}
             placeholder='{"type":"object","properties":{"summary":{"type":"string"},"sentiment":{"type":"string"}},"required":["summary","sentiment"]}'
+            multiline
             rows={3}
           />
-          <p className="mt-1 text-[10px] text-gray-400">Describes the expected JSON structure in the system prompt. Not all providers support strict schema enforcement.</p>
-          {config.outputSchema && selectedEndpoint?.provider_type === 'openai' && (
-            <p className="mt-1 text-[10px] text-amber-600">Note: OpenAI is the only provider that supports strict json_schema. Other providers will receive the schema as part of the prompt instead.</p>
-          )}
-          {config.outputSchema && selectedEndpoint?.provider_type !== 'openai' && selectedEndpoint && (
-            <p className="mt-1 text-[10px] text-amber-600">This provider doesn't support strict json_schema. The schema will be included in the system prompt as guidance, but the API won't enforce it.</p>
-          )}
-        </label>
+          <p className="mt-1 text-[10px] text-on-surface-variant">Describes the expected JSON structure. Used as guidance in the system prompt — tool-calling ensures the output matches the schema across all providers.</p>
+        </div>
       )}
     </div>
   );

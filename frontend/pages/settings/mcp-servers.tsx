@@ -1,18 +1,10 @@
 import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  Server,
-  Plus,
-  Trash2,
-  Edit3,
-  RefreshCw,
-  ChevronDown,
-  ChevronRight,
-  ArrowLeft,
-  AlertCircle,
-} from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
 import { api } from '@/lib/api-client';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface FormState {
   name: string;
@@ -133,25 +125,25 @@ export default function MCPServersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <Link href="/settings" className="text-gray-400 hover:text-gray-600">
-            <ArrowLeft className="w-4 h-4" />
+          <Link href="/settings" className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant">
+            <Icon name="arrow_back" className="text-base" /> Back
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900">MCP Servers</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <h1 className="text-2xl font-bold text-on-surface">MCP Servers</h1>
+            <p className="text-sm text-on-surface-variant mt-1">
               Configure Model Context Protocol servers and their available tools
             </p>
           </div>
           {!showForm && (
             <button
               onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="m3-button gap-2"
             >
-              <Plus className="w-4 h-4" />
+              <Icon name="add" className="text-base" />
               Add Server
             </button>
           )}
@@ -159,8 +151,8 @@ export default function MCPServersPage() {
 
         {/* Error banner */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <div className="mb-4 p-3 bg-error-container border border-red-200 rounded-lg flex items-center gap-2 text-sm text-error">
+            <Icon name="error" className="text-base flex-shrink-0" />
             {error}
           </div>
         )}
@@ -169,58 +161,46 @@ export default function MCPServersPage() {
         {showForm && (
           <form
             onSubmit={handleSubmit}
-            className="mb-6 bg-white rounded-lg border p-5 space-y-4"
+            className="mb-6 bg-surface rounded-lg border border-outline-variant p-5 space-y-4"
           >
-            <h2 className="text-base font-semibold text-gray-900">
+            <h2 className="text-base font-semibold text-on-surface">
               {editingId ? 'Edit MCP Server' : 'New MCP Server'}
             </h2>
 
-            <label className="block">
-              <span className="text-xs font-medium text-gray-700">Name</span>
-              <input
-                type="text"
-                required
-                className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="My File System Server"
-              />
-            </label>
+            <TextField
+              label="Name"
+              value={form.name}
+              onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+            />
 
-            <label className="block">
-              <span className="text-xs font-medium text-gray-700">URL</span>
-              <input
-                type="text"
-                required
-                className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                value={form.url}
-                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                placeholder="http://localhost:3002"
-              />
-            </label>
+            <TextField
+              label="URL"
+              value={form.url}
+              onChange={(v) => setForm((f) => ({ ...f, url: v }))}
+            />
 
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                className="w-4 h-4 rounded border-outline text-primary"
                 checked={form.enabled}
                 onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
               />
-              <span className="text-sm font-medium text-gray-700">Enabled</span>
+              <span className="text-sm font-medium text-on-surface-variant">Enabled</span>
             </label>
 
             <div className="flex items-center gap-2 justify-end">
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-on-surface-variant bg-surface border border-outline rounded-lg hover:bg-surface-container-high transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? 'Saving...' : editingId ? 'Update Server' : 'Create Server'}
               </button>
@@ -230,17 +210,17 @@ export default function MCPServersPage() {
 
         {/* Loading state */}
         {loading && (
-          <div className="text-center py-12 text-gray-400 text-sm">
+          <div className="text-center py-12 text-on-surface-variant text-sm">
             Loading MCP servers...
           </div>
         )}
 
         {/* Empty state */}
         {!loading && !error && servers.length === 0 && (
-          <div className="text-center py-16 bg-white rounded-lg border">
-            <Server className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">No MCP servers configured</p>
-            <p className="text-gray-400 text-sm mt-1">
+          <div className="text-center py-16 bg-surface rounded-lg border border-outline-variant">
+            <Icon name="dns" className="text-4xl text-on-surface-variant mx-auto mb-3" />
+            <p className="text-on-surface-variant font-medium">No MCP servers configured</p>
+            <p className="text-on-surface-variant text-sm mt-1">
               Add an MCP server to connect external tools
             </p>
           </div>
@@ -250,29 +230,29 @@ export default function MCPServersPage() {
         {!loading && servers.length > 0 && (
           <div className="space-y-2">
             {servers.map((srv) => (
-              <div key={srv.id} className="bg-white rounded-lg border">
+              <div key={srv.id} className="bg-surface rounded-lg border border-outline-variant">
                 {/* Server header row */}
                 <div className="p-4 flex items-start gap-4">
-                  <div className="p-2 bg-gray-50 rounded-lg">
-                    <Server className="w-5 h-5 text-gray-500" />
+                  <div className="p-2 bg-surface-container rounded-lg">
+                    <Icon name="dns" className="text-xl text-on-surface-variant" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-medium text-gray-900">{srv.name}</h3>
+                      <h3 className="font-medium text-on-surface">{srv.name}</h3>
                       <span
                         className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                           srv.enabled
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-500'
+                            ? 'bg-success-container text-success'
+                            : 'bg-surface-container-high text-on-surface-variant'
                         }`}
                       >
                         {srv.enabled ? 'Enabled' : 'Disabled'}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-500 mt-1 font-mono text-ellipsis overflow-hidden">
+                    <p className="text-sm text-on-surface-variant mt-1 font-mono text-ellipsis overflow-hidden">
                       {srv.url}
                     </p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                    <div className="flex items-center gap-3 mt-1 text-xs text-on-surface-variant">
                       <span>
                         {srv.tools.length} tool{srv.tools.length !== 1 ? 's' : ''}
                       </span>
@@ -280,64 +260,69 @@ export default function MCPServersPage() {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {srv.tools.length > 0 && (
-                      <button
-                        onClick={() => toggleExpand(srv.id)}
-                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"
-                        title={expandedId === srv.id ? 'Collapse tools' : 'Expand tools'}
-                      >
-                        {expandedId === srv.id ? (
-                          <ChevronDown className="w-4 h-4" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4" />
-                        )}
-                      </button>
+                      <Tooltip content={expandedId === srv.id ? 'Collapse tools' : 'Expand tools'}>
+                        <button
+                          onClick={() => toggleExpand(srv.id)}
+                          className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-on-surface-variant hover:bg-surface-container-high rounded transition-colors"
+                        >
+                          {expandedId === srv.id ? (
+                            <Icon name="expand_more" className="text-base" />
+                          ) : (
+                            <Icon name="chevron_right" className="text-base" />
+                          )} {srv.tools.length} tools
+                        </button>
+                      </Tooltip>
                     )}
-                    <button
-                      onClick={() => handleRefresh(srv.id)}
-                      disabled={refreshing === srv.id}
-                      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
-                      title="Refresh tools"
-                    >
-                      <RefreshCw
-                        className={`w-4 h-4 ${refreshing === srv.id ? 'animate-spin' : ''}`}
-                      />
-                    </button>
-                    <button
-                      onClick={() => handleEdit(srv)}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                      title="Edit server"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(srv.id)}
-                      disabled={deleting === srv.id}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                      title="Delete server"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <Tooltip content="Refresh tools">
+                      <button
+                        onClick={() => handleRefresh(srv.id)}
+                        disabled={refreshing === srv.id}
+                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-green-600 hover:bg-success-container rounded transition-colors disabled:opacity-50"
+                      >
+                        <Icon
+                          name="refresh"
+                          className={`text-base ${refreshing === srv.id ? 'animate-spin' : ''}`}
+                        /> Refresh
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Edit server">
+                      <button
+                        onClick={() => handleEdit(srv)}
+                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-primary-container rounded transition-colors"
+                      >
+                        <Icon name="edit" className="text-base" /> Edit
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Delete server">
+                      <button
+                        onClick={() => handleDelete(srv.id)}
+                        disabled={deleting === srv.id}
+                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors disabled:opacity-50"
+                      >
+                        <Icon name="delete" className="text-base" /> Delete
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
 
                 {/* Expandable tools list */}
                 {expandedId === srv.id && srv.tools.length > 0 && (
-                  <div className="border-t bg-gray-50 rounded-b-lg">
+                  <div className="border-t bg-surface-container rounded-b-lg">
                     <div className="px-4 py-2">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                      <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2">
                         Available Tools
                       </p>
                       <div className="space-y-1">
                         {srv.tools.map((tool: any) => (
                           <div
                             key={tool.name}
-                            className="bg-white rounded border px-3 py-2"
+                            className="bg-surface rounded border border-outline-variant px-3 py-2"
                           >
-                            <p className="text-sm font-medium text-gray-900">
+                            <p className="text-sm font-medium text-on-surface">
                               {tool.name}
                             </p>
                             {tool.description && (
-                              <p className="text-xs text-gray-500 mt-0.5">
+                              <p className="text-xs text-on-surface-variant mt-0.5">
                                 {tool.description}
                               </p>
                             )}

@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 
 interface LoadingSpinnerProps {
   className?: string;
@@ -7,7 +7,7 @@ interface LoadingSpinnerProps {
 export function LoadingSpinner({ className = '' }: LoadingSpinnerProps) {
   return (
     <div className={`flex items-center justify-center py-16 ${className}`}>
-      <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+      <Icon name="sync" className="text-2xl text-gray-400 animate-spin" />
     </div>
   );
 }

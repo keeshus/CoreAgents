@@ -3,6 +3,8 @@ import { useRouter } from 'next/router';
 import { useAuth, useAuthConfig } from '@/lib/auth-context';
 import { API_URL } from '@/lib/api-client';
 import Link from 'next/link';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,21 +41,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-surface-container flex items-center justify-center">
       <div className="max-w-md w-full mx-4">
-        <div className="bg-white rounded-xl shadow-sm border p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Sign In</h1>
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
+        <div className="bg-surface rounded-xl shadow-sm border p-8">
+          <h1 className="text-2xl font-bold text-on-surface mb-6">Sign In</h1>
+          {error && <div className="bg-error-container border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
 
           {hasSso && (
             <>
               <a
                 href={`${API_URL}/auth/sso/login`}
-                className="flex items-center justify-center gap-2 w-full border-2 border-gray-300 text-gray-700 rounded p-2.5 text-sm font-medium hover:bg-gray-50 hover:border-gray-400 transition-colors mb-4"
+                className="flex items-center justify-center gap-2 w-full border-2 border-outline text-on-surface-variant rounded p-2.5 text-sm font-medium hover:bg-surface-container-high hover:border-outline transition-colors mb-4"
               >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13 12H3" />
-                </svg>
+                <Icon name="login" className="text-xl" />
                 Sign in with {ssoName}
               </a>
             </>
@@ -61,27 +61,25 @@ export default function LoginPage() {
 
           {hasSso && (
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 border-t border-gray-200" />
-              <span className="text-xs text-gray-400">or</span>
-              <div className="flex-1 border-t border-gray-200" />
+              <div className="flex-1 border-t border-outline-variant" />
+              <span className="text-xs text-on-surface-variant">or</span>
+              <div className="flex-1 border-t border-outline-variant" />
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" required />
+              <TextField label="Email" type="email" value={email} onChange={setEmail} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" required />
+              <TextField label="Password" type="password" value={password} onChange={setPassword} />
             </div>
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white rounded p-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="w-full m3-button disabled:opacity-50">
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-          <p className="text-xs text-gray-500 mt-4 text-center">
-            Don&apos;t have an account? <Link href="/register" className="text-blue-600 hover:underline">Register</Link>
+          <p className="text-xs text-on-surface-variant mt-4 text-center">
+            Don&apos;t have an account? <Link href="/register" className="text-primary hover:underline">Register</Link>
           </p>
         </div>
       </div>

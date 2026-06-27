@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 
 export interface PwCheck {
   label: string;
@@ -35,7 +35,7 @@ export function PasswordStrengthMeter({ password }: { password: string }) {
       <div className="space-y-0.5">
         {pw.checks.map((c, i) => (
           <p key={i} className={`text-[10px] flex items-center gap-1 ${c.met ? 'text-green-600' : 'text-gray-400'}`}>
-            {c.met ? <CheckCircle className="w-2.5 h-2.5 shrink-0" /> : <XCircle className="w-2.5 h-2.5 shrink-0" />}
+            {c.met ? <Icon name="check_circle" className="text-[10px] shrink-0" /> : <Icon name="cancel" className="text-[10px] shrink-0" />}
             {c.label}
           </p>
         ))}

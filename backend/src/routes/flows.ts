@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { eq, asc, desc, sql } from 'drizzle-orm';
+import { eq, and, asc, desc, sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions, userAssignments } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -26,6 +26,23 @@ router.get(
     const [result, countResult] = await Promise.all([dataPromise, countPromise]);
     const sortParam = (req.query.sort as string) === 'created_at' ? 'created_at' : 'updated_at';
     res.json({ data: result, total: Number(countResult[0].count), limit, offset, search: search || undefined, sort: sortParam });
+  }),
+);
+
+// GET /api/flows/check-name — check if a flow name is already taken
+router.get(
+  '/check-name',
+  asyncHandler(async (req, res) => {
+    const name = req.query.name as string;
+    const excludeId = req.query.exclude as string | undefined;
+    if (!name || !name.trim()) {
+      res.json({ available: false });
+      return;
+    }
+    const conditions = [sql`LOWER(${flows.name}) = LOWER(${name.trim()})`];
+    if (excludeId) conditions.push(sql`${flows.id} != ${excludeId}`);
+    const result = await db.select({ id: flows.id }).from(flows).where(and(...conditions)).limit(1);
+    res.json({ available: result.length === 0 });
   }),
 );
 

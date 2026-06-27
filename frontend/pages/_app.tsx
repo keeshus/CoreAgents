@@ -6,16 +6,23 @@ import { AssistantProvider } from '@/components/assistant/AssistantContext';
 import { AssistantPanel } from '@/components/assistant/AssistantPanel';
 import { AssistantButton } from '@/components/assistant/AssistantButton';
 import { ThemeProvider, useTheme } from '@/hooks/useTheme';
-import { Sun, Moon } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { Tooltip, TooltipProvider } from '@/components/ui/Tooltip';
+import Head from 'next/head';
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <ThemeProvider>
       <AuthProvider>
         <AssistantProvider>
-          <Component {...pageProps} />
-          <AssistantGate />
-          <ThemeToggleFloating />
+          <Head>
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+          </Head>
+          <TooltipProvider>
+            <Component {...pageProps} />
+            <AssistantGate />
+            <ThemeToggleFloating />
+          </TooltipProvider>
         </AssistantProvider>
       </AuthProvider>
     </ThemeProvider>
@@ -38,12 +45,13 @@ function ThemeToggleFloating() {
   const { pathname } = useRouter();
   if (pathname?.includes('/flows/') && pathname?.endsWith('/edit')) return null;
   return (
-    <button
-      onClick={toggle}
-      className="fixed bottom-6 left-6 z-50 w-10 h-10 rounded-full bg-surface shadow-m3-2 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
-      title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-    >
-      {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-    </button>
+    <Tooltip content={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+      <button
+        onClick={toggle}
+        className="fixed bottom-6 left-6 z-50 w-10 h-10 rounded-full bg-surface shadow-m3-2 flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
+      >
+        {theme === 'light' ? <Icon name="dark_mode" className="text-lg" /> : <Icon name="light_mode" className="text-lg" />}
+      </button>
+    </Tooltip>
   );
 }

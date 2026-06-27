@@ -325,11 +325,55 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
   if (exec.status !== 'awaiting_approval') { res.status(400).json({ error: 'Not awaiting approval' }); return; }
 
   // Find the hitlNodeId — use provided one or fall back to first pending
-  const pendingHitls = (exec.pending_hitls || []) as Array<{ nodeId: string; prompt: string; buttons: Array<{ label: string; value: string }>; savedOutputs: Record<string, unknown> }>;
+  const pendingHitls = (exec.pending_hitls || []) as any[];
   const hitlEntry = hitlNodeId
     ? pendingHitls.find((h: any) => h.nodeId === hitlNodeId)
     : pendingHitls[0];
   if (!hitlEntry) { res.status(400).json({ error: 'No pending HITL found' }); return; }
+
+  // ── Multi-approver logic ──────────────────────────────────────────────────
+  if (hitlEntry.assignmentType === 'multi') {
+    const userId = req.user!.userId;
+    const currentApprovals: Array<{ userId: string; decision: string; feedback: string }> = hitlEntry.approvals || [];
+
+    // Check if user already voted
+    const existing = currentApprovals.find(a => a.userId === userId);
+    if (existing) {
+      res.status(400).json({ error: 'You have already responded to this request' });
+      return;
+    }
+
+    currentApprovals.push({ userId, decision, feedback });
+
+    if (decision === 'rejected') {
+      // Immediate rejection
+      hitlEntry.approvals = currentApprovals;
+      await db.update(executions).set({
+        status: 'cancelled',
+        error: `Rejected by user ${userId}`,
+        pending_hitls: JSON.stringify(pendingHitls) as any,
+        completed_at: new Date(),
+      }).where(eq(executions.id, exec.id));
+      res.json({ status: 'rejected', executionId: exec.id });
+      return;
+    }
+
+    // Count unique approving users
+    const approvedCount = currentApprovals.filter(a => a.decision === 'approved').length;
+    const required = hitlEntry.requiredApprovals || 1;
+
+    if (approvedCount < required) {
+      // Not enough approvals yet — update pending_hitls with the new approval
+      hitlEntry.approvals = currentApprovals;
+      const otherPending = pendingHitls.filter((h: any) => h.nodeId !== hitlEntry.nodeId);
+      await db.update(executions).set({
+        pending_hitls: JSON.stringify([...otherPending, hitlEntry]) as any,
+      }).where(eq(executions.id, exec.id));
+      res.json({ status: 'pending', message: `Approval recorded (${approvedCount}/${required} required)`, executionId: exec.id });
+      return;
+    }
+    // Enough approvals — fall through to resume the flow
+  }
 
   // Use the flow snapshot from when execution started, not the current flow definition
   const snapshot = (exec.output as any)?._flowSnapshot;

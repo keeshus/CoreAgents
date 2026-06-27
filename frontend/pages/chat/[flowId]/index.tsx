@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus, MessageCircle, Trash2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -34,50 +34,50 @@ export default function ChatSessionList() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-container">
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Link href="/flows" className="text-gray-400 hover:text-gray-600">
-            <ArrowLeft className="w-4 h-4" />
+          <Link href="/flows" className="text-on-surface-variant hover:text-on-surface-variant">
+            <Icon name="arrow_back" className="text-base" />
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900">Chat Sessions</h1>
-            <p className="text-sm text-gray-500">Conversations with this agent</p>
+            <h1 className="text-2xl font-bold text-on-surface">Chat Sessions</h1>
+            <p className="text-sm text-on-surface-variant">Conversations with this agent</p>
           </div>
           <button
             onClick={startNewChat}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
+            className="m3-button gap-2"
           >
-            <Plus className="w-4 h-4" /> New Chat
+            <Icon name="add" className="text-base" /> New Chat
           </button>
         </div>
         {loading ? (
-          <p className="text-gray-500 text-sm">Loading...</p>
+          <p className="text-on-surface-variant text-sm">Loading...</p>
         ) : sessions.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border">
-            <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-400 mb-3">No conversations yet</p>
-            <button onClick={startNewChat} className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+          <div className="text-center py-16 bg-surface rounded-xl border border-outline-variant">
+            <Icon name="chat" className="text-5xl text-outline-variant mx-auto mb-3" />
+            <p className="text-on-surface-variant mb-3">No conversations yet</p>
+            <button onClick={startNewChat} className="text-primary hover:text-primary text-sm font-medium">
               Start a new chat
             </button>
           </div>
         ) : (
           <div className="space-y-2">
             {sessions.map(s => (
-              <div key={s.id} className="bg-white rounded-lg border p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
+              <div key={s.id} className="bg-surface rounded-lg border border-outline-variant p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
                 <Link href={`/chat/${flowId}/${s.id}`} className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 hover:text-blue-600 truncate">
+                  <p className="font-medium text-on-surface hover:text-primary truncate">
                     {s.title || 'Untitled Chat'}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-on-surface-variant mt-1">
                     {new Date(s.updated_at).toLocaleString()}
                   </p>
                 </Link>
                 <button
                   onClick={() => deleteSession(s.id)}
-                  className="p-2 text-gray-400 hover:text-red-600 transition-colors shrink-0"
+                  className="p-2 text-on-surface-variant hover:text-error transition-colors shrink-0"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Icon name="delete" className="text-base" />
                 </button>
               </div>
             ))}

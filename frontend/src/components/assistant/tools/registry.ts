@@ -171,7 +171,7 @@ const getAvailableNodes: AssistantTool = {
   description: 'List all node types available in the node catalog for adding to the flow.',
   inputSchema: { type: 'object', properties: {} },
   async execute() {
-    return 'Available node types: llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval), stop (terminates), output (returns result), parallel (concurrent branches). Click the + button on the left to open the catalog, then select a node type. The trigger node is pre-added and cannot be removed.';
+    return 'Available node types: llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval — simple approve/reject or multi-approver), stop (terminates), output (returns result), parallel (concurrent branches). Click the + button on the left to open the catalog, then select a node type. The trigger node is pre-added and cannot be removed.';
   },
 };
 
@@ -235,23 +235,24 @@ const updateFlow: AssistantTool = {
     if (description !== undefined) flow.description = description;
     await apiFetch(`/flows/${match[1]}`, { method: 'PUT', body: JSON.stringify(flow) });
     // Update name input in DOM
-    if (name) {
-      const nameInput = document.querySelector('input[placeholder="Flow name"]') as HTMLInputElement;
-      if (nameInput) {
-        const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(nameInput), 'value')?.set;
-        nativeSetter?.call(nameInput, name);
-        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+    const topbar = document.querySelector('.fixed.inset-x-0.top-3');
+    if (name && topbar) {
+      const inputs = topbar.querySelectorAll('input');
+      if (inputs[0]) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(inputs[0]), 'value')?.set;
+        nativeSetter?.call(inputs[0], name);
+        inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+        inputs[0].dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
     // Update description input in DOM
-    if (description !== undefined) {
-      const descInput = document.querySelector('input[placeholder="Add a description..."]') as HTMLInputElement;
-      if (descInput) {
-        const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(descInput), 'value')?.set;
-        nativeSetter?.call(descInput, description);
-        descInput.dispatchEvent(new Event('input', { bubbles: true }));
-        descInput.dispatchEvent(new Event('change', { bubbles: true }));
+    if (description !== undefined && topbar) {
+      const inputs = topbar.querySelectorAll('input');
+      if (inputs[1]) {
+        const nativeSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(inputs[1]), 'value')?.set;
+        nativeSetter?.call(inputs[1], description);
+        inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+        inputs[1].dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
     return `Flow updated${name ? `: name → "${name}"` : ''}${description ? `: description → "${description}"` : ''}.`;
@@ -264,7 +265,7 @@ const addNode: AssistantTool = {
   inputSchema: {
     type: 'object',
     properties: {
-      type: { type: 'string', enum: ['llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'stop'] },
+      type: { type: 'string', enum: ['llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'stop', 'parallel'] },
     },
     required: ['type'],
   },
@@ -369,7 +370,7 @@ const closeNodeConfig: AssistantTool = {
   inputSchema: { type: 'object', properties: {} },
   async execute() {
     // Try clicking the close/X button in the modal
-    const closeBtn = document.querySelector('.fixed.inset-0.z-50 button[aria-label="Close"], .fixed.inset-0.z-50 svg.lucide-x, .fixed.inset-0.z-50 .lucide-x')?.closest('button');
+    const closeBtn = document.querySelector('.fixed.inset-0.z-50 button[aria-label="Close"], .fixed.inset-0.z-50 .material-symbols-outlined')?.closest('button');
     if (closeBtn) {
       (closeBtn as HTMLElement).click();
       return 'Closed the node config panel.';

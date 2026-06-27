@@ -2,8 +2,11 @@ import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, Shield, Loader2, AlertTriangle, Plus, X } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
+import { SelectField } from '@/components/ui/SelectField';
 import { API_URL } from '@/lib/api-client';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface Role {
   id: string;
@@ -113,79 +116,77 @@ export default function UsersSettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto p-6">
+    <div className="min-h-screen bg-surface-container">
+      <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Link href="/settings" className="text-gray-400 hover:text-gray-600">
-            <ArrowLeft className="w-4 h-4" />
+          <Link href="/settings" className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant">
+            <Icon name="arrow_back" className="text-base" /> Back
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-            <p className="text-sm text-gray-500 mt-1">Manage user accounts and roles</p>
+            <h1 className="text-2xl font-bold text-on-surface">Users</h1>
+            <p className="text-sm text-on-surface-variant mt-1">Manage user accounts and roles</p>
           </div>
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">
-            <Plus className="w-3 h-3" /> Create User
+          <button onClick={() => setShowCreate(true)} className="m3-button">
+            <Icon name="add" className="text-xs" /> Create User
           </button>
 
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+          <div className="bg-error-container border border-red-200 text-error text-sm rounded p-3 mb-4 flex items-center gap-2">
+            <Icon name="warning" className="text-base shrink-0" /> {error}
           </div>
         )}
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+            <Icon name="sync" className="text-2xl text-on-surface-variant animate-spin" />
           </div>
         ) : users.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border">
-            <Shield className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">No users</p>
+          <div className="text-center py-16 bg-surface rounded-xl border border-outline-variant">
+            <Icon name="shield" className="text-5xl text-on-surface-variant mx-auto mb-3" />
+            <p className="text-on-surface-variant font-medium">No users</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border overflow-hidden">
+          <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-gray-50">
-                  <th className="text-left p-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Name</th>
-                  <th className="text-left p-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Email</th>
-                  <th className="text-left p-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Role</th>
-                  <th className="text-left p-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Provider</th>
-                  <th className="text-left p-3 font-medium text-gray-500 text-xs uppercase tracking-wider">Last Login</th>
+                <tr className="border-b bg-surface-container">
+                  <th className="text-left p-3 font-medium text-on-surface-variant text-xs uppercase tracking-wider">Name</th>
+                  <th className="text-left p-3 font-medium text-on-surface-variant text-xs uppercase tracking-wider">Email</th>
+                  <th className="text-left p-3 font-medium text-on-surface-variant text-xs uppercase tracking-wider">Role</th>
+                  <th className="text-left p-3 font-medium text-on-surface-variant text-xs uppercase tracking-wider">Provider</th>
+                  <th className="text-left p-3 font-medium text-on-surface-variant text-xs uppercase tracking-wider">Last Login</th>
                   <th className="p-3" />
                 </tr>
               </thead>
               <tbody>
                 {users.map(u => (
-                  <tr key={u.id} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="p-3 font-medium text-gray-900">{u.name}</td>
-                    <td className="p-3 text-gray-600">{u.email}</td>
+                  <tr key={u.id} className="border-b last:border-0 hover:bg-surface-container-high">
+                    <td className="p-3 font-medium text-on-surface">{u.name}</td>
+                    <td className="p-3 text-on-surface-variant">{u.email}</td>
                     <td className="p-3">
-                      <select
+                      <SelectField
+                        label="Role"
                         value={u.role_id || roles[0]?.id || ''}
-                        onChange={e => handleRoleChange(u.id, e.target.value)}
-                        className="text-xs border border-gray-200 rounded px-2 py-1 bg-white"
-                      >
-                        {roles.map(r => (
-                          <option key={r.id} value={r.id}>{r.name}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => handleRoleChange(u.id, v)}
+                        options={roles.map(r => ({ value: r.id, label: r.name }))}
+                      />
                     </td>
-                    <td className="p-3 text-gray-600 capitalize">{u.provider}</td>
-                    <td className="p-3 text-gray-500 text-xs">
+                    <td className="p-3 text-on-surface-variant capitalize">{u.provider}</td>
+                    <td className="p-3 text-on-surface-variant text-xs">
                       {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'never'}
                     </td>
                     <td className="p-3 text-right">
-                      <button
-                        onClick={() => handleDelete(u.id)}
-                        disabled={deleting === u.id}
-                        className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-50 transition-colors"
-                        title="Delete user"
-                      >
-                        {deleting === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                      </button>
+                      <Tooltip content="Delete user">
+                        <button
+                          onClick={() => handleDelete(u.id)}
+                          disabled={deleting === u.id}
+                          className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error disabled:opacity-50 transition-colors"
+                        >
+                          {deleting === u.id ? <Icon name="sync" className="text-base animate-spin" /> : <Icon name="delete" className="text-base" />} Delete
+                        </button>
+                      </Tooltip>
                     </td>
                   </tr>
                 ))}
@@ -199,27 +200,17 @@ export default function UsersSettingsPage() {
       {/* Create User Modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowCreate(false)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-surface rounded-lg shadow-m3-4 max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Create User</h3>
-              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+              <h3 className="text-lg font-semibold text-on-surface">Create User</h3>
+              <button onClick={() => setShowCreate(false)} className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant"><Icon name="close" className="text-base" /> Close</button>
             </div>
-            {createError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{createError}</div>}
+            {createError && <div className="bg-error-container border border-red-200 text-error text-sm rounded p-3 mb-4">{createError}</div>}
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                <input type="text" value={newName} onChange={e => setNewName(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-                <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" />
-                <p className="text-[10px] text-gray-400 mt-1">Minimum 8 characters</p>
-              </div>
-              <button onClick={handleCreate} disabled={creating} className="w-full bg-blue-600 text-white rounded p-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              <TextField label="Name" value={newName} onChange={setNewName} />
+              <TextField label="Email" type="email" value={newEmail} onChange={setNewEmail} />
+              <TextField label="Password" type="password" value={newPassword} onChange={setNewPassword} helpText="Minimum 8 characters" />
+              <button onClick={handleCreate} disabled={creating} className="w-full m3-button disabled:opacity-50">
                 {creating ? 'Creating...' : 'Create User'}
               </button>
             </div>

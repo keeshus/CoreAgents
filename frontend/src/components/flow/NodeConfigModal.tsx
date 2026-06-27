@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useMemo } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import { useCallback, useMemo } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
+import { SelectField } from '@/components/ui/SelectField';
 import { getUpstreamNodeIds, getNodeFields } from '@/components/flow/config/InputPreview';
 import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
 import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
 import { TemplateAutocomplete } from '@/components/flow/config/TemplateAutocomplete';
 import { HITLNodeConfig } from '@/components/flow/config/HITLNodeConfig';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 const NODE_LABELS: Record<string, string> = {
   trigger: 'Trigger',
@@ -28,6 +32,7 @@ interface NodeConfigModalProps {
   onLabelChange: (label: string) => void;
   onDelete: () => void;
   onClose: () => void;
+  labelError?: string;
 }
 
 export function NodeConfigModal({
@@ -39,24 +44,8 @@ export function NodeConfigModal({
   onLabelChange,
   onDelete,
   onClose,
+  labelError,
 }: NodeConfigModalProps) {
-  // Close on Escape key
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  // Close on backdrop click
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose],
-  );
-
   // Compute upstream node labels for the input selection UI
   const upstreamLabels = useMemo(() => {
     const upstreamIds = getUpstreamNodeIds(node.id, edges);
@@ -102,44 +91,38 @@ export function NodeConfigModal({
   }, [node.data.config?.inputFields]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/30 flex items-start justify-center pt-12"
-      onClick={handleBackdropClick}
-    >
-      <div
-        className="bg-surface rounded-lg shadow-m3-4 w-full max-w-2xl max-h-[80vh] mx-4 flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog.Root open={!!node} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30" onClick={() => onClose()} />
+        <Dialog.Content className="fixed z-50 top-12 left-1/2 -translate-x-1/2 bg-surface rounded-lg shadow-m3-4 w-full max-w-2xl max-h-[80vh] mx-4 flex flex-col overflow-hidden" onOpenAutoFocus={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-on-surface-variant uppercase tracking-wider bg-surface-container-high px-2 py-0.5 rounded">
               {NODE_LABELS[node.data.type] || node.data.type}
             </span>
-            <input
-              className="text-sm font-semibold border border-outline-variant rounded px-2 py-1 w-48"
+            <TextField
+              label="Node name"
               value={node.data.label || ''}
-              onChange={(e) => onLabelChange(e.target.value)}
-              placeholder="Node name..."
+              onChange={(v) => onLabelChange(v)}
+              error={labelError}
+              className="w-48"
             />
           </div>
           <div className="flex items-center gap-1">
             {node.data.type !== 'trigger' && (
-              <button
-                onClick={onDelete}
-                className="p-1.5 text-on-surface-variant hover:text-error transition-colors"
-                title="Delete node"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              <Tooltip content="Delete node">
+                <button
+                  onClick={onDelete}
+                  className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error transition-colors"
+                >
+                  <Icon name="delete" className="text-base" /> Delete
+                </button>
+              </Tooltip>
             )}
-            <button
-              onClick={onClose}
-              className="p-1.5 text-on-surface-variant hover:text-on-surface-variant transition-colors"
-              title="Close"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <Dialog.Close className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors cursor-pointer">
+              <Icon name="close" className="text-base" /> Close
+            </Dialog.Close>
           </div>
         </div>
 
@@ -163,7 +146,7 @@ export function NodeConfigModal({
                           type="checkbox"
                           checked={labelSelected}
                           onChange={() => toggleField(label)}
-                          className="w-3 h-3 accent-blue-500"
+                          className="w-3 h-3 accent-primary"
                         />
                         <span className="text-xs font-semibold text-on-surface">{label}</span>
                         <span className="text-[10px] text-on-surface-variant">({fields.length} fields)</span>
@@ -179,7 +162,7 @@ export function NodeConfigModal({
                                   type="checkbox"
                                   checked={checked}
                                   onChange={() => toggleField(fp)}
-                                  className="w-2.5 h-2.5 accent-blue-400"
+                                  className="w-2.5 h-2.5 accent-primary"
                                 />
                                 <span className="text-[10px] font-mono text-on-surface-variant">{f.name}</span>
                                 <span className="text-[9px] text-outline-variant">: {f.type}</span>
@@ -250,8 +233,8 @@ export function NodeConfigModal({
                           list.splice(i, 1);
                           onConfigChange({ outputLabels: list.length > 0 ? list : ['true', 'false'] });
                         }}
-                        className="px-3 py-2 text-sm bg-error-container text-error rounded hover:bg-error-container shrink-0 font-bold"
-                      >✕</button>
+                        className="p-1.5 text-on-surface-variant hover:text-error"
+                      ><Icon name="close" className="text-sm" /></button>
                     </div>
                   ))}
                   <button
@@ -264,40 +247,43 @@ export function NodeConfigModal({
                   >+ Add label</button>
                 </div>
               </label>
+              <div className="mt-3">
+                <SelectField
+                  label="Default path"
+                  value={node.data.config.defaultPath || ''}
+                  onChange={(v) => onConfigChange({ defaultPath: v })}
+                  options={[
+                    { value: '', label: 'None (skip on no match)' },
+                    ...(node.data.config.outputLabels || ['true', 'false'])
+                      .filter((l: string) => l.trim())
+                      .map((l: string) => ({ value: l, label: l })),
+                  ]}
+                  helpText="When no condition matches, route here instead of skipping."
+                />
+              </div>
             </div>
           )}
 
           {node.data.type === 'code' && (
             <div className="space-y-3">
-              <label className="block">
-                <span className="text-xs font-medium text-on-surface-variant">JavaScript Code</span>
-                <textarea
-                  className="mt-1 block w-full rounded border border-outline p-2 text-sm resize-y min-h-[120px] font-mono"
-                  value={node.data.config.code || ''}
-                  onChange={(e) => onConfigChange({ code: e.target.value })}
-                  placeholder="// input contains all upstream data&#10;return input;"
-                  rows={6}
-                />
-                <p className="mt-1 text-[10px] text-on-surface-variant">
-                  Use <code className="font-mono">input</code> to access upstream data. Return the transformed value.
-                </p>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-on-surface-variant">
-                  Output Structure (documentation)
-                </span>
-                <textarea
-                  className="mt-1 block w-full rounded border border-outline p-2 text-sm resize-y min-h-[40px] font-mono"
-                  value={node.data.config.outputSchema || ''}
-                  onChange={(e) => onConfigChange({ outputSchema: e.target.value })}
-                  placeholder='{"type":"object","properties":{"result":{"type":"string"}}}'
-                  rows={2}
-                />
-                <p className="mt-1 text-[10px] text-on-surface-variant">
-                  Optional. Documents what this node outputs so downstream nodes can reference
-                  the structure.
-                </p>
-              </label>
+              <TextField
+                label="JavaScript Code"
+                value={node.data.config.code || ''}
+                onChange={(v) => onConfigChange({ code: v })}
+                multiline
+                rows={6}
+                helpText='Use "input" to access upstream data. Return the transformed value.'
+                className="font-mono"
+              />
+              <TextField
+                label="Output Structure (documentation)"
+                value={node.data.config.outputSchema || ''}
+                onChange={(v) => onConfigChange({ outputSchema: v })}
+                multiline
+                rows={2}
+                helpText="Optional. Documents what this node outputs so downstream nodes can reference the structure."
+                className="font-mono"
+              />
             </div>
           )}
 
@@ -307,34 +293,26 @@ export function NodeConfigModal({
 
           {node.data.type === 'trigger' && (
             <div className="space-y-3">
-              <label className="block">
-                <span className="text-xs font-medium text-on-surface-variant">Trigger Type</span>
-                <select
-                  className="mt-1 block w-full rounded border border-outline p-2 text-sm bg-surface"
-                  value={node.data.config.triggerType || 'manual'}
-                  onChange={(e) => onConfigChange({ triggerType: e.target.value })}
-                >
-                  <option value="manual">Manual</option>
-                  <option value="chat">Chat</option>
-                  <option value="webhook">Webhook</option>
-                  <option value="schedule">Schedule</option>
-                </select>
-              </label>
+              <SelectField
+                label="Trigger Type"
+                value={node.data.config.triggerType || 'manual'}
+                onChange={(v) => onConfigChange({ triggerType: v })}
+                options={[
+                  { value: 'manual', label: 'Manual' },
+                  { value: 'chat', label: 'Chat' },
+                  { value: 'webhook', label: 'Webhook' },
+                  { value: 'schedule', label: 'Schedule' },
+                ]}
+              />
 
               {node.data.config.triggerType === 'webhook' && (
                 <>
-                  <label className="block">
-                    <span className="text-xs font-medium text-on-surface-variant">Webhook Secret</span>
-                    <input
-                      className="mt-1 block w-full rounded border border-outline p-2 text-sm font-mono"
-                      value={node.data.config.webhookSecret || ''}
-                      onChange={(e) => onConfigChange({ webhookSecret: e.target.value })}
-                      placeholder="Optional secret for verification"
-                    />
-                <p className="mt-1 text-[10px] text-on-surface-variant">
-                      Pass as ?secret=... in the webhook URL
-                    </p>
-                  </label>
+                  <TextField
+                    label="Webhook Secret"
+                    value={node.data.config.webhookSecret || ''}
+                    onChange={(v) => onConfigChange({ webhookSecret: v })}
+                    helpText="Pass as ?secret=... in the webhook URL"
+                  />
                   <div className="bg-surface-container rounded p-2">
                     <p className="text-[10px] font-medium text-on-surface-variant mb-1">Webhook URL</p>
                     <code className="text-[10px] text-on-surface-variant break-all">
@@ -347,56 +325,36 @@ export function NodeConfigModal({
               )}
 
               {node.data.config.triggerType === 'schedule' && (
-                <label className="block">
-                  <span className="text-xs font-medium text-on-surface-variant">Cron Expression</span>
-                  <input
-                    className="mt-1 block w-full rounded border border-outline p-2 text-sm font-mono"
-                    value={node.data.config.cronExpression || ''}
-                    onChange={(e) => onConfigChange({ cronExpression: e.target.value })}
-                    placeholder="*/5 * * * *"
-                  />
-                  <p className="mt-1 text-[10px] text-on-surface-variant">
-                    minute hour day-of-month month day-of-week. E.g. &quot;0 9 * * *&quot; = daily
-                    at 9am, &quot;*/15 * * * *&quot; = every 15 min
-                  </p>
-                </label>
+                <TextField
+                  label="Cron Expression"
+                  value={node.data.config.cronExpression || ''}
+                  onChange={(v) => onConfigChange({ cronExpression: v })}
+                  helpText="minute hour day-of-month month day-of-week. E.g. &quot;0 9 * * *&quot; = daily at 9am, &quot;*/15 * * * *&quot; = every 15 min"
+                />
               )}
 
               {(node.data.config.triggerType === 'schedule' ||
                 node.data.config.triggerType === 'manual') && (
-                <label className="block">
-                  <span className="text-xs font-medium text-on-surface-variant">Input Message</span>
-                  <textarea
-                    className="mt-1 block w-full rounded border border-outline p-2 text-sm resize-y min-h-[40px]"
-                    value={node.data.config.inputMessage || ''}
-                    onChange={(e) => onConfigChange({ inputMessage: e.target.value })}
-                    placeholder="What is the latest news about AI?"
-                    rows={2}
-                  />
-                  <p className="mt-1 text-[10px] text-on-surface-variant">
-                    Sent to the next node each trigger. Plain text becomes the message, JSON objects
-                    are passed as structured input.
-                  </p>
-                </label>
+                <TextField
+                  label="Input Message"
+                  value={node.data.config.inputMessage || ''}
+                  onChange={(v) => onConfigChange({ inputMessage: v })}
+                  multiline
+                  rows={2}
+                  helpText="Sent to the next node each trigger. Plain text becomes the message, JSON objects are passed as structured input."
+                />
               )}
 
               {node.data.config.triggerType === 'webhook' && (
-                <label className="block">
-                    <span className="text-xs font-medium text-on-surface-variant">
-                    Expected Input Schema
-                  </span>
-                  <textarea
-                    className="mt-1 block w-full rounded border border-outline p-2 text-sm resize-y min-h-[60px] font-mono"
-                    value={node.data.config.inputSchema || ''}
-                    onChange={(e) => onConfigChange({ inputSchema: e.target.value })}
-                    placeholder='{"message":"string","userId":"string","priority":"number"}'
-                    rows={3}
-                  />
-                  <p className="mt-1 text-[10px] text-on-surface-variant">
-                    Define required fields and types. Incoming POSTs are validated — invalid requests
-                    get 400.
-                  </p>
-                </label>
+                <TextField
+                  label="Expected Input Schema"
+                  value={node.data.config.inputSchema || ''}
+                  onChange={(v) => onConfigChange({ inputSchema: v })}
+                  multiline
+                  rows={3}
+                  helpText="Define required fields and types. Incoming POSTs are validated — invalid requests get 400."
+                  className="font-mono"
+                />
               )}
             </div>
           )}
@@ -408,7 +366,7 @@ export function NodeConfigModal({
                   type="checkbox"
                   checked={node.data.config?.streaming === true}
                   onChange={(e) => onConfigChange({ streaming: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-blue-500"
+                  className="w-3.5 h-3.5 accent-primary"
                 />
                 <div>
                   <span className="text-xs font-medium text-on-surface-variant">Streaming</span>
@@ -475,7 +433,8 @@ export function NodeConfigModal({
             </pre>
           )}
         </div>
-      </div>
-    </div>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>
   );
 }

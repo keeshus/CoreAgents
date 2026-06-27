@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Send, Loader2, Square } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 
 interface ExecutionPanelProps {
   isRunning: boolean;
@@ -30,7 +30,7 @@ export function ExecutionPanel({ isRunning, onRun, onStop, events, output, error
               onClick={onStop}
               className="m3-button text-xs bg-error"
             >
-              <Square className="w-3 h-3" /> Stop
+              <Icon name="stop" className="text-xs" /> Stop
             </button>
           )}
           <button
@@ -38,7 +38,7 @@ export function ExecutionPanel({ isRunning, onRun, onStop, events, output, error
             disabled={isRunning}
             className="m3-button text-xs disabled:opacity-50"
           >
-            {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+            {isRunning ? <Icon name="sync" className="text-xs animate-spin" /> : <Icon name="send" className="text-xs" />}
             {isRunning ? 'Running' : 'Run'}
           </button>
         </div>

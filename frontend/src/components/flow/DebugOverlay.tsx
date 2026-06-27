@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import {
-  X, Play, Loader2, CheckCircle, XCircle, Clock, Square,
-  ChevronDown, ChevronUp, AlertTriangle, Bot, Wrench, GitBranch, Code, ArrowRight, Plus, Trash2, MessageSquare, Webhook, Calendar, Terminal
-} from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { SelectField } from '@/components/ui/SelectField';
+import { StepCard } from '@/components/flow/StepCard';
 
 interface DebugOverlayProps {
   flowId: string;
@@ -38,34 +37,15 @@ interface HistoryEntry {
   content: string;
 }
 
-const NODE_ICONS: Record<string, any> = {
-  trigger: ArrowRight,
-  'llm-agent': Bot,
-  'mcp-tool': Wrench,
-  branch: GitBranch,
-  code: Code,
-  output: CheckCircle,
-  retriever: Clock,
-};
 
-const NODE_LABELS: Record<string, string> = {
-  trigger: 'Trigger',
-  'llm-agent': 'LLM Agent',
-  'mcp-tool': 'MCP Tool',
-  retriever: 'Retriever',
-  branch: 'Condition',
-  code: 'Code',
-  output: 'Output',
-  parallel: 'Parallel',
-};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
-const TRIGGER_CONFIG: Record<string, { label: string; icon: any; description: string }> = {
-  manual: { label: 'Manual', icon: Terminal, description: 'Send a message to trigger the flow' },
-  chat: { label: 'Chat', icon: MessageSquare, description: 'Send a chat message with optional history' },
-  webhook: { label: 'Webhook', icon: Webhook, description: 'Provide a JSON payload as the webhook body' },
-  schedule: { label: 'Schedule', icon: Calendar, description: 'Trigger the flow with a message (simulates scheduled run)' },
+const TRIGGER_CONFIG: Record<string, { label: string; icon: string; description: string }> = {
+  manual: { label: 'Manual', icon: 'terminal', description: 'Send a message to trigger the flow' },
+  chat: { label: 'Chat', icon: 'sms', description: 'Send a chat message with optional history' },
+  webhook: { label: 'Webhook', icon: 'webhook', description: 'Provide a JSON payload as the webhook body' },
+  schedule: { label: 'Schedule', icon: 'calendar_today', description: 'Trigger the flow with a message (simulates scheduled run)' },
 };
 
 export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canvasEdges }: DebugOverlayProps) {
@@ -82,7 +62,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [finalOutput, setFinalOutput] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hitlPause, setHitlPause] = useState<{ executionId: string; prompt: string; buttons: { label: string; value: string }[]; nodeId: string } | null>(null);
+  const [hitlPause, setHitlPause] = useState<{ executionId: string; prompt: string; buttons: { label: string; value: string; icon?: string }[]; nodeId: string } | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -215,7 +195,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
             setHitlPause({
               executionId: event.executionId || '',
               prompt: d.prompt || 'Waiting for approval',
-              buttons: d.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }],
+              buttons: d.buttons || [{ label: 'Approve', value: 'approved', icon: 'check_circle' }, { label: 'Reject', value: 'rejected', icon: 'cancel' }],
               nodeId: d.nodeId || '',
             });
             setStatus('completed');
@@ -291,9 +271,9 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
     setChatHistory(prev => prev.filter((_, i) => i !== index));
   };
 
-  const formatTime = (t: string) => new Date(t).toLocaleTimeString();
 
-  const TriggerIcon = TRIGGER_CONFIG[triggerType]?.icon || Terminal;
+
+  const triggerIconName = TRIGGER_CONFIG[triggerType]?.icon || 'terminal';
 
   return (
     <div className="fixed inset-0 z-50 bg-surface flex flex-col">
@@ -303,34 +283,34 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
           <h2 className="text-sm font-semibold text-on-surface">Debug Run</h2>
           {!loadingFlow && (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-on-surface-variant bg-surface-container-high px-1.5 py-0.5 rounded">
-              <TriggerIcon className="w-3 h-3" />
+              <Icon name={triggerIconName} className="text-xs" />
               {TRIGGER_CONFIG[triggerType]?.label || triggerType}
             </span>
           )}
           {status === 'running' && (
             <span className="flex items-center gap-1 text-xs text-primary">
-              <Loader2 className="w-3 h-3 animate-spin" /> Running...
+              <Icon name="sync" className="text-xs animate-spin" /> Running...
             </span>
           )}
           {status === 'completed' && (
             <span className="flex items-center gap-1 text-xs text-success">
-              <CheckCircle className="w-3 h-3" /> Completed
+              <Icon name="check_circle" className="text-xs" /> Completed
             </span>
           )}
           {status === 'failed' && (
             <span className="flex items-center gap-1 text-xs text-error">
-              <XCircle className="w-3 h-3" /> Failed
+              <Icon name="cancel" className="text-xs" /> Failed
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
           {status === 'running' && (
             <button onClick={stop} className="m3-button text-xs bg-error">
-              <Square className="w-3 h-3" /> Stop
+              <Icon name="stop" className="text-xs" /> Stop
             </button>
           )}
-          <button onClick={onClose} className="p-1.5 text-on-surface-variant hover:text-on-surface-variant">
-            <X className="w-4 h-4" />
+          <button onClick={onClose} className="flex items-center gap-1 p-1.5 text-on-surface-variant hover:text-on-surface-variant">
+            <Icon name="close" className="text-base" /> Close
           </button>
         </div>
       </div>
@@ -341,7 +321,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
         {loadingFlow && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-3" />
+                <Icon name="sync" className="text-3xl text-primary animate-spin mx-auto mb-3" />
               <p className="text-sm text-on-surface-variant">Loading flow...</p>
             </div>
           </div>
@@ -359,7 +339,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                       value={chatMessage}
                       onChange={(e) => setChatMessage(e.target.value)}
                       placeholder="Enter the chat message..."
-                      className="w-full text-sm border rounded-lg px-3 py-2 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono resize-none bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                       rows={2}
                     />
                   </div>
@@ -367,29 +347,30 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-medium text-on-surface-variant">History</label>
                       <button onClick={addHistoryEntry} className="flex items-center gap-1 text-xs text-primary hover:text-primary">
-                        <Plus className="w-3 h-3" /> Add entry
+                        <Icon name="add" className="text-xs" /> Add entry
                       </button>
                     </div>
                     <div className="space-y-1.5">
                       {chatHistory.map((entry, i) => (
                         <div key={i} className="flex gap-2 items-start">
-                          <select
+                          <SelectField
+                            label="Role"
                             value={entry.role}
-                            onChange={(e) => updateHistoryEntry(i, 'role', e.target.value)}
-                            className="text-xs border rounded-lg px-2 py-1.5 font-mono bg-surface"
-                          >
-                            <option value="user">user</option>
-                            <option value="assistant">assistant</option>
-                          </select>
+                            onChange={(v) => updateHistoryEntry(i, 'role', v)}
+                            options={[
+                              { value: 'user', label: 'user' },
+                              { value: 'assistant', label: 'assistant' },
+                            ]}
+                          />
                           <input
                             type="text"
                             value={entry.content}
                             onChange={(e) => updateHistoryEntry(i, 'content', e.target.value)}
                             placeholder="Message content..."
-                            className="flex-1 text-xs border rounded-lg px-2.5 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            className="flex-1 text-xs border border-outline rounded-lg px-2.5 py-1.5 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                           />
-                          <button onClick={() => removeHistoryEntry(i)} className="p-1.5 text-error hover:text-error">
-                            <Trash2 className="w-3.5 h-3.5" />
+                          <button onClick={() => removeHistoryEntry(i)} className="flex items-center gap-1 p-1.5 text-error hover:text-error">
+                            <Icon name="delete" className="text-sm" /> Remove
                           </button>
                         </div>
                       ))}
@@ -407,7 +388,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                     value={manualMessage}
                     onChange={(e) => setManualMessage(e.target.value)}
                     placeholder="Enter the message to send to the flow..."
-                    className="w-full text-sm border rounded-lg px-3 py-2 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono resize-none bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     rows={2}
                   />
                 </div>
@@ -419,7 +400,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                     value={webhookPayload}
                     onChange={(e) => handleWebhookChange(e.target.value)}
                     placeholder='{"event": "test", "data": {}}'
-                    className="w-full text-sm border rounded-lg px-3 py-2 font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-h-[120px]"
+                    className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-h-[120px]"
                     rows={5}
                   />
                   {webhookPayloadError && (
@@ -432,7 +413,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                 disabled={status === 'running' || (triggerType === 'webhook' && webhookPayloadError !== null)}
                 className="m3-button text-sm w-full disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {status === 'running' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                {status === 'running' ? <Icon name="sync" className="text-base animate-spin" /> : <Icon name="play_arrow" className="text-base" />}
                 {status === 'idle' ? 'Start Debug Run' : 'Re-run'}
               </button>
             </div>
@@ -440,7 +421,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
             {/* Content area below the input form */}
             {status === 'idle' && steps.length === 0 && (
               <div className="text-center py-12">
-                <Bot className="w-12 h-12 text-outline-variant mx-auto mb-3" />
+                <Icon name="smart_toy" className="text-5xl text-outline-variant mx-auto mb-3" />
                 <p className="text-on-surface-variant font-medium">Ready to debug</p>
                 <p className="text-sm text-on-surface-variant mt-1">Fill in the input above and click &quot;Start Debug Run&quot;</p>
               </div>
@@ -448,7 +429,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
 
             {steps.length === 0 && status === 'running' && (
               <div className="text-center py-12">
-                <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-3" />
+              <Icon name="sync" className="text-3xl text-primary animate-spin mx-auto mb-3" />
                 <p className="text-on-surface-variant font-medium">Executing flow...</p>
               </div>
             )}
@@ -456,9 +437,9 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
             {steps.length === 0 && !loadingFlow && status !== 'idle' && status !== 'running' && (
               <div className="bg-surface rounded-lg border p-8 text-center">
                 {status === 'completed' ? (
-                  <CheckCircle className="w-12 h-12 text-success mx-auto mb-3" />
+                  <Icon name="check_circle" className="text-5xl text-success mx-auto mb-3" />
                 ) : (
-                  <XCircle className="w-12 h-12 text-error mx-auto mb-3" />
+                  <Icon name="cancel" className="text-5xl text-error mx-auto mb-3" />
                 )}
                 <h3 className="text-lg font-semibold text-on-surface mb-1">
                   {status === 'completed' ? 'Execution Completed' : 'Execution Failed'}
@@ -474,130 +455,13 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
             {steps.length > 0 && (
               <div className="space-y-1.5">
                 {steps.map((step, i) => {
-              const Icon = NODE_ICONS[step.nodeType] || Clock;
-              const isExpanded = expanded[step.nodeId + i] || false;
-              const isLLM = step.nodeType === 'llm-agent';
-              const hasSystemPrompt = step.input?.systemPrompt;
-              const hasTokens = step.tokens.length > 0;
-              const stepLabel = step.nodeLabel || step.input?._nodeLabel || NODE_LABELS[step.nodeType] || step.nodeType;
-
               return (
-                <div key={step.nodeId + i} className="bg-surface rounded-lg border overflow-hidden">
-                  <button
-                    onClick={() => toggle(step.nodeId + i)}
-                    className="w-full p-3 flex items-center gap-3 text-left hover:bg-surface-container transition-colors"
-                  >
-                    {step.status === 'running' && <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />}
-                    {step.status === 'completed' && <CheckCircle className="w-4 h-4 text-success shrink-0" />}
-                    {step.status === 'failed' && <XCircle className="w-4 h-4 text-error shrink-0" />}
-                    {step.status === 'pending' && <Clock className="w-4 h-4 text-yellow-500 shrink-0" />}
-
-                    <div className="flex items-center gap-2 shrink-0 w-4">
-                      <Icon className="w-4 h-4 text-on-surface-variant" />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-on-surface">{stepLabel}</span>
-                        {isLLM && step.input?.model && <span className="text-[10px] text-on-surface-variant font-mono">{step.input.model}</span>}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[10px] capitalize ${
-                          step.status === 'completed' ? 'text-success' :
-                          step.status === 'failed' ? 'text-error' :
-                          step.status === 'running' ? 'text-primary' : 'text-on-surface-variant'
-                        }`}>
-                          {step.status}
-                        </span>
-                        {step.completedAt && (
-                          <span className="text-[10px] text-on-surface-variant">{formatTime(step.startedAt)} → {formatTime(step.completedAt)}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {isLLM && step.status === 'running' && hasTokens && (
-                      <div className="hidden sm:block text-xs text-on-surface-variant italic truncate max-w-[200px]">{step.tokens.join('').slice(-60)}</div>
-                    )}
-                    {isLLM && step.status === 'completed' && step.output?.content && (
-                      <div className="hidden sm:block text-xs text-on-surface-variant truncate max-w-[200px]">{String(step.output.content).slice(0, 60)}</div>
-                    )}
-                    {step.error && <AlertTriangle className="w-4 h-4 text-error shrink-0" />}
-
-                    {(step.input || step.output || hasTokens || hasSystemPrompt) && (
-                      isExpanded ? <ChevronUp className="w-4 h-4 text-on-surface-variant shrink-0" /> : <ChevronDown className="w-4 h-4 text-on-surface-variant shrink-0" />
-                    )}
-                  </button>
-
-                  {isExpanded && (
-                    <div className="border-t bg-surface-container/50 p-4 space-y-3">
-                      {hasSystemPrompt && (
-                        <div>
-                          <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">System Prompt</h4>
-                          <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">{step.input.systemPrompt}</pre>
-                        </div>
-                      )}
-                      {step.nodeType === 'branch' && step.input?.condition && (
-                        <div>
-                          <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Condition</h4>
-                          <code className="text-xs bg-surface border rounded p-2 block font-mono">{step.input.condition}</code>
-                        </div>
-                      )}
-                      {step.nodeType === 'parallel' && step.children && step.children.length > 0 && (
-                        <div>
-                          <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Sub-nodes ({step.children.length})</h4>
-                          <div className="space-y-1.5">
-                            {step.children.map(child => (
-                              <div key={child.nodeId} className={`p-2 rounded border text-xs ${
-                                child.status === 'completed' ? 'bg-success-container border-success' :
-                                child.status === 'failed' ? 'bg-error-container border-error' : 'bg-surface-container border-outline-variant'
-                              }`}>
-                                <div className="flex items-center gap-2">
-                                  {child.status === 'completed' && <CheckCircle className="w-3 h-3 text-success" />}
-                                  {child.status === 'failed' && <XCircle className="w-3 h-3 text-error" />}
-                                  <span className="font-medium text-on-surface-variant">{NODE_LABELS[child.type] || child.type}</span>
-                                  <span className="text-[10px] text-on-surface-variant">{child.nodeId.slice(0, 8)}</span>
-                                </div>
-                                {child.error && <p className="text-error mt-1 font-mono">{child.error}</p>}
-                                {child.output && (
-                                  <pre className="mt-1 text-[10px] bg-surface rounded p-1.5 max-h-24 overflow-y-auto font-mono whitespace-pre-wrap break-all">{JSON.stringify(child.output, null, 2)}</pre>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {step.input && (
-                        <div>
-                          <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Input</h4>
-                          <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{JSON.stringify(step.input, null, 2)}</pre>
-                        </div>
-                      )}
-                      {isLLM && hasTokens && (
-                        <div>
-                          <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">
-                            {step.status === 'running' ? 'Streaming Tokens' : 'LLM Response'}
-                          </h4>
-                          <div className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto text-on-surface">
-                            {step.tokens.join('')}
-                            {step.status === 'running' && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5 align-middle" />}
-                          </div>
-                        </div>
-                      )}
-                      {step.output && (
-                        <div>
-                          <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Output</h4>
-                          <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{JSON.stringify(step.output, null, 2)}</pre>
-                        </div>
-                      )}
-                      {step.error && (
-                        <div className="flex items-start gap-2 bg-error-container border border-error rounded p-2">
-                          <AlertTriangle className="w-3 h-3 text-error mt-0.5 shrink-0" />
-                          <span className="text-xs text-error font-mono break-all">{step.error}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <StepCard
+                  key={step.nodeId + i}
+                  step={step}
+                  expanded={expanded[step.nodeId + i] || false}
+                  onToggle={() => toggle(step.nodeId + i)}
+                />
               );
             })}
 
@@ -608,7 +472,8 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                 <div className="flex gap-2">
                   {hitlPause.buttons.map(btn => (
                     <button key={btn.value} onClick={() => handleHitlApprove(btn.value)}
-                      className="m3-button text-sm bg-secondary text-white">
+                      className="m3-button text-sm bg-secondary flex items-center gap-1">
+                      {btn.icon && <Icon name={btn.icon} className="text-sm" />}
                       {btn.label}
                     </button>
                   ))}
@@ -631,7 +496,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
 
             {error && !steps.some(s => s.error) && (
               <div className="mt-4 bg-error-container border border-error rounded-lg p-4 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-error mt-0.5 shrink-0" />
+                <Icon name="warning" className="text-2xl text-error mt-0.5 shrink-0" />
                 <div>
                   <h3 className="text-sm font-semibold text-error mb-1">Execution Failed</h3>
                   <p className="text-xs text-error font-mono break-all">{error}</p>

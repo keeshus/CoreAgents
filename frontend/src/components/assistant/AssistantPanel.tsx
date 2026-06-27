@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAssistant } from './AssistantContext';
-import { Send, Loader2, AlertTriangle, Trash2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { Tooltip } from '@/components/ui/Tooltip';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -53,23 +54,27 @@ export function AssistantPanel() {
   const hasMessages = messages.length > 0 || streamingContent;
 
   return (
-    <div className="fixed bottom-24 right-6 z-50 w-[480px] max-h-[720px] bg-surface rounded-xl shadow-2xl border flex flex-col">
+    <div className="fixed bottom-24 right-6 z-50 w-[480px] max-h-[720px] bg-surface rounded-xl shadow-m3-4 border border-outline-variant flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-surface-container rounded-t-xl shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-on-surface">Co-Pilot</span>
           {pageContext && (
-            <span className="text-[9px] text-on-surface-variant ml-1 max-w-[120px] truncate" title={pageContext.description}>
-              · {pageContext.description}
-            </span>
+            <Tooltip content={pageContext.description}>
+              <span className="text-[9px] text-on-surface-variant ml-1 max-w-[120px] truncate">
+                · {pageContext.description}
+              </span>
+            </Tooltip>
           )}
           {!defaultEndpointId && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-error-container text-error">No endpoint</span>
           )}
         </div>
-        <button onClick={clearConversation} className="p-1 text-on-surface-variant hover:text-error transition-colors" title="Clear conversation">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <Tooltip content="Clear conversation">
+          <button onClick={clearConversation} className="flex items-center gap-1 p-1 text-xs text-on-surface-variant hover:text-error transition-colors">
+            <Icon name="delete" className="text-sm" /> Clear
+          </button>
+        </Tooltip>
       </div>
 
       {/* Messages */}
@@ -84,7 +89,7 @@ export function AssistantPanel() {
           <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
               m.role === 'user'
-                ? 'bg-primary text-white'
+                ? 'bg-primary text-on-primary'
                 : m.role === 'tool'
                   ? 'bg-surface-container-high text-on-surface-variant text-[11px] font-mono'
                   : 'bg-surface-container-high text-on-surface'
@@ -120,14 +125,14 @@ export function AssistantPanel() {
         {streaming && !streamingContent && (
           <div className="flex justify-start">
             <div className="rounded-lg px-3 py-2 bg-surface-container-high">
-              <Loader2 className="w-4 h-4 animate-spin text-on-surface-variant" />
+              <Icon name="sync" className="text-base animate-spin text-on-surface-variant" />
             </div>
           </div>
         )}
 
         {error && (
           <div className="flex items-center gap-2 text-xs text-error bg-error-container rounded p-2">
-            <AlertTriangle className="w-3 h-3 shrink-0" /> {error}
+            <Icon name="warning" className="text-xs shrink-0" /> {error}
           </div>
         )}
 
@@ -151,7 +156,7 @@ export function AssistantPanel() {
           disabled={streaming || !input.trim()}
           className="m3-button disabled:opacity-50 shrink-0 self-end"
         >
-          {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          {streaming ? <Icon name="sync" className="text-base animate-spin" /> : <Icon name="send" className="text-base" />}
         </button>
       </form>
     </div>

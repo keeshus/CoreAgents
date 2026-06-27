@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { TemplateAutocomplete } from '@/components/flow/config/TemplateAutocomplete';
 import { API_URL } from '@/lib/api-client';
-import { Search, X, Check, Loader2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { SelectField } from '@/components/ui/SelectField';
+import { TextField } from '@/components/ui/TextField';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface HITLNodeConfigProps {
   config: Record<string, any>;
@@ -22,81 +25,115 @@ interface User {
   name: string;
 }
 
-function UserSearch({ assignedUserId, onSelect }: { assignedUserId: string; onSelect: (userId: string) => void }) {
-  const [open, setOpen] = useState(false);
+const PAGE_SIZE = 5;
+
+function SearchableList({
+  items,
+  selectedId,
+  placeholder,
+  onSelect,
+  renderItem,
+  getItemId,
+  loading,
+}: {
+  items: { id: string; [key: string]: any }[];
+  selectedId: string;
+  placeholder: string;
+  onSelect: (id: string) => void;
+  renderItem: (item: any) => React.ReactNode;
+  getItemId: (item: any) => string;
+  loading?: boolean;
+}) {
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+
+  const filtered = query
+    ? items.filter(item => {
+        const searchStr = Object.values(item).join(' ').toLowerCase();
+        return searchStr.includes(query.toLowerCase());
+      })
+    : items;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const paged = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const selected = items.find(i => i.id === selectedId);
+
+  return (
+    <div>
+      <div className="space-y-1">
+        {selected ? (
+          <div className="flex items-center gap-2 border border-outline rounded p-2 text-sm bg-surface-container">
+            <div className="flex-1">{renderItem(selected)}</div>
+            <button onClick={() => { onSelect(''); setQuery(''); setPage(0); }} aria-label="Clear selection" className="text-on-surface-variant hover:text-error shrink-0">
+              <Icon name="close" className="text-xs" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <TextField label={placeholder} value={query} onChange={(v) => { setQuery(v); setPage(0); }} />
+            {loading ? (
+              <div className="flex items-center justify-center py-4"><Icon name="sync" className="text-base animate-spin text-on-surface-variant" /></div>
+            ) : filtered.length === 0 ? (
+              <p className="text-xs text-on-surface-variant text-center py-4">No {placeholder.toLowerCase()} found</p>
+            ) : (
+              <div className="border border-outline-variant rounded overflow-hidden">
+                {paged.map(item => (
+                  <button
+                    key={getItemId(item)}
+                    onClick={() => { onSelect(getItemId(item)); setQuery(''); setPage(0); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-surface-container-high border-b border-outline-variant last:border-0"
+                  >
+                    {renderItem(item)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  disabled={safePage === 0}
+                  onClick={() => setPage(p => p - 1)}
+                  className="text-xs text-on-surface-variant hover:text-primary disabled:opacity-30"
+                >Previous</button>
+                <span className="text-xs text-on-surface-variant">{safePage + 1} / {totalPages}</span>
+                <button
+                  disabled={safePage >= totalPages - 1}
+                  onClick={() => setPage(p => p + 1)}
+                  className="text-xs text-on-surface-variant hover:text-primary disabled:opacity-30"
+                >Next</button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UserSearch({ assignedUserId, onSelect }: { assignedUserId: string; onSelect: (userId: string) => void }) {
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!open) return;
-    setLoading(true);
     fetch(`${API_URL}/users`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(data => setUsers(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [open]);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const filtered = query
-    ? users.filter(u => u.name.toLowerCase().includes(query.toLowerCase()) || u.email.toLowerCase().includes(query.toLowerCase()))
-    : users;
-
-  const selected = users.find(u => u.id === assignedUserId);
-
   return (
-    <div ref={wrapperRef} className="relative">
-      {selected ? (
-        <div className="flex items-center gap-2 border border-gray-300 rounded p-2 text-sm bg-gray-50">
-          <span className="flex-1">{selected.name} <span className="text-gray-400">({selected.email})</span></span>
-          <button onClick={() => { onSelect(''); setQuery(''); }} className="text-gray-400 hover:text-red-600">
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      ) : (
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
-          <input
-            className="w-full rounded border border-gray-300 p-2 pl-8 text-sm"
-            placeholder="Search users..."
-            value={query}
-            onChange={e => { setQuery(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-          />
-        </div>
-      )}
-      {open && !selected && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>
-          ) : filtered.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-4">No users found</p>
-          ) : (
-            filtered.map(u => (
-              <button
-                key={u.id}
-                onClick={() => { onSelect(u.id); setOpen(false); setQuery(''); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b last:border-0"
-              >
-                <span className="font-medium text-gray-900">{u.name}</span>
-                <span className="text-gray-400 ml-2">{u.email}</span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
+    <SearchableList
+      items={users}
+      selectedId={assignedUserId}
+      placeholder="Search users"
+      onSelect={onSelect}
+      getItemId={(u) => u.id}
+      renderItem={(u) => <><span className="font-medium text-on-surface">{u.name}</span><span className="text-on-surface-variant ml-2">{u.email}</span></>}
+      loading={loading}
+    />
   );
 }
 
@@ -112,31 +149,91 @@ function RoleSelect({ assignedRoleId, onSelect }: { assignedRoleId: string; onSe
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="text-xs text-gray-400 py-1">Loading roles...</div>;
+  return (
+    <SearchableList
+      items={roles}
+      selectedId={assignedRoleId}
+      placeholder="Search roles"
+      onSelect={onSelect}
+      getItemId={(r) => r.id}
+      renderItem={(r) => <span className="font-medium text-on-surface">{r.name}</span>}
+      loading={loading}
+    />
+  );
+}
+
+function MultiAssignPicker({ config, onChange }: { config: any; onChange: (updates: any) => void }) {
+  const assigned = config.assignees || { userIds: [], roleIds: [] };
+  const [showPicker, setShowPicker] = useState<'user' | 'role' | null>(null);
+
+  const removeUser = (id: string) => onChange({ assignees: { ...assigned, userIds: assigned.userIds.filter((u: string) => u !== id) } });
+  const removeRole = (id: string) => onChange({ assignees: { ...assigned, roleIds: assigned.roleIds.filter((r: string) => r !== id) } });
 
   return (
-    <select
-      className="block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-      value={assignedRoleId}
-      onChange={e => onSelect(e.target.value)}
-    >
-      <option value="">Select a role...</option>
-      {roles.map(r => (
-        <option key={r.id} value={r.id}>{r.name}</option>
-      ))}
-    </select>
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {assigned.userIds.map((id: string) => (
+          <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary-container text-primary font-medium">
+            User:{id.slice(0, 8)}
+            <button onClick={() => removeUser(id)} aria-label="Remove user" className="hover:text-error"><Icon name="close" className="text-[10px]" /></button>
+          </span>
+        ))}
+        {assigned.roleIds.map((id: string) => (
+          <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-secondary-container text-on-secondary-container font-medium">
+            Role:{id.slice(0, 8)}
+            <button onClick={() => removeRole(id)} aria-label="Remove role" className="hover:text-error"><Icon name="close" className="text-[10px]" /></button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => setShowPicker(showPicker === 'user' ? null : 'user')} className="text-xs text-primary hover:underline">+ Add user</button>
+        <button onClick={() => setShowPicker(showPicker === 'role' ? null : 'role')} className="text-xs text-primary hover:underline">+ Add role</button>
+      </div>
+      {showPicker === 'user' && (
+        <UserSearch
+          assignedUserId=""
+          onSelect={(userId) => { onChange({ assignees: { ...assigned, userIds: [...assigned.userIds, userId] } }); setShowPicker(null); }}
+        />
+      )}
+      {showPicker === 'role' && (
+        <RoleSelect
+          assignedRoleId=""
+          onSelect={(roleId) => { onChange({ assignees: { ...assigned, roleIds: [...assigned.roleIds, roleId] } }); setShowPicker(null); }}
+        />
+      )}
+    </div>
   );
 }
 
 export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLNodeConfigProps) {
+  const mode = config.mode || 'simple';
+
   return (
     <div className="space-y-3">
+      {/* Mode selector */}
+      <div>
+        <span className="text-xs font-medium text-on-surface-variant block mb-1">Mode</span>
+        <div className="flex gap-2">
+          {(['simple', 'custom'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => onChange({ mode: m, buttons: m === 'simple' ? undefined : config.buttons })}
+              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                mode === m ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container'
+              }`}
+            >
+              {m === 'simple' ? 'Simple' : 'Custom'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <label className="block">
-        <span className="text-xs font-medium text-gray-700">Prompt for the User</span>
+        <span className="text-xs font-medium text-on-surface-variant">Prompt for the User</span>
         <TemplateAutocomplete
           value={config.prompt || ''}
           onChange={(v) => onChange({ prompt: v })}
-          placeholder="Please review the generated content before proceeding... Type {{ for field suggestions"
+          placeholder="Please review the generated content before proceeding..."
           rows={3}
           nodeId={nodeId}
           nodes={nodes}
@@ -144,131 +241,100 @@ export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLN
           selectedFields={config?.inputFields}
         />
       </label>
-      <div className="space-y-2">
-        <span className="text-sm font-medium text-gray-700 block">Buttons</span>
-        {(
-          config.buttons || [
-            { label: 'Approve', value: 'approved' },
-            { label: 'Reject', value: 'rejected' },
-          ]
-        ).map((btn: any, i: number) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              className="flex-1 rounded border border-gray-300 p-2 text-sm"
-              value={btn.label}
-              onChange={(e) => {
-                const btns = [...(config.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }])];
-                btns[i] = { ...btns[i], label: e.target.value };
-                onChange({ buttons: btns });
-              }}
-              placeholder="Button label"
-            />
-            <input
-              className="flex-1 rounded border border-gray-300 p-2 text-sm font-mono"
-              value={btn.value}
-              onChange={(e) => {
-                const btns = [...(config.buttons || [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }])];
-                btns[i] = { ...btns[i], value: e.target.value };
-                onChange({ buttons: btns });
-              }}
-              placeholder="value"
-            />
-            <button
-              onClick={() => {
-                const btns = [
-                  ...(config.buttons || [
-                    { label: 'Approve', value: 'approved' },
-                    { label: 'Reject', value: 'rejected' },
-                  ]),
-                ];
-                btns.splice(i, 1);
-                onChange({
-                  buttons: btns.length > 0 ? btns : [{ label: 'Approve', value: 'approved' }],
-                });
-              }}
-              className="w-6 h-6 flex items-center justify-center text-xs bg-red-200 text-red-800 rounded hover:bg-red-300 shrink-0 font-bold"
-              title="Remove"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={() => {
-            const btns = [
-              ...(config.buttons || [
-                { label: 'Approve', value: 'approved' },
-                { label: 'Reject', value: 'rejected' },
-              ]),
-            ];
-            onChange({ buttons: [...btns, { label: '', value: '' }] });
-          }}
-          className="text-sm text-blue-600 hover:underline block"
-        >
-          + Add Button
-        </button>
-      </div>
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <input
-          type="checkbox"
-          checked={config?.allowFeedback !== false}
-          onChange={(e) => onChange({ allowFeedback: e.target.checked })}
-          className="rounded accent-blue-500"
-        />
-        <span className="text-sm text-gray-700">Allow reviewer feedback</span>
-        <span className="text-xs text-gray-400">(text input field)</span>
-      </label>
-      <label className="block">
-        <span className="text-xs font-medium text-gray-700">Max iterations <span className="text-gray-400 font-normal">(0 = unlimited)</span></span>
-        <input
-          type="number"
-          min={0}
-          value={config?.maxIterations ?? 0}
-          onChange={(e) => onChange({ maxIterations: Math.max(0, parseInt(e.target.value) || 0) })}
-          className="mt-1 block w-24 rounded border border-gray-300 p-2 text-sm"
-        />
-        <p className="text-[10px] text-gray-400 mt-1">When exceeded, flow exits through the red &quot;max iterations&quot; handle.</p>
-      </label>
-      {/* Assignment picker */}
-      <div className="border-t border-gray-100 pt-3 mt-3">
-        <span className="text-sm font-medium text-gray-700 block mb-2">Assignment</span>
+
+      {mode === 'custom' && (
         <div className="space-y-2">
-          <select
-            className="block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-            value={config.assignedTo?.type || 'anyone'}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === 'anyone') {
-                const { assignedTo, ...rest } = config;
-                onChange({ ...rest, assignedTo: undefined });
-              } else if (val === 'role') {
-                onChange({ assignedTo: { type: 'role', roleId: '' } });
-              } else {
-                onChange({ assignedTo: { type: 'user', userId: '' } });
-              }
-            }}
-          >
-            <option value="anyone">Anyone (no restriction)</option>
-            <option value="role">Specific role</option>
-            <option value="user">Specific user</option>
-          </select>
-          {config.assignedTo?.type === 'role' && (
-            <RoleSelect
-              assignedRoleId={config.assignedTo.roleId || ''}
-              onSelect={(roleId) => onChange({ assignedTo: { ...config.assignedTo, roleId } })}
-            />
-          )}
-          {config.assignedTo?.type === 'user' && (
-            <UserSearch
-              assignedUserId={config.assignedTo.userId || ''}
-              onSelect={(userId) => onChange({ assignedTo: { ...config.assignedTo, userId } })}
-            />
-          )}
-          <p className="text-[10px] text-gray-400">
-            Restrict approval visibility to a specific user or role.
-          </p>
+          <span className="text-sm font-medium text-on-surface-variant block">Buttons</span>
+          {(config.buttons || []).map((btn: any, i: number) => (
+            <div key={i} className="flex items-start gap-2">
+              <div className="flex-1 grid grid-cols-3 gap-2">
+                <TextField label="Label" value={btn.label} onChange={(v) => {
+                  const btns = [...(config.buttons || [])];
+                  btns[i] = { ...btns[i], label: v };
+                  onChange({ buttons: btns });
+                }} />
+                <TextField label="Icon" value={btn.icon || ''} onChange={(v) => {
+                  const btns = [...(config.buttons || [])];
+                  btns[i] = { ...btns[i], icon: v };
+                  onChange({ buttons: btns });
+                }} />
+                <TextField label="Value" value={btn.value} onChange={(v) => {
+                  const btns = [...(config.buttons || [])];
+                  btns[i] = { ...btns[i], value: v };
+                  onChange({ buttons: btns });
+                }} />
+              </div>
+              <div className="flex items-center gap-1 pt-1">
+                {btn.icon && <Icon name={btn.icon} className="text-sm text-on-surface-variant" />}
+                <Tooltip content="Remove">
+                  <button onClick={() => {
+                    const btns = [...(config.buttons || [])];
+                    btns.splice(i, 1);
+                    onChange({ buttons: btns.length > 0 ? btns : [{ label: 'Approve', value: 'approved', icon: 'check_circle' }] });
+                  }} className="p-1.5 text-on-surface-variant hover:text-error">
+                    <Icon name="close" className="text-sm" />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+          ))}
+          <button onClick={() => onChange({ buttons: [...(config.buttons || []), { label: '', value: '', icon: '' }] })} className="text-sm text-primary hover:underline block">
+            + Add Button
+          </button>
         </div>
+      )}
+
+      {/* Assignment — multi-approver only in Simple mode */}
+      <div className="border-t border-outline-variant pt-3">
+        <span className="text-sm font-medium text-on-surface-variant block mb-2">Assignment</span>
+        <SelectField
+          label="Assignment type"
+          value={config.assignmentType || 'user'}
+          onChange={(v) => { onChange({ assignmentType: v, assignees: v === 'multi' ? (config.assignees || { userIds: [], roleIds: [] }) : undefined }); }}
+          options={[
+            { value: 'user', label: 'Specific user' },
+            { value: 'role', label: 'Specific role' },
+            ...(mode === 'simple' ? [{ value: 'multi', label: 'Multi-approver' }] : []),
+          ]}
+        />
       </div>
+
+      {config.assignmentType === 'user' && (
+        <UserSearch
+          assignedUserId={config.assignedUserId || ''}
+          onSelect={(userId) => onChange({ assignedUserId: userId })}
+        />
+      )}
+
+      {config.assignmentType === 'role' && (
+        <RoleSelect
+          assignedRoleId={config.assignedRoleId || ''}
+          onSelect={(roleId) => onChange({ assignedRoleId: roleId })}
+        />
+      )}
+
+      {mode === 'simple' && config.assignmentType === 'multi' && (
+            <div className="space-y-3">
+              <TextField
+                label="Required approvals"
+                type="number"
+                value={String(config.requiredApprovals ?? 1)}
+                onChange={(v) => onChange({ requiredApprovals: Math.max(1, parseInt(v) || 1) })}
+                helpText="How many selected approvers must approve before the flow continues."
+                className="w-24"
+              />
+              <MultiAssignPicker config={config} onChange={onChange} />
+              <p className="text-[10px] text-on-surface-variant">Selected approvers will see this HITL. If anyone rejects, the flow stops immediately.</p>
+            </div>
+          )}
+
+      <label className="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" checked={config?.allowFeedback !== false} onChange={(e) => onChange({ allowFeedback: e.target.checked })} className="rounded accent-primary" />
+        <span className="text-sm text-on-surface-variant">Allow reviewer feedback</span>
+        <span className="text-xs text-on-surface-variant">(text input field)</span>
+      </label>
+
+      <TextField label="Max iterations" type="number" value={String(config?.maxIterations ?? 0)} onChange={(v) => onChange({ maxIterations: Math.max(0, parseInt(v) || 0) })} helpText="When exceeded, flow exits through the red max iterations handle. (0 = unlimited)" className="w-24" />
     </div>
   );
 }

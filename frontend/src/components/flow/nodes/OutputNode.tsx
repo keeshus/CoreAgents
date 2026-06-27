@@ -8,13 +8,13 @@ export function OutputNode(props: NodeProps) {
   const modeLabel = mode === 'all' ? 'JSON (all data)' : mode === 'single' ? 'single value' : `JSON (${inputFields.length} fields)`;
   const modeDesc = mode === 'all' ? 'Returns all accumulated data as JSON' : mode === 'single' ? 'Returns just the selected field value' : `Returns ${inputFields.length} fields as JSON`;
   return (
-    <BaseNode label={(props.data?.label as string) || 'Output'} nodeType="Output" category="output" selected={props.selected || false} inputs={1} outputs={0}>
+    <BaseNode label={(props.data?.label as string) || 'Output'} nodeType="Output" category="output" selected={props.selected || false} inputs={1} outputs={0} warnings={props.data?._warnings as string[] | undefined} feedbackInput>
       <div className="space-y-1">
-        <p className="text-xs text-gray-500">{modeDesc}</p>
+        <p className="text-xs text-on-surface-variant">{modeDesc}</p>
       </div>
-      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1">
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-orange-100 text-orange-700">{modeLabel}</span>
-        <span className="text-[9px] text-gray-400 ml-auto">→ final</span>
+      <div className="mt-2 pt-2 border-t border-outline-variant flex items-center gap-1">
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-tertiary-container text-on-tertiary-container">{modeLabel}</span>
+        <span className="text-[9px] text-on-surface-variant ml-auto">→ final</span>
       </div>
     </BaseNode>
   );

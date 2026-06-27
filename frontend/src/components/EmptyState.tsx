@@ -1,17 +1,17 @@
-import type { LucideIcon } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 
 interface EmptyStateProps {
-  icon?: LucideIcon;
+  iconName?: string;
   title: string;
   description?: string;
 }
 
-export function EmptyState({ icon: Icon, title, description }: EmptyStateProps) {
+export function EmptyState({ iconName, title, description }: EmptyStateProps) {
   return (
-    <div className="text-center py-16 bg-white rounded-xl border">
-      {Icon && <Icon className="w-12 h-12 text-gray-300 mx-auto mb-3" />}
-      <p className="text-gray-500 font-medium">{title}</p>
-      {description && <p className="text-xs text-gray-400 mt-1">{description}</p>}
+    <div className="text-center py-16 bg-surface rounded-xl border">
+      {iconName && <Icon name={iconName} className="text-5xl text-outline-variant mx-auto mb-3" />}
+      <p className="text-on-surface-variant font-medium">{title}</p>
+      {description && <p className="text-xs text-on-surface-variant mt-1">{description}</p>}
     </div>
   );
 }

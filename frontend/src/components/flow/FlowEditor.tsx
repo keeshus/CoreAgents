@@ -6,6 +6,7 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   addEdge,
   type Connection,
   type OnConnect,
@@ -27,7 +28,7 @@ import { HITLNode } from './nodes/HITLNode';
 import { StopNode } from './nodes/StopNode';
 import { DeletableEdge } from './DeletableEdge';
 
-const edgeTypes = { default: DeletableEdge };
+const edgeTypes = { default: DeletableEdge, smoothstep: DeletableEdge };
 
 const nodeTypes = {
   trigger: TriggerNode,
@@ -55,9 +56,18 @@ interface FlowEditorProps {
   onNodeDragStart?: (nodeId: string) => void;
 }
 
-export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef, setNodeDataCallbackRef, deleteNodeCallbackRef, setNodeLabelRef, onNodeClick, onNodeDragStart }: FlowEditorProps) {
+export function FlowEditor(props: FlowEditorProps) {
+  return (
+    <ReactFlowProvider>
+      <FlowEditorInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, onEdgesChange, addNodeCallbackRef, setNodeDataCallbackRef, deleteNodeCallbackRef, setNodeLabelRef, onNodeClick, onNodeDragStart }: FlowEditorProps) {
   const [nodes, setNodes, rawOnNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(initialEdges);
+  const { screenToFlowPosition } = useReactFlow();
   const serializedRef = useRef(JSON.stringify({ nodes: initialNodes, edges: initialEdges }));
 
   // Sync with parent state (undo/redo) without remounting the component
@@ -200,38 +210,23 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
   }, [nodes, layoutChildren]);
 
   const addNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
-    // Place node at center of visible viewport (accounting for pan/zoom)
-    let centerX = 300, centerY = 200;
-    const vp = document.querySelector('.react-flow__viewport') as HTMLElement | null;
-    if (vp) {
-      const rect = vp.getBoundingClientRect();
-      // Parse CSS transform: translate(Xpx, Ypx) scale(Z)
-      const transform = vp.style.transform;
-      const match = transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/);
-      if (match) {
-        const panX = parseFloat(match[1]);
-        const panY = parseFloat(match[2]);
-        const zoom = parseFloat(match[3]);
-        centerX = (rect.width / 2 - panX) / zoom - 75;
-        centerY = (rect.height / 2 - panY) / zoom;
-      } else {
-        centerX = rect.width / 2 - 75;
-        centerY = rect.height / 2;
-      }
-    }
+    const rf = document.querySelector('.react-flow') as HTMLElement | null;
+    const cx = rf ? rf.clientWidth / 2 : window.innerWidth / 2;
+    const cy = rf ? rf.clientHeight / 2 : window.innerHeight / 2;
+    const center = screenToFlowPosition({ x: cx, y: cy });
     const existing = nodes.filter(n => n.type === type);
     const nextNum = existing.length + 1;
     const newNode: Node = {
       id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       type,
       position: {
-        x: centerX + Math.random() * 40,
-        y: centerY + Math.random() * 40,
+        x: center.x - 75 + Math.random() * 40,
+        y: center.y + Math.random() * 40,
       },
       data: { label: `${type}${nextNum}`, type, config: { ...defaultConfig } },
     };
     setNodes((nds) => [...nds, newNode]);
-  }, [setNodes, nodes]);
+  }, [setNodes, nodes, screenToFlowPosition]);
 
   // Expose addNode to parent via ref and globally for Co-Pilot
   useEffect(() => {
@@ -304,16 +299,11 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
 
   const connectNodes = useCallback(
     (source: string, target: string, sourceHandle?: string) => {
-      const sourceNode = nodes.find(n => n.id === source);
-      const targetNode = nodes.find(n => n.id === target);
-      const isFeedback = sourceNode && targetNode && (sourceNode.data as any)?.type === 'hitl' && targetNode.position.x < sourceNode.position.x;
       setEdges((eds) => addEdge({
         source, target, sourceHandle,
-        style: isFeedback ? { strokeDasharray: '5,5', stroke: '#f97316', strokeWidth: 2 } : undefined,
-        animated: isFeedback,
       } as any, eds));
     },
-    [setEdges, nodes]
+    [setEdges]
   );
 
   const removeEdge = useCallback(
@@ -332,38 +322,33 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => {
-      const sourceNode = nodes.find(n => n.id === connection.source);
-      const targetNode = nodes.find(n => n.id === connection.target);
-      const isFeedback = sourceNode && targetNode && (sourceNode.data as any)?.type === 'hitl' && targetNode.position.x < sourceNode.position.x;
+      const isFeedback = connection.targetHandle === 'feedback-input';
       setEdges((eds) => addEdge({
         ...connection,
-        style: isFeedback ? { strokeDasharray: '5,5', stroke: '#f97316', strokeWidth: 2 } : undefined,
+        style: isFeedback ? { strokeDasharray: '5,5', stroke: 'var(--md-warning)', strokeWidth: 2 } : undefined,
         animated: isFeedback,
       }, eds));
     },
-    [setEdges, nodes]
+    [setEdges]
   );
 
   const isValidConnection = useCallback(
     (connection: Connection) => {
       // Tool input handles can have multiple connections
       if (connection.targetHandle?.startsWith('tool-input')) return true;
-      // Feedback edges (backward connections from HITL): allow even if target already has input
-      const sourceNode = nodes.find(n => n.id === connection.source);
-      const targetNode = nodes.find(n => n.id === connection.target);
-      if (sourceNode && targetNode && (sourceNode.data as any)?.type === 'hitl' && targetNode.position.x < sourceNode.position.x) return true;
+      // Feedback input handle is dedicated for feedback — always allow
+      if (connection.targetHandle === 'feedback-input') return true;
       // Check if target already has an incoming connection on this handle
       const existing = edges.find(
         e => e.target === connection.target && e.targetHandle === connection.targetHandle
       );
       return !existing;
     },
-    [edges, nodes]
+    [edges]
   );
 
   return (
-    <ReactFlowProvider>
-      <div className="w-full h-full">
+      <div className="w-full h-full bg-surface">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -373,6 +358,7 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
           isValidConnection={isValidConnection}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: 'var(--md-outline)', strokeWidth: 2 }, animated: false }}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
@@ -417,11 +403,15 @@ export function FlowEditor({ initialNodes = [], initialEdges = [], onNodesChange
             }
           }}
         >
-          <Background />
+          <Background gap={16} size={1.5} color="currentColor" />
           <Controls />
-          <MiniMap />
+          <MiniMap
+            style={{ background: 'var(--md-surface-container-high)' }}
+            nodeColor="var(--md-primary-container)"
+            nodeStrokeColor="var(--md-primary)"
+            maskColor="var(--md-surface-dim)"
+          />
         </ReactFlow>
       </div>
-    </ReactFlowProvider>
   );
 }

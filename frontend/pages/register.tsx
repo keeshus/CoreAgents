@@ -3,8 +3,9 @@ import { useRouter } from 'next/router';
 import { useAuth, useAuthConfig } from '@/lib/auth-context';
 import { API_URL } from '@/lib/api-client';
 import Link from 'next/link';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 import { PasswordStrengthMeter } from '@/components/PasswordStrength';
+import { TextField } from '@/components/ui/TextField';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -45,62 +46,55 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-surface-container flex items-center justify-center">
       <div className="max-w-md w-full mx-4">
-        <div className="bg-white rounded-xl shadow-sm border p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Create Account</h1>
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
+        <div className="bg-surface rounded-xl shadow-sm border p-8">
+          <h1 className="text-2xl font-bold text-on-surface mb-6">Create Account</h1>
+          {error && <div className="bg-error-container border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
 
           {hasSso && (
             <>
               <a
                 href={`${API_URL}/auth/sso/login`}
-                className="flex items-center justify-center gap-2 w-full border-2 border-gray-300 text-gray-700 rounded p-2.5 text-sm font-medium hover:bg-gray-50 hover:border-gray-400 transition-colors mb-4"
+                className="flex items-center justify-center gap-2 w-full border-2 border-outline text-on-surface-variant rounded p-2.5 text-sm font-medium hover:bg-surface-container-high hover:border-outline transition-colors mb-4"
               >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13 12H3" />
-                </svg>
+                <Icon name="login" className="text-xl" />
                 Register with {ssoName}
               </a>
               <div className="flex items-center gap-3 mb-4">
-                <div className="flex-1 border-t border-gray-200" />
-                <span className="text-xs text-gray-400">or</span>
-                <div className="flex-1 border-t border-gray-200" />
+                <div className="flex-1 border-t border-outline-variant" />
+                <span className="text-xs text-on-surface-variant">or</span>
+                <div className="flex-1 border-t border-outline-variant" />
               </div>
             </>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" autoComplete="name" />
+              <TextField label="Name" value={name} onChange={setName} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-              <input type="text" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" autoComplete="email" placeholder="you@example.com" />
+              <TextField label="Email" value={email} onChange={setEmail} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" autoComplete="new-password" />
-              <p className="text-[10px] text-gray-400 mt-2">Minimum 8 characters required</p>
+              <TextField label="Password" type="password" value={password} onChange={setPassword} helpText="Minimum 8 characters required" />
               {password.length > 0 && <PasswordStrengthMeter password={password} />}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Confirm Password</label>
-              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" autoComplete="new-password" />
+              <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} />
               {touchedConfirm && (
                 <p className={`mt-1 text-xs flex items-center gap-1 ${passwordsMatch ? 'text-green-600' : 'text-red-600'}`}>
-                  {passwordsMatch ? <CheckCircle className="w-3 h-3 shrink-0" /> : <XCircle className="w-3 h-3 shrink-0" />}
+                  {passwordsMatch ? <Icon name="check_circle" className="text-xs shrink-0" /> : <Icon name="cancel" className="text-xs shrink-0" />}
                   {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
                 </p>
               )}
             </div>
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white rounded p-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="w-full m3-button disabled:opacity-50">
               {loading ? 'Creating account...' : 'Create Account'}
             </button>
           </form>
-          <p className="text-xs text-gray-500 mt-4 text-center">
-            Already have an account? <Link href="/login" className="text-blue-600 hover:underline">Sign In</Link>
+          <p className="text-xs text-on-surface-variant mt-4 text-center">
+            Already have an account? <Link href="/login" className="text-primary hover:underline">Sign In</Link>
           </p>
         </div>
       </div>

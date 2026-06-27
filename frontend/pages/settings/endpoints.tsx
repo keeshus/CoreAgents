@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Cpu, Plus, Trash2, Edit3, Eye, EyeOff, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api-client';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { TextField } from '@/components/ui/TextField';
+import { SelectField } from '@/components/ui/SelectField';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 const PROVIDER_STYLES: Record<string, string> = {
-  anthropic: 'bg-blue-100 text-blue-700',
-  openai: 'bg-green-100 text-green-700',
-  litellm: 'bg-purple-100 text-purple-700',
+  anthropic: 'bg-primary-container text-primary',
+  openai: 'bg-success-container text-success',
+  litellm: 'bg-secondary-container text-on-secondary-container',
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -42,7 +45,7 @@ export default function EndpointsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({});
+
   const [deleting, setDeleting] = useState<string | null>(null);
   useAssistantContext({ pageKey: 'settings:endpoints', description: 'Managing LLM endpoints' });
 
@@ -152,33 +155,29 @@ export default function EndpointsPage() {
     }
   };
 
-  const toggleShowApiKey = (id: string) => {
-    setShowApiKey((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <Link href="/settings" className="text-gray-400 hover:text-gray-600">
-            <ArrowLeft className="w-4 h-4" />
+          <Link href="/settings" className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant">
+            <Icon name="arrow_back" className="text-base" /> Back
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900">LLM Endpoints</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <h1 className="text-2xl font-bold text-on-surface">LLM Endpoints</h1>
+            <p className="text-sm text-on-surface-variant mt-1">
               Manage your LLM provider connections
             </p>
-            <p className="text-[10px] text-gray-400 mt-1">
+            <p className="text-[10px] text-on-surface-variant mt-1">
               ⭐ The default endpoint is used by the Co-Pilot AI assistant for system-wide tasks like answering questions and helping you build flows.
             </p>
           </div>
           {!showForm && (
             <button
               onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="m3-button gap-2"
             >
-              <Plus className="w-4 h-4" />
+              <Icon name="add" className="text-base" />
               Add Endpoint
             </button>
           )}
@@ -186,8 +185,8 @@ export default function EndpointsPage() {
 
         {/* Error banner */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <div className="mb-4 p-3 bg-error-container border border-red-200 rounded-lg flex items-center gap-2 text-sm text-error">
+            <Icon name="error" className="text-base flex-shrink-0" />
             {error}
           </div>
         )}
@@ -196,120 +195,89 @@ export default function EndpointsPage() {
         {showForm && (
           <form
             onSubmit={handleSubmit}
-            className="mb-6 bg-white rounded-lg border p-5 space-y-4"
+            className="mb-6 bg-surface rounded-lg border border-outline-variant p-5 space-y-4"
           >
-            <h2 className="text-base font-semibold text-gray-900">
+            <h2 className="text-base font-semibold text-on-surface">
               {editingId ? 'Edit Endpoint' : 'New Endpoint'}
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700">Name</span>
-                <input
-                  type="text"
-                  required
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="My Anthropic Key"
-                />
-              </label>
+              <TextField
+                label="Name"
+                value={form.name}
+                onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+              />
 
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700">Provider Type</span>
-                <select
-                  required
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-                  value={form.providerType}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      providerType: e.target.value as 'anthropic' | 'openai' | 'litellm',
-                    }))
-                  }
-                >
-                  <option value="anthropic">Anthropic</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="litellm">LiteLLM</option>
-                </select>
-              </label>
+              <SelectField
+                label="Provider Type"
+                value={form.providerType}
+                onChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    providerType: v as 'anthropic' | 'openai' | 'litellm',
+                  }))
+                }
+                options={[
+                  { value: 'anthropic', label: 'Anthropic' },
+                  { value: 'openai', label: 'OpenAI' },
+                  { value: 'litellm', label: 'LiteLLM' },
+                ]}
+              />
 
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700">
-                  Base URL {form.providerType !== 'litellm' && <span className="text-gray-400">(optional)</span>}
-                </span>
-                <input
-                  type="text"
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                  value={form.baseUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
-                  placeholder={
-                    form.providerType === 'litellm'
-                      ? 'http://localhost:4000'
-                      : 'https://api.anthropic.com'
-                  }
-                  required={form.providerType === 'litellm'}
-                />
-              </label>
+              <TextField
+                label="Base URL"
+                value={form.baseUrl}
+                onChange={(v) => setForm((f) => ({ ...f, baseUrl: v }))}
+              />
 
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700">
-                  API Key {editingId && <span className="text-gray-400">(leave blank to keep current)</span>}
-                </span>
-                <input
-                  type="password"
-                  required={!editingId}
-                  className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                  value={form.apiKey}
-                  onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
-                  placeholder="sk-ant-..."
-                />
-              </label>
+              <TextField
+                label="API Key"
+                type="password"
+                value={form.apiKey}
+                onChange={(v) => setForm((f) => ({ ...f, apiKey: v }))}
+                helpText={editingId ? 'Leave blank to keep current' : undefined}
+              />
 
-              <label className="block">
-                <span className="text-xs font-medium text-gray-700">Default Model</span>
+              <div>
                 {(() => {
                   const parsed = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
                   if (parsed.length > 0) {
                     return (
-                      <select
-                        required
-                        className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-                        value={form.defaultModel}
-                        onChange={(e) => setForm((f) => ({ ...f, defaultModel: e.target.value }))}
-                      >
-                        <option value="">Select default...</option>
-                        {parsed.map((m) => <option key={m} value={m}>{m}</option>)}
-                      </select>
+                      <>
+                        <SelectField
+                          label="Default Model"
+                          value={form.defaultModel}
+                          onChange={(v) => setForm((f) => ({ ...f, defaultModel: v }))}
+                          options={parsed.map((m) => ({ value: m, label: m }))}
+                        />
+                      </>
                     );
                   }
                   return (
-                    <input
-                      type="text"
-                      required
-                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
+                    <TextField
+                      label="Default Model"
                       value={form.defaultModel}
-                      onChange={(e) => setForm((f) => ({ ...f, defaultModel: e.target.value }))}
-                      placeholder="claude-sonnet-4-20250514"
+                      onChange={(v) => setForm((f) => ({ ...f, defaultModel: v }))}
                     />
                   );
                 })()}
-              </label>
+              </div>
             </div>
 
             <div className="col-span-2">
-              <span className="text-xs font-medium text-gray-700 block mb-1">Models</span>
+              <span className="text-xs font-medium text-on-surface-variant block mb-1">Models</span>
               <div className="space-y-1.5">
                 {(form.models ? form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '') : []).map((model, i) => (
                   <div key={i} className="flex items-center gap-1">
-                    <input
-                      className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs"
+                    <TextField
+                      label="Model"
                       value={model}
-                      onChange={(e) => {
+                      onChange={(v) => {
                         const list = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
-                        list[i] = e.target.value;
+                        list[i] = v;
                         setForm((f) => ({ ...f, models: list.join(', ') }));
                       }}
+                      className="flex-1"
                     />
                     <button
                       type="button"
@@ -318,14 +286,15 @@ export default function EndpointsPage() {
                         list.splice(i, 1);
                         setForm((f) => ({ ...f, models: list.join(', ') }));
                       }}
-                      className="px-1.5 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 shrink-0 font-bold"
-                    >✕</button>
+                      className="p-1.5 text-on-surface-variant hover:text-error"
+                      aria-label="Remove model"
+                    ><Icon name="close" className="text-sm" /></button>
                   </div>
                 ))}
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, models: f.models ? f.models + ', ' : ' ' }))}
-                  className="text-[11px] text-blue-600 hover:underline"
+                  className="text-[11px] text-primary hover:underline"
                 >+ Add model</button>
               </div>
             </div>
@@ -334,14 +303,14 @@ export default function EndpointsPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-on-surface-variant bg-surface border border-outline rounded-lg hover:bg-surface-container-high transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
               </button>
@@ -351,15 +320,15 @@ export default function EndpointsPage() {
 
         {/* Loading state */}
         {loading && (
-          <div className="text-center py-12 text-gray-400 text-sm">Loading endpoints...</div>
+          <div className="text-center py-12 text-on-surface-variant text-sm">Loading endpoints...</div>
         )}
 
         {/* Empty state */}
         {!loading && !error && endpoints.length === 0 && (
-          <div className="text-center py-16 bg-white rounded-lg border">
-            <Cpu className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">No endpoints configured</p>
-            <p className="text-gray-400 text-sm mt-1">
+          <div className="text-center py-16 bg-surface rounded-lg border border-outline-variant">
+            <Icon name="memory" className="text-4xl text-on-surface-variant mx-auto mb-3" />
+            <p className="text-on-surface-variant font-medium">No endpoints configured</p>
+            <p className="text-on-surface-variant text-sm mt-1">
               Add an LLM endpoint to get started
             </p>
           </div>
@@ -371,73 +340,60 @@ export default function EndpointsPage() {
             {endpoints.map((ep) => (
               <div
                 key={ep.id}
-                className="bg-white rounded-lg border p-4 flex items-start gap-4"
+                className="bg-surface rounded-lg border border-outline-variant p-4 flex items-start gap-4"
               >
-                <div className="p-2 bg-gray-50 rounded-lg">
-                  <Cpu className="w-5 h-5 text-gray-500" />
+                <div className="p-2 bg-surface-container rounded-lg">
+                  <Icon name="memory" className="text-xl text-on-surface-variant" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-medium text-gray-900">{ep.name}</h3>
+                    <h3 className="font-medium text-on-surface">{ep.name}</h3>
                     {ep.is_default && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium">⭐ Default</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-medium">⭐ Default</span>
                     )}
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        PROVIDER_STYLES[ep.provider_type] || 'bg-gray-100 text-gray-700'
+                        PROVIDER_STYLES[ep.provider_type] || 'bg-surface-container-high text-on-surface-variant'
                       }`}
                     >
                       {PROVIDER_LABELS[ep.provider_type] || ep.provider_type}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Model: <span className="font-mono text-gray-600">{ep.default_model}</span>
+                  <p className="text-sm text-on-surface-variant mt-1">
+                    Model: <span className="font-mono text-on-surface-variant">{ep.default_model}</span>
                   </p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                  <div className="flex items-center gap-3 mt-1 text-xs text-on-surface-variant">
                     <span>{(ep.models || []).length} model{(ep.models || []).length !== 1 ? 's' : ''}</span>
-                    <button
-                      onClick={() => toggleShowApiKey(ep.id)}
-                      className="flex items-center gap-1 hover:text-gray-600 transition-colors"
-                    >
-                      {showApiKey[ep.id] ? (
-                        <>
-                          <EyeOff className="w-3 h-3" />
-                          <span>{(ep.api_key || '').slice(0, 8)}...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-3 h-3" />
-                          <span>API Key hidden</span>
-                        </>
-                      )}
-                    </button>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {!ep.is_default && (
-                    <button
-                      onClick={() => handleSetDefault(ep.id)}
-                      className="text-[10px] px-2 py-1 rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-                      title="Use this endpoint for the Co-Pilot AI assistant"
-                    >
-                      Set as default
-                    </button>
+                    <Tooltip content="Use this endpoint for the Co-Pilot AI assistant">
+                      <button
+                        onClick={() => handleSetDefault(ep.id)}
+                        className="text-[10px] px-2 py-1 rounded bg-secondary-container text-on-secondary-container"
+                      >
+                        Set as default
+                      </button>
+                    </Tooltip>
                   )}
-                  <button
-                    onClick={() => handleEdit(ep)}
-                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                    title="Edit endpoint"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(ep)}
-                    disabled={deleting === ep.id}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                    title="Delete endpoint"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    <Tooltip content="Edit endpoint">
+                      <button
+                        onClick={() => handleEdit(ep)}
+                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-primary-container rounded transition-colors"
+                      >
+                        <Icon name="edit" className="text-base" /> Edit
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Delete endpoint">
+                      <button
+                        onClick={() => handleDelete(ep)}
+                        disabled={deleting === ep.id}
+                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors disabled:opacity-50"
+                      >
+                        <Icon name="delete" className="text-base" /> Delete
+                      </button>
+                    </Tooltip>
                 </div>
               </div>
             ))}

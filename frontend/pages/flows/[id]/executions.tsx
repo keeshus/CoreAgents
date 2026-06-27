@@ -2,8 +2,10 @@ import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Loader2, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Zap, StopCircle, Bug, Trash2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { StepCard } from '@/components/flow/StepCard';
 import { useAuth } from '@/lib/auth-context';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -24,13 +26,13 @@ const NODE_LABELS: Record<string, string> = {
   retriever: 'Retriever', branch: 'Condition', code: 'Code', output: 'Output',
 };
 
-const statusConfig: Record<string, { icon: any; color: string; bg: string; label: string }> = {
-  completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50 border-green-200', label: 'Completed' },
-  failed: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50 border-red-200', label: 'Failed' },
-  running: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', label: 'Running' },
-  pending: { icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', label: 'Pending' },
-  cancelled: { icon: XCircle, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200', label: 'Cancelled' },
-  awaiting_approval: { icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', label: 'Awaiting Approval' },
+const statusConfig: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+  completed: { icon: 'check_circle', color: 'text-success', bg: 'bg-success-container', label: 'Completed' },
+  failed: { icon: 'cancel', color: 'text-error', bg: 'bg-error-container', label: 'Failed' },
+  running: { icon: 'sync', color: 'text-primary', bg: 'bg-primary-container', label: 'Running' },
+  pending: { icon: 'schedule', color: 'text-on-secondary-container', bg: 'bg-secondary-container', label: 'Pending' },
+  cancelled: { icon: 'cancel', color: 'text-on-surface-variant', bg: 'bg-surface-container-high', label: 'Cancelled' },
+  awaiting_approval: { icon: 'schedule', color: 'text-on-secondary-container', bg: 'bg-secondary-container', label: 'Awaiting Approval' },
 };
 
 const fmtTime = (t: string | null) => t ? new Date(t).toLocaleTimeString() : '—';
@@ -105,62 +107,72 @@ export default function ExecutionHistoryPage() {
   const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }));
 
   if (view === 'list') return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Link href={backHref} className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-4 h-4" /></Link>
-          <div className="flex-1"><h1 className="text-2xl font-bold text-gray-900">Execution History</h1></div>
+          <Link href={backHref} className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant"><Icon name="arrow_back" className="text-base" /> Back</Link>
+          <div className="flex-1"><h1 className="text-2xl font-bold text-on-surface">Run history</h1></div>
         </div>
-        {loading ? <p className="text-gray-500 text-sm">Loading...</p> : executions.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-xl border">
-            <Zap className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-400">No executions yet</p>
+        {loading ? <p className="text-on-surface-variant text-sm">Loading...</p> : executions.length === 0 ? (
+          <div className="text-center py-16 bg-surface rounded-xl border">
+            <Icon name="bolt" className="text-5xl text-outline-variant mx-auto mb-3" />
+            <p className="text-on-surface-variant">No executions yet</p>
           </div>
         ) : (
           <div>
-            <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 mb-3 cursor-pointer select-none">
+            <label className="inline-flex items-center gap-1.5 text-xs text-on-surface-variant mb-3 cursor-pointer select-none">
               <input type="checkbox" checked={hideDebug} onChange={(e) => setHideDebug(e.target.checked)} className="rounded" />
               Hide debug runs
             </label>
-            <div className="space-y-2">{(hideDebug ? executions.filter(e => !e.input?._debug) : executions).map(exec => {
+            <div className="space-y-3">{(hideDebug ? executions.filter(e => !e.input?._debug) : executions).map(exec => {
             const cfg = statusConfig[exec.status] || statusConfig.pending;
-            const Icon = cfg.icon;
             const pausedTotal = exec.output?._pausedTotal || 0;
             const d = dur(exec.started_at, exec.completed_at, pausedTotal);
             const isDebug = exec.input?._debug;
             return (
-              <div key={exec.id} onClick={() => viewDetails(exec.id)} className="w-full bg-white rounded-lg border p-4 flex items-center gap-4 hover:shadow-sm transition-shadow cursor-pointer">
-                <div className={`p-2 rounded-full ${cfg.bg}`}><Icon className={`w-5 h-5 ${cfg.color} ${exec.status === 'running' ? 'animate-spin' : ''}`} /></div>
-                <div className="flex-1 min-w-0">
+              <div key={exec.id} onClick={() => viewDetails(exec.id)} className="bg-surface rounded-lg border p-4 flex items-center justify-between hover:shadow-sm transition-shadow cursor-pointer">
+                <div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-1.5 py-0.5 rounded-full capitalize font-medium ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
-                    {isDebug && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium flex items-center gap-1"><Bug className="w-3 h-3" /> Debug</span>}
-                    {d && <span className="text-xs text-gray-400">{d}</span>}
+                    {isDebug && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-container text-primary font-medium flex items-center gap-1"><Icon name="bug_report" className="text-xs" /> Debug</span>}
+                    {d && <span className="text-xs text-on-surface-variant">{d}</span>}
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">{fmtTime(exec.created_at)}</p>
-                  {exec.error && <p className="text-xs text-red-500 mt-1 truncate font-mono">{trunc(exec.error, 80)}</p>}
+                  <p className="text-xs text-on-surface-variant mt-1">{fmtTime(exec.created_at)}</p>
+                  {exec.error && <p className="text-xs text-error mt-1 truncate font-mono max-w-md">{trunc(exec.error, 80)}</p>}
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex items-center gap-2">
                   {exec.status === 'awaiting_approval' && (
-                    <Link href="/approvals" className="text-xs text-amber-600 hover:text-amber-700 underline whitespace-nowrap">
-                      Pending approval →
-                    </Link>
+                    <Tooltip content="Pending approval">
+                      <Link href="/approvals" className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary transition-colors">
+                        <Icon name="pending" className="text-base" /> Approvals
+                      </Link>
+                    </Tooltip>
                   )}
                   {exec.status === 'running' && (
-                    <button onClick={(e) => cancel(exec.id, e)} disabled={cancelling === exec.id} className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 disabled:opacity-50 shrink-0"><StopCircle className="w-3 h-3" />{cancelling === exec.id ? '...' : 'Stop'}</button>
+                    <Tooltip content="Stop execution">
+                      <button onClick={(e) => cancel(exec.id, e)} disabled={cancelling === exec.id} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors disabled:opacity-30 cursor-pointer">
+                        <Icon name="stop_circle" className="text-base" /> Stop
+                      </button>
+                    </Tooltip>
                   )}
-                  <button onClick={(e) => deleteExec(exec.id, e)} disabled={deleting === exec.id} className="p-1.5 text-gray-300 hover:text-red-500 disabled:opacity-30 shrink-0" title="Delete execution"><Trash2 className="w-3.5 h-3.5" /></button>
-                  <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                  <Tooltip content="Delete execution">
+                    <button onClick={(e) => deleteExec(exec.id, e)} disabled={deleting === exec.id} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors cursor-pointer disabled:opacity-30">
+                      <Icon name="delete" className="text-base" /> Delete
+                    </button>
+                  </Tooltip>
+                  <span className="p-2 text-outline-variant">
+                    <Icon name="chevron_right" className="text-base" />
+                  </span>
                 </div>
               </div>
             );
           })}</div>
             <div className="flex items-center justify-between mt-4 text-sm">
-              <span className="text-gray-500">{total} execution{total !== 1 ? 's' : ''}</span>
+              <span className="text-on-surface-variant">{total} execution{total !== 1 ? 's' : ''}</span>
               <div className="flex items-center gap-2">
-                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1 rounded border text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Previous</button>
-                <span className="text-gray-500">Page {page + 1} of {Math.ceil(total / PAGE_SIZE) || 1}</span>
-                <button disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)} className="px-3 py-1 rounded border text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next</button>
+                <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="m3-button-outlined text-sm disabled:opacity-40 disabled:cursor-not-allowed">Previous</button>
+                <span className="text-on-surface-variant text-xs">Page {page + 1} of {Math.ceil(total / PAGE_SIZE) || 1}</span>
+                <button disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)} className="m3-button-outlined text-sm disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
               </div>
             </div>
           </div>
@@ -171,7 +183,7 @@ export default function ExecutionHistoryPage() {
 
   // Detail view
   const cfg = selected ? statusConfig[selected.status] || statusConfig.pending : statusConfig.pending;
-  const Icon = cfg.icon;
+  const iconName = cfg.icon;
   const pausedTotal = selected?.output?._pausedTotal || 0;
   const waitingSince = selected?.output?._pausedAt
     ? Math.floor((Date.now() - selected.output._pausedAt) / 1000) + 's'
@@ -180,33 +192,33 @@ export default function ExecutionHistoryPage() {
   const isDebug = selected?.input?._debug;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => { setView('list'); setSelected(null); setSteps([]); }} className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-4 h-4" /></button>
+          <button onClick={() => { setView('list'); setSelected(null); setSteps([]); }} className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant"><Icon name="arrow_back" className="text-base" /> Back</button>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">{isDebug ? 'Debug Trace' : 'Execution Details'}</h1>
-              {isDebug && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium flex items-center gap-1"><Bug className="w-3 h-3" /> Debug</span>}
+              <h1 className="text-2xl font-bold text-on-surface">{isDebug ? 'Debug Trace' : 'Execution Details'}</h1>
+              {isDebug && <span className="text-xs px-2 py-0.5 rounded-full bg-primary-container text-primary font-medium flex items-center gap-1"><Icon name="bug_report" className="text-xs" /> Debug</span>}
               {selected && <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>}
             </div>
-            {selected && <p className="text-sm text-gray-500 mt-1">{fmtTime(selected.created_at)}{execDuration && <span className="ml-2 text-gray-400">· run: {execDuration}</span>}{pausedTotal > 0 && <span className="ml-2 text-amber-500">· paused: {(pausedTotal / 1000).toFixed(0)}s</span>}{selected.status === 'awaiting_approval' && waitingSince && <span className="ml-2 text-amber-500">· waiting: {waitingSince}</span>}</p>}
+            {selected && <p className="text-sm text-on-surface-variant mt-1">{fmtTime(selected.created_at)}{execDuration && <span className="ml-2 text-on-surface-variant">· run: {execDuration}</span>}{pausedTotal > 0 && <span className="ml-2 text-amber-500">· paused: {(pausedTotal / 1000).toFixed(0)}s</span>}{selected.status === 'awaiting_approval' && waitingSince && <span className="ml-2 text-amber-500">· waiting: {waitingSince}</span>}</p>}
           </div>
-          {flowId && <Link href={`/flows/${flowId}/edit`} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Open Editor</Link>}
+          {flowId && <Link href={`/flows/${flowId}/edit`} className="text-xs text-primary hover:text-primary font-medium">Open Editor</Link>}
         </div>
 
         {selected?.error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            <div><h3 className="text-sm font-semibold text-red-700 mb-1">Execution Failed</h3><p className="text-xs text-red-600 font-mono break-all">{selected.error}</p></div>
+          <div className="bg-error-container border border-error rounded-lg p-4 mb-4 flex items-start gap-3">
+            <Icon name="warning" className="text-2xl text-error shrink-0 mt-0.5" />
+            <div><h3 className="text-sm font-semibold text-error mb-1">Execution Failed</h3><p className="text-xs text-error font-mono break-all">{selected.error}</p></div>
           </div>
         )}
 
         {steps.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border"><Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-400">No step data recorded</p></div>
+          <div className="text-center py-12 bg-surface rounded-xl border"><Icon name="schedule" className="text-3xl text-outline-variant mx-auto mb-2" /><p className="text-sm text-on-surface-variant">No step data recorded</p></div>
         ) : (
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Step Trace ({steps.length} steps)</h2>
+            <h2 className="text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-4">Step Trace ({steps.length} steps)</h2>
             <div className="space-y-2">{(function() {
               const groups: { iter: number; steps: any[] }[] = [];
               for (const step of steps) {
@@ -229,101 +241,31 @@ export default function ExecutionHistoryPage() {
                   );
                 }
                 group.steps.forEach((step: any) => {
-              const sc = statusConfig[step.status] || statusConfig.pending;
-              const SIcon = sc.icon;
-              const sd = dur(step.started_at, step.completed_at);
-              const label = step.node_label || step.input?._nodeLabel || NODE_LABELS[step.node_type] || step.node_type;
-              const open = expanded[step.id] || false;
-              const has = step.input || step.output || step.error;
-              const isLLM = step.node_type === 'llm-agent';
               elements.push(
-                <div key={step.id} className="bg-white rounded-lg border overflow-hidden">
-                  <button onClick={() => toggle(step.id)} className="w-full p-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors">
-                    {step.status === 'running' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />}
-                    {step.status === 'completed' && <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />}
-                    {step.status === 'failed' && <XCircle className="w-4 h-4 text-red-500 shrink-0" />}
-                    {step.status === 'pending' && <Clock className="w-4 h-4 text-yellow-500 shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-gray-900 shrink-0">{label}</span>
-                        {step.output?.toolCalls?.length > 0 && (
-                          <span className="text-[10px] text-gray-400 font-mono truncate" title={step.output.toolCalls.map((t: any) => `${t.name}(${JSON.stringify(t.input)}) → ${typeof t.result === 'string' ? t.result.slice(0, 80) : JSON.stringify(t.result).slice(0, 80)}`).join(' | ')}>
-                            {step.output.toolCalls.map((t: any, i: number) => (
-                              <span key={i}>{i > 0 && ', '}{t.name}({typeof t.input === 'object' ? Object.keys(t.input || {}).join(',') : '…'})</span>
-                            ))}
-                          </span>
-                        )}
-                        {step.output?.decision && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-600 capitalize">{step.output.decision}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[10px] px-1 rounded capitalize ${sc.bg} ${sc.color}`}>{sc.label}</span>
-                        {sd && <span className="text-[10px] text-gray-400">{sd}</span>}
-                        {step.started_at && <span className="text-[10px] text-gray-400">{fmtTime(step.started_at)}</span>}
-                      </div>
-                    </div>
-                    {step.error && <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />}
-                    {has && (open ? <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />)}
-                  </button>
-                  {open && has && (
-                    <div className="border-t bg-gray-50/50 p-4 space-y-3">
-                      {step.error && <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded p-2"><AlertTriangle className="w-3 h-3 text-red-500 mt-0.5 shrink-0" /><span className="text-xs text-red-700 font-mono break-all">{step.error}</span></div>}
-                      {step.input && (
-                        <div>
-                          {isLLM && step.input.systemPrompt && (
-                            <div className="mb-2">
-                              <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">System Prompt</h4>
-                              <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">{step.input.systemPrompt}</pre>
-                            </div>
-                          )}
-                          {isLLM && (
-                            <div>
-                              <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Input</h4>
-                              <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">{JSON.stringify(step.input, null, 2)}</pre>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {step.output && (
-                        <div>
-                          <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{isLLM ? 'LLM Response' : 'Output'}</h4>
-                          {isLLM && typeof step.output.content === 'string' && (
-                            <div className="text-xs text-gray-800 whitespace-pre-wrap break-all bg-green-50/50 rounded p-2 border border-green-100 mb-2">{step.output.content}</div>
-                          )}
-                          {step.output.toolCalls && step.output.toolCalls.length > 0 && (
-                            <div className="mb-2">
-                              <h5 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Tool Calls ({step.output.toolCalls.length})</h5>
-                              <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{JSON.stringify(step.output.toolCalls, null, 2)}</pre>
-                            </div>
-                          )}
-                          {step.output.decision && (
-                            <div className="mb-2">
-                              <h5 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Decision</h5>
-                              <div className="text-xs bg-amber-50 border border-amber-200 rounded p-2">
-                                <span className="font-medium capitalize">{step.output.decision}</span>
-                                {step.output.feedback && <p className="text-gray-600 mt-1">{step.output.feedback}</p>}
-                              </div>
-                            </div>
-                          )}
-                          {step.output.reviewedContent && (
-                            <div className="mb-2">
-                              <h5 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Reviewed Content</h5>
-                              <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{JSON.stringify(step.output.reviewedContent, null, 2)}</pre>
-                            </div>
-                          )}
-                          <pre className="text-xs bg-white border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{JSON.stringify(step.output, null, 2)}</pre>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <StepCard
+                  key={step.id}
+                  step={{
+                    nodeId: step.id,
+                    nodeType: step.node_type,
+                    nodeLabel: step.node_label,
+                    status: step.status,
+                    input: step.input,
+                    output: step.output,
+                    error: step.error || null,
+                    startedAt: step.started_at,
+                    completedAt: step.completed_at,
+                    tokens: step.tokens,
+                    children: step.children,
+                  }}
+                  expanded={expanded[step.id] || false}
+                  onToggle={() => toggle(step.id)}
+                />
               );
               });
               });
               return elements;
             })()}</div>
-            {selected?.output && <div className="mt-6 bg-white rounded-lg border p-4"><h3 className="text-sm font-semibold text-gray-900 mb-2">Final Output</h3><pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all">{JSON.stringify(selected.output, null, 2)}</pre></div>}
+            {selected?.output && <div className="mt-6 bg-surface rounded-lg border p-4"><h3 className="text-sm font-semibold text-on-surface mb-2">Final Output</h3><pre className="text-xs bg-surface-container p-3 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all">{JSON.stringify(selected.output, null, 2)}</pre></div>}
           </div>
         )}
       </div>

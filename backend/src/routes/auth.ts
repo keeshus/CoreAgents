@@ -396,4 +396,40 @@ router.put('/profile', authenticate, asyncHandler(async (req, res) => {
   });
 }));
 
+// ── PUT /api/auth/password — change password (local accounts only) ─────────
+
+router.put('/password', authenticate, asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const { currentPassword, newPassword } = req.body || {};
+
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: 'Current password and new password are required' });
+    return;
+  }
+
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: 'New password must be at least 8 characters' });
+    return;
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+  if (user.provider !== 'local') {
+    res.status(403).json({ error: 'Password change is only available for local accounts' });
+    return;
+  }
+
+  const valid = await bcrypt.compare(currentPassword, user.password_hash || '');
+  if (!valid) {
+    res.status(401).json({ error: 'Current password is incorrect' });
+    return;
+  }
+
+  const password_hash = await bcrypt.hash(newPassword, 10);
+  await db.update(users).set({ password_hash }).where(eq(users.id, userId));
+
+  res.json({ status: 'ok' });
+}));
+
 export default router;

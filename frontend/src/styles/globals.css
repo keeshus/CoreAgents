@@ -177,6 +177,9 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
+/* All buttons show hand cursor unless disabled */
+button:not(:disabled) { cursor: pointer; }
+
 /* ── M3 utility classes ───────────────────────────────────────────────── */
 @utility m3-surface {
   background-color: var(--md-surface);
@@ -214,6 +217,8 @@ body {
 @utility m3-label-large { font-size: 14px; line-height: 1.5; font-weight: 500; letter-spacing: 0.1px; }
 @utility m3-label-medium { font-size: 12px; line-height: 1.5; font-weight: 500; letter-spacing: 0.5px; }
 @utility m3-label-small { font-size: 11px; line-height: 1.5; font-weight: 500; letter-spacing: 0.5px; }
+
+
 
 /* ── M3 Components ────────────────────────────────────────────────────── */
 @utility m3-elevated {
@@ -257,13 +262,16 @@ body {
 }
 .m3-button-outlined:hover { background-color: color-mix(in srgb, var(--md-primary) 8%, transparent); }
 .m3-input {
-  width: 100%; padding: 0.625rem 1rem;
+  width: 100%; padding: 1.25rem 1rem 0.5rem;
   background-color: var(--md-surface-container-high); color: var(--md-on-surface);
-  border: none; border-radius: var(--radius-sm);
+  border: none; border-bottom: 2px solid var(--md-outline-variant);
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   font-size: 0.875rem; line-height: 1.5; outline: none;
-  transition: all 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
-.m3-input:focus { outline: 2px solid var(--md-primary); background-color: var(--md-surface-container-highest); }
+.m3-input:focus { border-bottom-color: var(--md-primary); background-color: var(--md-surface-container-highest); }
+.m3-input::placeholder { color: var(--md-outline); }
+.m3-input:disabled { opacity: 0.4; }
 @utility m3-chip {
   display: inline-flex; align-items: center; gap: 0.375rem;
   padding: 0.375rem 0.75rem;
@@ -283,4 +291,40 @@ body {
   padding: 0.125rem 0.5rem;
   font-size: 0.6875rem; font-weight: 500;
   border-radius: var(--radius-sm); letter-spacing: 0.5px;
+}
+
+/* ── Prose / Markdown M3 overrides ────────────────────── */
+.prose {
+  --tw-prose-body: var(--md-on-surface);
+  --tw-prose-headings: var(--md-on-surface);
+  --tw-prose-links: var(--md-primary);
+  --tw-prose-bold: var(--md-on-surface);
+  --tw-prose-counters: var(--md-on-surface-variant);
+  --tw-prose-bullets: var(--md-outline);
+  --tw-prose-hr: var(--md-outline-variant);
+  --tw-prose-quotes: var(--md-on-surface-variant);
+  --tw-prose-quote-borders: var(--md-primary);
+  --tw-prose-code: var(--md-on-surface);
+  --tw-prose-th-borders: var(--md-outline);
+  --tw-prose-td-borders: var(--md-outline-variant);
+}
+
+/* ── React Flow theme overrides ───────────────────────── */
+.react-flow { background: var(--md-surface) !important; }
+.react-flow__node { background: transparent; }
+.react-flow__background circle { fill: var(--md-outline) !important; opacity: 0.4; }
+.react-flow__controls { background: var(--md-surface-container) !important; border: 1px solid var(--md-outline-variant) !important; border-radius: 8px !important; overflow: hidden; box-shadow: 0 1px 3px 1px rgba(0,0,0,0.15), 0 1px 2px 0 rgba(0,0,0,0.30) !important; }
+.react-flow__controls-button { background: var(--md-surface-container) !important; border-bottom: 1px solid var(--md-outline-variant) !important; fill: var(--md-on-surface-variant) !important; width: 32px; height: 32px; }
+.react-flow__controls-button:hover { background: var(--md-surface-container-high) !important; }
+.react-flow__controls-button svg { fill: var(--md-on-surface-variant) !important; }
+.react-flow__minimap { background-color: var(--md-surface-container-high); }
+.react-flow__minimap-mask { fill: var(--md-surface-dim); }
+.react-flow__attribution { display: none; }
+
+/* ── Material Symbols ─────────────────────────────────── */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
 }

@@ -1,7 +1,8 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Send, Bot, User, Loader2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -13,7 +14,7 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
   // Load existing messages
   useEffect(() => {
@@ -101,29 +102,24 @@ export default function ChatPage() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    // Auto-resize the textarea
-    e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-  };
+
 
   return (
-    <div className="h-screen flex flex-col bg-white">
+    <div className="h-screen flex flex-col bg-surface">
       {/* Header */}
-      <div className="h-12 border-b flex items-center px-4 shrink-0 bg-white">
-        <Link href={`/chat/${flowId}`} className="text-gray-400 hover:text-gray-600 mr-3">
-          <ArrowLeft className="w-4 h-4" />
+      <div className="h-12 border-b border-outline-variant flex items-center px-4 shrink-0 bg-surface-container">
+          <Link href={`/chat/${flowId}`} className="text-on-surface-variant hover:text-on-surface mr-3">
+          <Icon name="arrow_back" className="text-base" />
         </Link>
-        <h1 className="text-sm font-semibold text-gray-900">Chat</h1>
-        <span className="text-xs text-gray-400 ml-3">Built with Core Agents</span>
+        <h1 className="text-sm font-semibold text-on-surface">Chat</h1>
+        <span className="text-xs text-on-surface-variant ml-3">Built with Core Agents</span>
       </div>
 
       {/* Messages */}
@@ -131,28 +127,28 @@ export default function ChatPage() {
         <div className="max-w-3xl mx-auto space-y-4">
           {messages.length === 0 && !streaming && (
             <div className="text-center py-16">
-              <Bot className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-400 text-sm">Start a conversation with this agent</p>
+              <Icon name="smart_toy" className="text-5xl text-outline-variant mx-auto mb-3" />
+              <p className="text-on-surface-variant text-sm">Start a conversation with this agent</p>
             </div>
           )}
           {messages.map(msg => (
             <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  msg.role === 'user' ? 'bg-blue-600' : 'bg-gray-200'
+                  msg.role === 'user' ? 'bg-primary' : 'bg-surface-container-high'
                 }`}
               >
                 {msg.role === 'user' ? (
-                  <User className="w-4 h-4 text-white" />
+                  <Icon name="person" className="text-base text-on-primary" />
                 ) : (
-                  <Bot className="w-4 h-4 text-gray-600" />
+                  <Icon name="smart_toy" className="text-base text-on-surface-variant" />
                 )}
               </div>
               <div
                 className={`max-w-[70%] rounded-lg px-4 py-2 ${
                   msg.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-900'
+                    ? 'bg-primary text-on-primary'
+                    : 'bg-surface-container-high text-on-surface'
                 }`}
               >
                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
@@ -161,25 +157,25 @@ export default function ChatPage() {
           ))}
           {streaming && streamContent && (
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                <Bot className="w-4 h-4 text-gray-600" />
+              <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
+                <Icon name="smart_toy" className="text-base text-on-surface-variant" />
               </div>
-              <div className="max-w-[70%] rounded-lg px-4 py-2 bg-gray-100">
+              <div className="max-w-[70%] rounded-lg px-4 py-2 bg-surface-container-high">
                 <p className="text-sm whitespace-pre-wrap break-words">{streamContent}</p>
-                <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-0.5" />
+                <span className="inline-block w-2 h-4 bg-on-surface-variant animate-pulse ml-0.5" />
               </div>
             </div>
           )}
           {streaming && !streamContent && (
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                <Loader2 className="w-4 h-4 text-gray-600 animate-spin" />
+              <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
+                <Icon name="sync" className="text-base text-on-surface-variant animate-spin" />
               </div>
-              <div className="rounded-lg px-4 py-2 bg-gray-100">
+              <div className="rounded-lg px-4 py-2 bg-surface-container-high">
                 <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span className="w-2 h-2 bg-on-surface-variant rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-on-surface-variant rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-on-surface-variant rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
             </div>
@@ -189,24 +185,26 @@ export default function ChatPage() {
       </div>
 
       {/* Input */}
-      <div className="border-t bg-white">
+      <div className="border-t border-outline-variant bg-surface-container">
         <div className="max-w-3xl mx-auto p-4 flex gap-3">
-          <textarea
-            ref={inputRef}
+          <TextField
+            inputRef={inputRef}
+            label="Message"
             value={input}
-            onChange={handleInputChange}
+            onChange={setInput}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
+            multiline
             rows={1}
-            className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent leading-relaxed"
             disabled={streaming}
+            className="flex-1"
           />
           <button
             onClick={sendMessage}
             disabled={streaming || !input.trim()}
-            className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shrink-0 self-end"
+            className="m3-button gap-2 shrink-0 self-end disabled:opacity-50"
           >
-            <Send className="w-4 h-4" />
+            <Icon name="send" className="text-base" />
           </button>
         </div>
       </div>

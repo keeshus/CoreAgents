@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { getUpstreamNodeIds, getNodeFields } from './InputPreview';
 import { validateTemplates } from '@/lib/validateTemplates';
+import { Icon } from '@/components/ui/Icon';
+import { TextField } from '@/components/ui/TextField';
 
 const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
 
@@ -33,7 +35,7 @@ export function TemplateAutocomplete({
   edges = [],
   selectedFields,
 }: TemplateAutocompleteProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [filter, setFilter] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -92,7 +94,7 @@ export function TemplateAutocomplete({
     return errors;
   }, [value, upstreamLabels, nodes, selectedFields]);
 
-  const getCursorPos = useCallback((textarea: HTMLTextAreaElement, text: string) => {
+  const getCursorPos = useCallback((textarea: HTMLTextAreaElement | HTMLInputElement, text: string) => {
     const pos = textarea.selectionStart || 0;
     const before = text.slice(0, pos);
     const lines = before.split('\n');
@@ -105,12 +107,12 @@ export function TemplateAutocomplete({
     };
   }, []);
 
-  const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    onChange(val);
+  const handleInput = useCallback((newValue: string) => {
+    onChange(newValue);
 
-    const pos = e.target.selectionStart || 0;
-    const before = val.slice(0, pos);
+    if (!textareaRef.current) return;
+    const pos = textareaRef.current.selectionStart || 0;
+    const before = newValue.slice(0, pos);
     const lastOpen = before.lastIndexOf('{{');
     const lastClose = before.lastIndexOf('}}');
 
@@ -119,7 +121,7 @@ export function TemplateAutocomplete({
       setFilter(partial);
       setSelectedIndex(0);
       setShowDropdown(true);
-      setCursorPos(getCursorPos(e.target, val));
+      setCursorPos(getCursorPos(textareaRef.current, newValue));
     } else {
       setShowDropdown(false);
     }
@@ -127,7 +129,7 @@ export function TemplateAutocomplete({
 
   const insertSuggestion = useCallback((path: string) => {
     if (!textareaRef.current) return;
-    const pos = textareaRef.current.selectionStart;
+    const pos = textareaRef.current.selectionStart ?? 0;
     const before = value.slice(0, pos);
     const after = value.slice(pos);
     const lastOpen = before.lastIndexOf('{{');
@@ -178,24 +180,26 @@ export function TemplateAutocomplete({
 
   return (
     <div className="relative">
-      <textarea
-        ref={textareaRef}
+      <TextField
+        inputRef={textareaRef}
+        label=""
         value={value}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
+        multiline
         rows={rows}
-        className={`mt-1 block w-full rounded border border-gray-300 p-2 text-sm resize-y font-mono ${className}`}
+        className={className}
       />
       {validationErrors.length > 0 && (
         <div className="mt-1 space-y-0.5">
           {validationErrors.map((err, i) => (
-            <p key={i} className="text-[10px] text-red-600 flex items-start gap-1">
-              <span className="mt-0.5 shrink-0">⚠️</span>
+            <p key={i} className="text-[10px] text-error flex items-start gap-1">
+              <Icon name="warning" className="text-xs shrink-0 mt-0.5" />
               <span>
-                <code className="font-mono text-red-700">{err.match}</code> — {err.message}
+                <code className="font-mono text-error">{err.match}</code> — {err.message}
                 {err.suggestions.length > 0 && (
-                  <span className="text-gray-500"> Did you mean <code className="font-mono text-blue-600">{err.suggestions[0]}</code>?</span>
+                  <span className="text-on-surface-variant"> Did you mean <code className="font-mono text-primary">{err.suggestions[0]}</code>?</span>
                 )}
               </span>
             </p>
@@ -204,20 +208,20 @@ export function TemplateAutocomplete({
       )}
       {showDropdown && filtered.length > 0 && (
         <div
-          className="absolute z-50 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto"
+          className="absolute z-50 bg-surface border border-outline-variant rounded shadow-m3-4 max-h-48 overflow-y-auto"
           style={{ top: cursorPos.top, left: cursorPos.left, minWidth: 280 }}
         >
           {filtered.map((s, i) => (
             <button
               key={s.path}
               type="button"
-              className={`block w-full text-left px-3 py-2 text-xs border-b border-gray-50 last:border-b-0 ${
-                i === selectedIndex ? 'bg-blue-100 text-blue-800' : 'hover:bg-blue-50 hover:text-blue-700'
+              className={`block w-full text-left px-3 py-2 text-xs border-b border-outline-variant last:border-b-0 ${
+                i === selectedIndex ? 'bg-primary-container text-primary' : 'hover:bg-primary-container hover:text-primary'
               }`}
               onClick={() => insertSuggestion(s.path)}
             >
               <code className="font-mono">{s.path}</code>
-              <span className="text-gray-400 ml-2">{s.label}</span>
+              <span className="text-on-surface-variant ml-2">{s.label}</span>
             </button>
           ))}
         </div>

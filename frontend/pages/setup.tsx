@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/auth-context';
-import { Loader2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 import { PasswordStrengthMeter } from '@/components/PasswordStrength';
+import { TextField } from '@/components/ui/TextField';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -57,8 +58,8 @@ export default function SetupPage() {
 
   if (checking || authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+      <div className="min-h-screen bg-surface-container flex items-center justify-center">
+        <Icon name="sync" className="text-2xl text-on-surface-variant animate-spin" />
       </div>
     );
   }
@@ -66,32 +67,27 @@ export default function SetupPage() {
   if (!setupRequired) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-surface-container flex items-center justify-center">
       <div className="max-w-md w-full mx-4">
-        <div className="bg-white rounded-xl shadow-sm border p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Core Agents</h1>
-          <p className="text-sm text-gray-500 mb-6">Create the first admin account to get started.</p>
-          {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
+        <div className="bg-surface rounded-xl shadow-sm border p-8">
+          <h1 className="text-2xl font-bold text-on-surface mb-2">Welcome to Core Agents</h1>
+          <p className="text-sm text-on-surface-variant mb-6">Create the first admin account to get started.</p>
+          {error && <div className="bg-error-container border border-red-200 text-red-700 text-sm rounded p-3 mb-4">{error}</div>}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" required />
+              <TextField label="Name" value={name} onChange={setName} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
-              <input type="text" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" required autoComplete="email" placeholder="you@example.com" />
+              <TextField label="Email" value={email} onChange={setEmail} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" required autoComplete="new-password" />
-              <p className="text-[10px] text-gray-400 mt-2">Minimum 8 characters required</p>
+              <TextField label="Password" type="password" value={password} onChange={setPassword} helpText="Minimum 8 characters required" />
               {password.length > 0 && <PasswordStrengthMeter password={password} />}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Confirm Password</label>
-              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full rounded border border-gray-300 p-2 text-sm" required autoComplete="new-password" />
+              <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} />
             </div>
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white rounded p-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="w-full m3-button disabled:opacity-50">
               {loading ? 'Creating admin account...' : 'Create Admin Account'}
             </button>
           </form>

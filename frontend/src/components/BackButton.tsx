@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 
 interface BackButtonProps {
   href: string;
@@ -8,7 +8,7 @@ interface BackButtonProps {
 export function BackButton({ href }: BackButtonProps) {
   return (
     <Link href={href} className="text-gray-400 hover:text-gray-600">
-      <ArrowLeft className="w-4 h-4" />
+      <Icon name="arrow_back" className="text-base" />
     </Link>
   );
 }

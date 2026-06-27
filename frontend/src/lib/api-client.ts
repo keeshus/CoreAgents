@@ -70,6 +70,8 @@ export const api = {
       return request<{ data: any[]; total: number }>(`/flows${qs}`);
     },
     get: (id: string) => request<any>(`/flows/${id}`),
+    checkName: (name: string, excludeId?: string) =>
+      request<{ available: boolean }>(`/flows/check-name?name=${encodeURIComponent(name)}${excludeId ? `&exclude=${encodeURIComponent(excludeId)}` : ''}`),
     create: (data: { name: string; description?: string; nodes?: any[]; edges?: any[] }) =>
       request<any>('/flows', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
@@ -127,5 +129,7 @@ export const api = {
     profile: () => request<any>('/auth/profile'),
     updateProfile: (data: { name?: string; email?: string }) =>
       request<any>('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
+    changePassword: (data: { currentPassword: string; newPassword: string }) =>
+      request<any>('/auth/password', { method: 'PUT', body: JSON.stringify(data) }),
   },
 };

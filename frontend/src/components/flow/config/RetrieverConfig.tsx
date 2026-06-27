@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { TextField } from '@/components/ui/TextField';
+import { SelectField } from '@/components/ui/SelectField';
 import { CollectionSelector } from './CollectionSelector';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
@@ -25,33 +27,25 @@ export function RetrieverConfig({ config, onChange }: RetrieverConfigProps) {
 
   return (
     <div className="space-y-3">
-      <label className="block">
-        <span className="text-xs font-medium text-gray-700">Embedding Provider</span>
-        <select
-          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-          value={config.embeddingProviderId || ''}
-          onChange={e => onChange({ embeddingProviderId: e.target.value })}
-        >
-          <option value="">Select provider...</option>
-          {embeddingProviders.map((ep: any) => (
-            <option key={ep.id} value={ep.id}>{ep.name} ({ep.model})</option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label="Embedding Provider"
+        value={config.embeddingProviderId || ''}
+        onChange={(v) => onChange({ embeddingProviderId: v })}
+        options={[
+          { value: '', label: 'Select provider...' },
+          ...embeddingProviders.map((ep: any) => ({ value: ep.id, label: `${ep.name} (${ep.model})` })),
+        ]}
+      />
 
-      <label className="block">
-        <span className="text-xs font-medium text-gray-700">Vector Store</span>
-        <select
-          className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm bg-white"
-          value={config.vectorStoreId || ''}
-          onChange={e => onChange({ vectorStoreId: e.target.value })}
-        >
-          <option value="">Select store...</option>
-          {vectorStores.map((vs: any) => (
-            <option key={vs.id} value={vs.id}>{vs.name} ({vs.url})</option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label="Vector Store"
+        value={config.vectorStoreId || ''}
+        onChange={(v) => onChange({ vectorStoreId: v })}
+        options={[
+          { value: '', label: 'Select store...' },
+          ...vectorStores.map((vs: any) => ({ value: vs.id, label: `${vs.name} (${vs.url})` })),
+        ]}
+      />
 
       <CollectionSelector
         vectorStoreId={config.vectorStoreId || ''}
@@ -60,26 +54,18 @@ export function RetrieverConfig({ config, onChange }: RetrieverConfigProps) {
       />
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-xs font-medium text-gray-700">Top-K</span>
-          <input
-            type="number"
-            className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-            value={config.topK ?? 5}
-            onChange={e => onChange({ topK: parseInt(e.target.value) || 5 })}
-            min={1} max={50}
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs font-medium text-gray-700">Min Score</span>
-          <input
-            type="number" step="0.01"
-            className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-            value={config.minScore ?? 0.7}
-            onChange={e => onChange({ minScore: parseFloat(e.target.value) || 0.7 })}
-            min={0} max={1}
-          />
-        </label>
+        <TextField
+          label="Top-K"
+          type="number"
+          value={String(config.topK ?? 5)}
+          onChange={(v) => onChange({ topK: parseInt(v) || 5 })}
+        />
+        <TextField
+          label="Min Score"
+          type="number"
+          value={String(config.minScore ?? 0.7)}
+          onChange={(v) => onChange({ minScore: parseFloat(v) || 0.7 })}
+        />
       </div>
     </div>
   );

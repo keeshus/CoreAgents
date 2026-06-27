@@ -237,7 +237,7 @@ export function InputPreview({
 
   return (
     <div className="px-3 pb-3 space-y-3">
-      <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+      <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider">
         Incoming Data Shape
       </h4>
 
@@ -245,21 +245,21 @@ export function InputPreview({
       <div className="space-y-2">
         {upstream.map((up) => (
           <div key={up.nodeId}>
-            <p className="text-[10px] text-gray-500 mb-0.5">
+            <p className="text-[10px] text-on-surface-variant mb-0.5">
               from{' '}
-              <span className="font-medium text-gray-700">{up.label}</span>
-              <span className="text-gray-400 ml-1">({up.nodeId})</span>
+              <span className="font-medium text-on-surface">{up.label}</span>
+              <span className="text-on-surface-variant ml-1">({up.nodeId})</span>
             </p>
             {up.raw !== null ? (
-              <pre className="text-[10px] bg-blue-50 border border-blue-100 rounded p-2 font-mono text-blue-800 whitespace-pre overflow-x-auto">
+              <pre className="text-[10px] bg-primary-container border border-outline-variant rounded p-2 font-mono text-primary whitespace-pre overflow-x-auto">
                 {up.raw}
               </pre>
             ) : up.fields.length > 0 ? (
-              <pre className="text-[10px] bg-blue-50 border border-blue-100 rounded p-2 font-mono text-blue-800 whitespace-pre overflow-x-auto">
+              <pre className="text-[10px] bg-primary-container border border-outline-variant rounded p-2 font-mono text-primary whitespace-pre overflow-x-auto">
                 {fieldsToLines(up.fields)}
               </pre>
             ) : (
-              <pre className="text-[10px] bg-gray-50 border border-gray-100 rounded p-2 font-mono text-gray-500 whitespace-pre overflow-x-auto">
+              <pre className="text-[10px] bg-surface-container border border-outline-variant rounded p-2 font-mono text-on-surface-variant whitespace-pre overflow-x-auto">
                 (no structured fields)
               </pre>
             )}
@@ -269,15 +269,15 @@ export function InputPreview({
 
       {/* ─── Accumulated input section ─── */}
       <div>
-        <h5 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+        <h5 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">
           Accumulated Input
         </h5>
         {accumulatedFields.length === 0 ? (
-          <pre className="text-[10px] bg-gray-50 border border-gray-100 rounded p-2 font-mono text-gray-500 whitespace-pre overflow-x-auto">
+          <pre className="text-[10px] bg-surface-container border border-outline-variant rounded p-2 font-mono text-on-surface-variant whitespace-pre overflow-x-auto">
             (no structured fields from upstream)
           </pre>
         ) : (
-          <div className="bg-white border border-gray-200 rounded p-2 space-y-0.5">
+          <div className="bg-surface border border-outline-variant rounded p-2 space-y-0.5">
             {accumulatedFields.map((field) => (
               <div key={field.name} className="flex items-center gap-1.5">
                 {showCheckboxes && (
@@ -285,12 +285,12 @@ export function InputPreview({
                     type="checkbox"
                     checked={!filteredFields?.includes(field.name)}
                     readOnly
-                    className="w-2.5 h-2.5 accent-blue-500"
+                    className="w-2.5 h-2.5 accent-primary"
                   />
                 )}
-                <span className="text-[10px] font-mono text-gray-700">
+                <span className="text-[10px] font-mono text-on-surface">
                   {field.name}
-                  <span className="text-gray-400 ml-1">:{field.type}</span>
+                  <span className="text-on-surface-variant ml-1">:{field.type}</span>
                 </span>
               </div>
             ))}
