@@ -104,11 +104,12 @@ router.post(
     const flowSnapshot = { nodes: flowNodes, edges: flowEdges, version: 0 };
 
     let execId: string;
+    let exec: any;
     if (isDebug) {
       // Debug runs: don't persist to DB, just generate a temp ID for SSE
       execId = `debug_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     } else {
-      const [exec] = await db
+      [exec] = await db
         .insert(executions)
         .values({
           flow_id: flowId,
@@ -204,29 +205,31 @@ router.post(
           // Attach the execution ID (the engine sets it to '' initially)
           const richEvent: SSEEvent = {
             ...event,
-            executionId: exec.id,
+            executionId: execId,
           };
 
           // Persist step lifecycle to the database
-          const data = event.data;
-          const resolvedNodeId = (data.nodeId as string) || nodeId;
-          const resolvedNodeType = (data.nodeType as string) || '';
-          const iter = (data as any).iteration ?? 0;
+          if (!isDebug) {
+            const data = event.data;
+            const resolvedNodeId = (data.nodeId as string) || nodeId;
+            const resolvedNodeType = (data.nodeType as string) || '';
+            const iter = (data as any).iteration ?? 0;
 
-          if (event.type === 'step.started') {
-            await db.insert(executionSteps).values({
-              execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
-              node_label: data.nodeLabel as string | null, iteration: iter,
-              status: 'running', input: data.input as any, started_at: new Date(),
-            });
-          } else if (event.type === 'step.completed') {
-            await db.update(executionSteps).set({
-              status: 'completed', output: data.output as any, completed_at: new Date(),
-            }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
-          } else if (event.type === 'step.failed') {
-            await db.update(executionSteps).set({
-              status: 'failed', error: data.error as string, completed_at: new Date(),
-            }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
+            if (event.type === 'step.started') {
+              await db.insert(executionSteps).values({
+                execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+                node_label: data.nodeLabel as string | null, iteration: iter,
+                status: 'running', input: data.input as any, started_at: new Date(),
+              });
+            } else if (event.type === 'step.completed') {
+              await db.update(executionSteps).set({
+                status: 'completed', output: data.output as any, completed_at: new Date(),
+              }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
+            } else if (event.type === 'step.failed') {
+              await db.update(executionSteps).set({
+                status: 'failed', error: data.error as string, completed_at: new Date(),
+              }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
+            }
           }
 
           // Stream event to the SSE client
@@ -236,20 +239,22 @@ router.post(
       );
 
       // Mark execution as completed in DB
-      const completedOutput = { ...(result.output as object || {}), _flowSnapshot: flowSnapshot };
-      await db
-        .update(executions)
-        .set({
-          status: 'completed',
-          output: completedOutput as any,
-          completed_at: new Date(),
-        })
-        .where(eq(executions.id, exec.id));
+      if (!isDebug) {
+        const completedOutput = { ...(result.output as object || {}), _flowSnapshot: flowSnapshot };
+        await db
+          .update(executions)
+          .set({
+            status: 'completed',
+            output: completedOutput as any,
+            completed_at: new Date(),
+          })
+          .where(eq(executions.id, exec.id));
+      }
 
       activeExecutors.delete(exec.id);
       emitSSE({
         type: 'execution.completed',
-        executionId: exec.id,
+        executionId: execId,
         data: { output: result.output },
         timestamp: new Date().toISOString(),
       });
@@ -257,18 +262,20 @@ router.post(
       // Handle FlowStop — terminate execution immediately
       if (err instanceof FlowStopError) {
         activeExecutors.delete(exec.id);
-        await db
-          .update(executions)
-          .set({
-            status: err.status as any,
-            error: err.message,
-            completed_at: new Date(),
-          })
-          .where(eq(executions.id, exec.id));
+        if (!isDebug) {
+          await db
+            .update(executions)
+            .set({
+              status: err.status as any,
+              error: err.message,
+              completed_at: new Date(),
+            })
+            .where(eq(executions.id, exec.id));
+        }
 
         emitSSE({
           type: 'execution.stopped',
-          executionId: exec.id,
+          executionId: execId,
           data: { status: err.status, message: err.message },
           timestamp: new Date().toISOString(),
         });
@@ -278,21 +285,22 @@ router.post(
 
       // Handle HITL pause — save partial outputs and await approval
       if (err instanceof HitlPauseError) {
-        activeExecutors.delete(exec.id);
+        activeExecutors.delete(execId);
         const hitlCfg = (flowDef.nodes || []).find((n: any) => n.id === err.nodeId)?.data?.config || {};
-        const hitlEntry = { nodeId: err.nodeId, prompt: err.prompt, buttons: err.buttons, savedOutputs: err.savedOutputs };
-        await db
-          .update(executions)
-          .set({
-            status: 'awaiting_approval',
-            output: { ...err.savedOutputs, _flowSnapshot: flowSnapshot, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlAllowFeedback: (hitlCfg as any).allowFeedback !== false, _hitlNodeId: err.nodeId, _pausedAt: Date.now(), _nextIteration: 1 } as any,
-            pending_hitls: JSON.stringify([hitlEntry]) as any,
-          })
-          .where(eq(executions.id, exec.id));
+        if (!isDebug) {
+          await db
+            .update(executions)
+            .set({
+              status: 'awaiting_approval',
+              output: { ...err.savedOutputs, _flowSnapshot: flowSnapshot, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _hitlAllowFeedback: (hitlCfg as any).allowFeedback !== false, _hitlNodeId: err.nodeId, _pausedAt: Date.now(), _nextIteration: 1 } as any,
+              pending_hitls: JSON.stringify([{ nodeId: err.nodeId, prompt: err.prompt, buttons: err.buttons, savedOutputs: err.savedOutputs }]) as any,
+            })
+            .where(eq(executions.id, exec.id));
+        }
 
         emitSSE({
           type: 'execution.paused',
-          executionId: exec.id,
+          executionId: execId,
           data: { nodeId: err.nodeId, savedOutputs: err.savedOutputs, buttons: err.buttons, prompt: err.prompt, allowFeedback: (hitlCfg as any).allowFeedback !== false, message: 'Waiting for human approval' },
           timestamp: new Date().toISOString(),
         });
@@ -304,18 +312,20 @@ router.post(
       console.error('Flow execution failed:', error);
       activeExecutors.delete(exec.id);
 
-      await db
-        .update(executions)
-        .set({
-          status: 'failed',
-          error,
-          completed_at: new Date(),
-        })
-        .where(eq(executions.id, exec.id));
+      if (!isDebug) {
+        await db
+          .update(executions)
+          .set({
+            status: 'failed',
+            error,
+            completed_at: new Date(),
+          })
+          .where(eq(executions.id, exec.id));
+      }
 
       emitSSE({
         type: 'execution.failed',
-        executionId: exec.id,
+        executionId: execId,
         data: { error },
         timestamp: new Date().toISOString(),
       });
