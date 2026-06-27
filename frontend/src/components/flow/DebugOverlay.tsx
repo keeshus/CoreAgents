@@ -29,6 +29,7 @@ interface StepInfo {
   startedAt: string;
   completedAt: string | null;
   tokens: string[];
+  iteration?: number;
   children?: Array<{ nodeId: string; type: string; output?: any; error?: string; status: string }>;
 }
 
@@ -62,7 +63,8 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [finalOutput, setFinalOutput] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hitlPause, setHitlPause] = useState<{ executionId: string; prompt: string; buttons: { label: string; value: string; icon?: string }[]; nodeId: string } | null>(null);
+  const [hitlPause, setHitlPause] = useState<{ executionId: string; prompt: string; buttons: { label: string; value: string; icon?: string }[]; nodeId: string; allowFeedback?: boolean } | null>(null);
+  const [hitlFeedback, setHitlFeedback] = useState('');
   const logEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -114,6 +116,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
     setFinalOutput(null);
     setError(null);
     setHitlPause(null);
+    setHitlFeedback('');
     setStatus('running');
 
     const controller = new AbortController();
@@ -166,6 +169,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
               startedAt: event.timestamp,
               completedAt: null,
               tokens: [],
+              iteration: d.iteration ?? 0,
             }]);
           } else if (event.type === 'stream.token') {
             setSteps(prev => prev.map(s =>
@@ -197,7 +201,9 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
               prompt: d.prompt || 'Waiting for approval',
               buttons: d.buttons || [{ label: 'Approve', value: 'approved', icon: 'check_circle' }, { label: 'Reject', value: 'rejected', icon: 'cancel' }],
               nodeId: d.nodeId || '',
+              allowFeedback: d.allowFeedback !== false,
             });
+            setHitlFeedback('');
             setStatus('completed');
           } else if (event.type === 'execution.failed') {
             setError(d.error || 'Execution failed');
@@ -213,25 +219,54 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
 
   const handleHitlApprove = useCallback(async (decision: string) => {
     if (!hitlPause) return;
-    setStatus('running');
     setHitlPause(null);
+    setStatus('running');
     try {
-      await fetch(`${API_URL}/executions/${hitlPause.executionId}/approve`, {
+      const res = await fetch(`${API_URL}/executions/${hitlPause.executionId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ decision, hitlNodeId: hitlPause.nodeId }),
+        body: JSON.stringify({ decision, feedback: hitlFeedback, hitlNodeId: hitlPause.nodeId }),
       });
-      run();
+      const result = await res.json();
+      if (result.status === 'completed') {
+        const detail = await fetch(`${API_URL}/flows/${flowId}/executions/${hitlPause.executionId}`, { credentials: 'include' });
+        const data = await detail.json();
+        if (data.steps) {
+          const mappedSteps: StepInfo[] = data.steps.map((s: any) => ({
+            nodeId: s.node_id,
+            nodeType: s.node_type,
+            nodeLabel: s.node_label,
+            status: s.status,
+            input: s.input,
+            output: s.output,
+            error: s.error || null,
+            startedAt: s.started_at,
+            completedAt: s.completed_at,
+            tokens: s.tokens || [],
+            iteration: s.iteration ?? 0,
+            children: s.children,
+          }));
+          setSteps(mappedSteps);
+        }
+        setFinalOutput(result.output || data.output);
+        setStatus('completed');
+      } else if (result.status === 'failed') {
+        setError(result.error || 'Execution failed');
+        setStatus('failed');
+      } else {
+        setStatus('running');
+      }
     } catch (err: any) {
       setError(err.message || 'Approval failed');
       setStatus('failed');
     }
-  }, [hitlPause, run]);
+  }, [hitlPause, flowId]);
 
   const handleHitlReject = useCallback(async () => {
     if (!hitlPause) return;
     setHitlPause(null);
+    setHitlFeedback('');
     try {
       await fetch(`${API_URL}/executions/${hitlPause.executionId}/reject`, {
         method: 'POST',
@@ -304,11 +339,6 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
           )}
         </div>
         <div className="flex items-center gap-2">
-          {status === 'running' && (
-            <button onClick={stop} className="m3-button text-xs bg-error">
-              <Icon name="stop" className="text-xs" /> Stop
-            </button>
-          )}
           <button onClick={onClose} className="flex items-center gap-1 p-1.5 text-on-surface-variant hover:text-on-surface-variant">
             <Icon name="close" className="text-base" /> Close
           </button>
@@ -409,12 +439,11 @@ className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono r
                 </div>
               )}
               <button
-                onClick={run}
-                disabled={status === 'running' || (triggerType === 'webhook' && webhookPayloadError !== null)}
-                className="m3-button text-sm w-full disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={status === 'running' ? stop : run}
+                disabled={status === 'running' ? false : (triggerType === 'webhook' && webhookPayloadError !== null)}
+                className="m3-button text-sm w-full disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1"
               >
-                {status === 'running' ? <Icon name="sync" className="text-base animate-spin" /> : <Icon name="play_arrow" className="text-base" />}
-                {status === 'idle' ? 'Start Debug Run' : 'Re-run'}
+                {status === 'running' ? <><Icon name="stop" className="text-base" /> Stop</> : <><Icon name="play_arrow" className="text-base" /> {status === 'idle' ? 'Start Debug Run' : 'Re-run'}</>}
               </button>
             </div>
 
@@ -454,21 +483,53 @@ className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono r
 
             {steps.length > 0 && (
               <div className="space-y-1.5">
-                {steps.map((step, i) => {
-              return (
-                <StepCard
-                  key={step.nodeId + i}
-                  step={step}
-                  expanded={expanded[step.nodeId + i] || false}
-                  onToggle={() => toggle(step.nodeId + i)}
-                />
-              );
-            })}
+                {(() => {
+                  const groups: { iter: number; steps: StepInfo[] }[] = [];
+                  for (const step of steps) {
+                    const iter = step.iteration ?? 0;
+                    let group = groups.find(g => g.iter === iter);
+                    if (!group) { group = { iter, steps: [] }; groups.push(group); }
+                    group.steps.push(step);
+                  }
+                  groups.sort((a, b) => a.iter - b.iter);
+                  return groups.flatMap((group) => {
+                    const els: React.ReactNode[] = [];
+                    if (group.iter > 0) {
+                      els.push(
+                        <div key={`sep-${group.iter}`} className="flex items-center gap-2 py-1">
+                          <div className="flex-1 border-t border-dashed border-orange-300" />
+                          <span className="text-[10px] font-medium text-orange-500 uppercase tracking-wider">⟳ Run {group.iter}</span>
+                          <div className="flex-1 border-t border-dashed border-orange-300" />
+                        </div>
+                      );
+                    }
+                    group.steps.forEach((step, i) => {
+                      els.push(
+                        <StepCard
+                          key={step.nodeId + group.iter + i}
+                          step={step}
+                          expanded={expanded[step.nodeId + group.iter + i] || false}
+                          onToggle={() => toggle(step.nodeId + group.iter + i)}
+                        />
+                      );
+                    });
+                    return els;
+                  });
+                })()}
 
             {hitlPause && (
               <div className="mt-4 bg-secondary-container border border-secondary rounded-lg p-4">
                 <h3 className="text-sm font-semibold text-on-secondary-container mb-2">Human-in-the-Loop — Approval Required</h3>
                 <div className="prose prose-sm max-w-none text-on-secondary-container bg-surface rounded border p-3 max-h-48 overflow-y-auto">{hitlPause.prompt}</div>
+                {hitlPause.allowFeedback && (
+                  <textarea
+                    value={hitlFeedback}
+                    onChange={(e) => setHitlFeedback(e.target.value)}
+                    placeholder="Provide feedback to the reviewer..."
+                    className="w-full text-sm border border-outline rounded-lg px-3 py-2 resize-none bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary mt-2"
+                    rows={2}
+                  />
+                )}
                 <div className="flex gap-2">
                   {hitlPause.buttons.map(btn => (
                     <button key={btn.value} onClick={() => handleHitlApprove(btn.value)}

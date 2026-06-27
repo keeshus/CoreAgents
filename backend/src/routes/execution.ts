@@ -20,7 +20,9 @@ router.get('/executions/pending', requirePermission('execution:approve'), asyncH
     .from(executions)
     .where(eq(executions.status, 'awaiting_approval'))
     .orderBy(desc(executions.created_at));
-  res.json(result);
+  // Filter out debug runs
+  const filtered = result.filter((r: any) => !r.input?._debug);
+  res.json(filtered);
 }));
 
 // GET /api/executions — global list of all executions across all flows (admin only)
@@ -282,7 +284,7 @@ router.post(
         emitSSE({
           type: 'execution.paused',
           executionId: exec.id,
-          data: { nodeId: err.nodeId, savedOutputs: err.savedOutputs, buttons: err.buttons, prompt: err.prompt, message: 'Waiting for human approval' },
+          data: { nodeId: err.nodeId, savedOutputs: err.savedOutputs, buttons: err.buttons, prompt: err.prompt, allowFeedback: (hitlCfg as any).allowFeedback !== false, message: 'Waiting for human approval' },
           timestamp: new Date().toISOString(),
         });
         res.end();
@@ -572,7 +574,9 @@ router.get(
       db.select().from(executions).where(eq(executions.flow_id, flowId)).orderBy(desc(executions.created_at)).limit(limit).offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(executions).where(eq(executions.flow_id, flowId)),
     ]);
-    res.json({ data: result, total: Number(countResult[0].count), limit, offset });
+    // Filter out debug runs
+    const filtered = result.filter((r: any) => !r.input?._debug);
+    res.json({ data: filtered, total: Number(countResult[0].count), limit, offset });
   }),
 );
 

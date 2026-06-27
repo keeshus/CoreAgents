@@ -81,6 +81,7 @@ export interface BranchNodeData extends BaseNodeData {
     condition: string;
     outputLabels: string[];
     inputFields?: string[];
+    defaultPath?: string;
   };
 }
 

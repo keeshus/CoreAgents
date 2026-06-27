@@ -61,7 +61,6 @@ export default function ExecutionHistoryPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const PAGE_SIZE = 20;
   const [cancelling, setCancelling] = useState<string | null>(null);
-  const [hideDebug, setHideDebug] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const deleteExec = async (execId: string, e: React.MouseEvent) => {
@@ -120,21 +119,15 @@ export default function ExecutionHistoryPage() {
           </div>
         ) : (
           <div>
-            <label className="inline-flex items-center gap-1.5 text-xs text-on-surface-variant mb-3 cursor-pointer select-none">
-              <input type="checkbox" checked={hideDebug} onChange={(e) => setHideDebug(e.target.checked)} className="rounded" />
-              Hide debug runs
-            </label>
-            <div className="space-y-3">{(hideDebug ? executions.filter(e => !e.input?._debug) : executions).map(exec => {
+            <div className="space-y-3">{executions.map(exec => {
             const cfg = statusConfig[exec.status] || statusConfig.pending;
             const pausedTotal = exec.output?._pausedTotal || 0;
             const d = dur(exec.started_at, exec.completed_at, pausedTotal);
-            const isDebug = exec.input?._debug;
             return (
               <div key={exec.id} onClick={() => viewDetails(exec.id)} className="bg-surface rounded-lg border p-4 flex items-center justify-between hover:shadow-sm transition-shadow cursor-pointer">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-1.5 py-0.5 rounded-full capitalize font-medium ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
-                    {isDebug && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary-container text-primary font-medium flex items-center gap-1"><Icon name="bug_report" className="text-xs" /> Debug</span>}
                     {d && <span className="text-xs text-on-surface-variant">{d}</span>}
                   </div>
                   <p className="text-xs text-on-surface-variant mt-1">{fmtTime(exec.created_at)}</p>
