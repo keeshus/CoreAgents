@@ -50,7 +50,7 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
           </Tooltip>
         )}
       </div>
-      <div className="p-3 text-xs overflow-y-auto max-h-[160px]">
+      <div className="p-3 text-xs">
         {children}
       </div>
       {/* Tool inputs — MCP/Retriever tools wire in here (LLM Agent) */}
