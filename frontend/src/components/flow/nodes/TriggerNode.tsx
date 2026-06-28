@@ -18,18 +18,18 @@ export function TriggerNode(props: NodeProps) {
         <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded font-medium ${info.color}`}>{info.label}</span>
         <p className="text-[10px] text-on-surface-variant">{info.desc}</p>
         {triggerType === 'webhook' && (
-          <code className="block text-[9px] bg-surface-container p-1 rounded mt-1 break-all">
+          <code className="block text-[9px] bg-surface-container p-1 rounded mt-1 truncate">
             POST /api/webhook/...?secret=
           </code>
         )}
         {triggerType === 'schedule' && config?.cronExpression && (
-          <code className="block text-[9px] bg-surface-container p-1 rounded mt-1">{config.cronExpression}</code>
+          <code className="block text-[9px] bg-surface-container p-1 rounded mt-1 truncate">{config.cronExpression}</code>
         )}
         {(triggerType === 'schedule' || triggerType === 'manual') && config?.inputMessage && (
           <p className="text-[9px] text-on-surface-variant mt-1 truncate">Input: {config.inputMessage.slice(0, 60)}</p>
         )}
         {triggerType === 'webhook' && config?.inputSchema && (
-          <code className="block text-[9px] bg-secondary-container border border-secondary-container p-1 rounded mt-1 break-all">{config.inputSchema}</code>
+          <code className="block text-[9px] bg-secondary-container border border-secondary-container p-1 rounded mt-1 truncate">{config.inputSchema}</code>
         )}
       </div>
       <div className="mt-2 pt-2 border-t border-outline-variant">

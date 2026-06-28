@@ -13,7 +13,7 @@ export function CodeNode(props: NodeProps) {
         <p>
           <span className="inline-block bg-surface-container-high text-on-surface text-[10px] px-1.5 py-0.5 rounded font-mono uppercase">{language}</span>
         </p>
-        <code className="block bg-surface-container p-1.5 rounded text-[11px] font-mono mt-1 overflow-auto max-h-20 whitespace-pre-wrap">
+        <code className="block bg-surface-container p-1.5 rounded text-[11px] font-mono mt-1 truncate">
           {code ? code.slice(0, 120) + (code.length > 120 ? '...' : '') : 'No code'}
         </code>
       </div>
