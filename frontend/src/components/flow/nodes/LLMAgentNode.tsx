@@ -16,7 +16,7 @@ export function LLMAgentNode(props: NodeProps) {
           <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${hasEndpoint ? 'bg-surface-container text-on-surface' : 'bg-error-container text-error'}`}>
             {hasEndpoint ? 'Endpoint set' : 'No endpoint'}
           </span>
-          {hasModel && <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-surface-container text-on-surface truncate max-w-[80px]">{config.model}</span>}
+          {hasModel && <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-surface-container text-on-surface">{config.model}</span>}
         </div>
       </div>
     </BaseNode>
