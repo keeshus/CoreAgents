@@ -791,7 +791,7 @@ export const toolGroups: Record<string, AssistantTool[]> = {
 export function getToolGroupNames(pageKey: string, nodeType?: string): string[] {
   const groups: string[] = ['navigation'];
 
-  if (pageKey?.startsWith('flow:')) groups.push('flow-editor');
+  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'endpoint-crud', 'mcp-crud', 'embedding-crud', 'store-crud');
   else if (pageKey === 'settings:endpoints') groups.push('endpoint-crud');
   else if (pageKey === 'settings:mcp-servers') groups.push('mcp-crud');
   else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud');

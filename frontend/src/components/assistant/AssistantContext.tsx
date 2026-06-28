@@ -53,7 +53,7 @@ const AssistantContext = createContext<AssistantContextType>({} as AssistantCont
 
 function getPageCapabilities(pageKey: string): string {
   if (pageKey.startsWith('flow:')) {
-    return 'This page shows the visual flow editor canvas. You can add/delete/edit nodes, connect them, and configure their settings. Opening a node shows a config panel with fields specific to that node type (system prompt, condition, code, etc.). The left panel has a node catalog.';
+    return 'This page shows the visual flow editor canvas. You can add/delete/edit nodes, connect them, and configure their settings. Opening a node shows a config panel with fields specific to that node type (system prompt, condition, code, etc.). The left panel has a node catalog. I can also look up available LLM endpoints, MCP servers, embedding providers, and vector stores to help configure nodes.';
   }
   if (pageKey === 'flows-list') {
     return 'This page shows a list of all flows with their name, description, and version. Each flow has action buttons to run (execute once), chat (conversational interface), debug (step-through), view execution history, and delete. The "New Flow" button creates a new blank flow. There is no search/filter, no export/import, no grid/list toggle.';
