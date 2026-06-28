@@ -141,8 +141,8 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
             value={config.outputSchema || ''}
             onChange={(e) => onChange({ ...config, outputSchema: e.target.value })}
             placeholder='{"type":"object","properties":{"summary":{"type":"string"},"sentiment":{"type":"string"}},"required":["summary","sentiment"]}'
-            rows={3}
-            className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+            rows={Math.max(3, Math.min(10, (config.outputSchema || '').split('\n').length))}
+            className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary max-h-[200px]"
           />
           <p className="mt-1 text-[10px] text-on-surface-variant">Describes the expected JSON structure. Used as guidance in the system prompt — tool-calling ensures the output matches the schema across all providers.</p>
         </div>
