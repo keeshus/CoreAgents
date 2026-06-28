@@ -93,6 +93,7 @@ function VectorStores() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', url: '', apiKey: '', storeType: 'qdrant' });
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState<string | null>(null);
 
   const loadData = async () => {
     const res = await fetch(`${API_URL}/vector-stores`);
@@ -100,6 +101,18 @@ function VectorStores() {
     setLoading(false);
   };
   useEffect(() => { loadData(); }, []);
+
+  const handleRefresh = async (id: string) => {
+    setRefreshing(id);
+    try {
+      const res = await fetch(`${API_URL}/vector-stores/${id}/refresh`, { method: 'POST' });
+      if (res.ok) {
+        const updated = await res.json();
+        setItems(prev => prev.map(v => v.id === id ? updated : v));
+      }
+    } catch {}
+    setRefreshing(null);
+  };
 
   const reset = () => { setForm({ name: '', url: '', apiKey: '', storeType: 'qdrant' }); setShowForm(false); };
 
@@ -133,8 +146,20 @@ function VectorStores() {
               <div>
                 <p className="text-sm font-medium">{vs.name}</p>
                 <p className="text-xs text-on-surface-variant">{vs.store_type} · {vs.url}</p>
+                {vs.collections?.length > 0 && (
+                  <p className="text-[10px] text-on-surface-variant mt-1">{vs.collections.length} collection{vs.collections.length !== 1 ? 's' : ''}</p>
+                )}
               </div>
-              <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleRefresh(vs.id)}
+                  disabled={refreshing === vs.id}
+                  className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors disabled:opacity-50"
+                >
+                  <Icon name="refresh" className={`text-sm ${refreshing === vs.id ? 'animate-spin' : ''}`} /> Refresh
+                </button>
+                <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
+              </div>
             </div>
           ))}
         </div>

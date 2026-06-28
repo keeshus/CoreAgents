@@ -176,6 +176,7 @@ export const vectorStores = pgTable('vector_stores', {
   store_type: text('store_type').notNull().default('qdrant'),
   url: text('url').notNull(),
   api_key: text('api_key'),
+  collections: jsonb('collections').default('[]'),
   created_at: timestamp('created_at').notNull().defaultNow(),
   updated_at: timestamp('updated_at').notNull().defaultNow(),
 });

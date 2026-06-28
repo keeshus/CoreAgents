@@ -17,11 +17,29 @@ export function CollectionSelector({ vectorStoreId, value, onChange }: Collectio
   useEffect(() => {
     if (!vectorStoreId) { setCollections([]); return; }
     setLoading(true);
-    fetch(`${API_URL}/vector-stores/${vectorStoreId}/collections`)
+    // First try the persisted collections, then fall back to on-demand API
+    fetch(`${API_URL}/vector-stores`)
       .then(r => r.json())
-      .then(data => setCollections(Array.isArray(data) ? data : []))
-      .catch(() => setCollections([]))
-      .finally(() => setLoading(false));
+      .then((stores: any[]) => {
+        const store = stores.find((s: any) => s.id === vectorStoreId);
+        if (store?.collections?.length > 0) {
+          setCollections(store.collections);
+          setLoading(false);
+        } else {
+          fetch(`${API_URL}/vector-stores/${vectorStoreId}/collections`)
+            .then(r => r.json())
+            .then(data => setCollections(Array.isArray(data) ? data : []))
+            .catch(() => setCollections([]))
+            .finally(() => setLoading(false));
+        }
+      })
+      .catch(() => {
+        fetch(`${API_URL}/vector-stores/${vectorStoreId}/collections`)
+          .then(r => r.json())
+          .then(data => setCollections(Array.isArray(data) ? data : []))
+          .catch(() => setCollections([]))
+          .finally(() => setLoading(false));
+      });
   }, [vectorStoreId]);
 
   if (!vectorStoreId) {

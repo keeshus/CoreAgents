@@ -51,6 +51,30 @@ router.get('/vector-stores/:id/collections', asyncHandler(async (req, res) => {
   } catch { res.json([]); }
 }));
 
+// POST /api/vector-stores/:id/refresh — refresh and persist collections
+router.post('/vector-stores/:id/refresh', requirePermission('store:write'), asyncHandler(async (req, res) => {
+  const id = req.params.id as string;
+  const [rs] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
+  if (!rs) { res.status(404).json({ error: 'Not found' }); return; }
+  let collections: string[] = [];
+  try {
+    if (rs.store_type === 'neo4j') {
+      const driver = neo4j.driver(rs.url, neo4j.auth.basic('', rs.api_key || ''));
+      const session = driver.session();
+      try {
+        const result = await session.run('MATCH (d:Document) RETURN DISTINCT d.collectionName AS name');
+        collections = result.records.map(r => r.get('name'));
+      } finally { await session.close(); await driver.close(); }
+    } else {
+      const client = new QdrantClient({ url: rs.url, apiKey: rs.api_key || undefined });
+      const result = await client.getCollections();
+      collections = result.collections.map((c: any) => c.name);
+    }
+  } catch { collections = []; }
+  const [updated] = await db.update(vectorStores).set({ collections: collections as any, updated_at: new Date() }).where(eq(vectorStores.id, id)).returning();
+  res.json(updated);
+}));
+
 router.get('/vector-stores', asyncHandler(async (_req, res) => {
   res.json(await db.select().from(vectorStores));
 }));
