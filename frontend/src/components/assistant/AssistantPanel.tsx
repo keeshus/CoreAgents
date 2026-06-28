@@ -20,7 +20,7 @@ const sanitizeSchema = {
 export function AssistantPanel() {
   const {
     open, messages, streaming, streamingContent, error,
-    sendMessage, clearConversation, defaultEndpointId, pageContext,
+    sendMessage, stopAssistant, clearConversation, defaultEndpointId, pageContext,
   } = useAssistant();
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -152,11 +152,12 @@ export function AssistantPanel() {
           disabled={streaming}
         />
         <button
-          type="submit"
-          disabled={streaming || !input.trim()}
-          className="m3-button disabled:opacity-50 shrink-0 self-end"
+          type={streaming ? 'button' : 'submit'}
+          onClick={streaming ? stopAssistant : undefined}
+          disabled={!streaming && !input.trim()}
+          className="m3-button disabled:opacity-50 shrink-0 self-end flex items-center gap-1"
         >
-          {streaming ? <Icon name="sync" className="text-base animate-spin" /> : <Icon name="send" className="text-base" />}
+          {streaming ? <><Icon name="stop" className="text-base" /> Stop</> : <Icon name="send" className="text-base" />}
         </button>
       </form>
     </div>

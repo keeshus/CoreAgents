@@ -37,6 +37,7 @@ interface AssistantContextType {
   streamingContent: string;
   error: string | null;
   sendMessage: (text: string) => Promise<void>;
+  stopAssistant: () => void;
   clearConversation: () => void;
   pageContext: PageContext | null;
   setPageContext: (ctx: PageContext) => void;
@@ -437,7 +438,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     <AssistantContext.Provider value={{
       open, setOpen: handleSetOpen, toggle,
       messages, streaming, streamingContent, error,
-      sendMessage, clearConversation,
+      sendMessage, stopAssistant: () => abortRef.current?.abort(), clearConversation,
       pageContext, setPageContext,
       activeTools, setActiveTools,
       defaultEndpointId,
