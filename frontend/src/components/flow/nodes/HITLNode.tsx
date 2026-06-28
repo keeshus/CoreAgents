@@ -1,6 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { BaseNode } from './BaseNode';
-import { Icon } from '@/components/ui/Icon';
 import { Tooltip } from '@/components/ui/Tooltip';
 
 export function HITLNode(props: NodeProps) {
@@ -10,11 +9,10 @@ export function HITLNode(props: NodeProps) {
   const maxIter = config?.maxIterations || 0;
   return (
     <BaseNode label={(props.data?.label as string) || 'Human in the Loop'} nodeType="HITL" category="processing" selected={props.selected || false} inputs={1} outputs={labels.length} outputLabels={labels} warnings={props.data?._warnings as string[] | undefined} feedbackInput>
-      <div className="space-y-1">
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container flex items-center gap-1 w-fit"><Icon name="pause" className="text-[9px]" /> pause → route</span>
-      </div>
-      <div className="mt-2 pt-2 border-t border-outline-variant flex items-center gap-1">
-        <span className="text-[9px] text-on-surface-variant">{labels.length} path{labels.length !== 1 ? 's' : ''}{maxIter > 0 ? ` · max ${maxIter} iters` : ' · unlimited'}</span>
+      <div className="flex flex-wrap gap-1">
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container">pause</span>
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-surface-container text-on-surface">{labels.length} path{labels.length !== 1 ? 's' : ''}</span>
+        {maxIter > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-surface-container text-on-surface">max {maxIter}</span>}
       </div>
       <Tooltip content="Max iterations reached — exit">
         <Handle
