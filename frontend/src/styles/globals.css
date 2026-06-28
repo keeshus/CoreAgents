@@ -315,7 +315,20 @@ button:not(:disabled) { cursor: pointer; }
 .react-flow__node-input,
 .react-flow__node-default,
 .react-flow__node-output,
-.react-flow__node-group { background-color: var(--md-surface) !important; }
+.react-flow__node-group {
+  background-color: var(--md-surface) !important;
+  padding: 0 !important;
+  border: none !important;
+  width: auto !important;
+  font-size: inherit !important;
+}
+/* Override React Flow's CSS variable defaults so they use our theme */
+.react-flow.light {
+  --xy-node-background-color-default: var(--md-surface);
+}
+.react-flow.dark {
+  --xy-node-background-color-default: var(--md-surface);
+}
 .react-flow__background circle { fill: var(--md-outline) !important; opacity: 0.4; }
 .react-flow__controls { background: var(--md-surface-container) !important; border: 1px solid var(--md-outline-variant) !important; border-radius: 8px !important; overflow: hidden; box-shadow: 0 1px 3px 1px rgba(0,0,0,0.15), 0 1px 2px 0 rgba(0,0,0,0.30) !important; }
 .react-flow__controls-button { background: var(--md-surface-container) !important; border-bottom: 1px solid var(--md-outline-variant) !important; fill: var(--md-on-surface-variant) !important; width: 32px; height: 32px; }
