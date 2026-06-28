@@ -783,6 +783,7 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'flows-list': [listFlows, searchFlows],
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails, deleteExecution],
+  'chat': [],
 };
 
 // ── Registry: page key pattern → tool group names ──────────────────────────────
@@ -799,6 +800,8 @@ export function getToolGroupNames(pageKey: string, nodeType?: string): string[] 
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
   else if (pageKey === 'profile') groups.push('profile-crud');
   else if (pageKey === 'flows-list') groups.push('flows-list');
+  else if (pageKey?.startsWith('chat:')) groups.push('chat');
+  else if (pageKey?.startsWith('chat-sessions:')) groups.push('chat');
 
   return groups;
 }

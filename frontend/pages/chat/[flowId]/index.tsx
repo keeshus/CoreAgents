@@ -2,6 +2,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -32,6 +33,8 @@ export default function ChatSessionList() {
     await fetch(`${API_URL}/chat/sessions/${sessionId}`, { method: 'DELETE' });
     setSessions(sessions.filter(s => s.id !== sessionId));
   };
+
+  useAssistantContext({ pageKey: 'chat-sessions:' + flowId, description: 'Viewing chat sessions' });
 
   return (
     <div className="min-h-screen bg-surface-container">

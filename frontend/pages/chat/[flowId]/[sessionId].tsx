@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -39,6 +40,8 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamContent]);
+
+  useAssistantContext({ pageKey: 'chat:' + flowId, description: 'Chatting with an agent' });
 
   const sendMessage = async () => {
     if (!input.trim() || streaming || !sessionId) return;

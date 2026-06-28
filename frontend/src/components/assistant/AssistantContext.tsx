@@ -79,6 +79,12 @@ function getPageCapabilities(pageKey: string): string {
   if (pageKey === 'profile') {
     return 'This page shows your profile: name, email, role, permissions, provider, member since date, and last login. You can edit your name and email. There are no avatars, themes, API keys, or subscriptions.';
   }
+  if (pageKey.startsWith('chat:')) {
+    return 'This page shows a chat conversation with a flow agent. You can send messages and see streaming responses. The back button returns to the chat sessions list.';
+  }
+  if (pageKey.startsWith('chat-sessions:')) {
+    return 'This page lists all chat sessions for a flow. You can create a new chat or delete existing ones. Click a session to open the conversation.';
+  }
   if (pageKey.startsWith('settings:')) {
     return 'This is a settings sub-page with configuration options. Available features are visible in the page content.';
   }
