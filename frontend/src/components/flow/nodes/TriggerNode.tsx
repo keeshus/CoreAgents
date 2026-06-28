@@ -17,7 +17,7 @@ export function TriggerNode(props: NodeProps) {
       <div className="flex flex-wrap gap-1">
         <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${info.color}`}>{info.label}</span>
         {triggerType === 'webhook' && config?.inputSchema && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container">Schema</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container">Custom schema</span>
         )}
         {triggerType === 'schedule' && config?.cronExpression && (
           <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container truncate max-w-[160px]">{config.cronExpression}</span>
