@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
@@ -15,6 +15,7 @@ export default function ChatPage() {
   const [streamContent, setStreamContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Load existing messages
   useEffect(() => {
@@ -47,11 +48,15 @@ export default function ChatPage() {
     setStreaming(true);
     setStreamContent('');
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const res = await fetch(`${API_URL}/chat/sessions/${sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -66,6 +71,7 @@ export default function ChatPage() {
       let fullContent = '';
 
       while (true) {
+        if (controller.signal.aborted) { reader.cancel(); break; }
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -95,12 +101,18 @@ export default function ChatPage() {
         }
       }
     } catch (err: any) {
+      if (err.name === 'AbortError') return;
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Error: ${err.message}` }]);
       setStreamContent('');
     } finally {
       setStreaming(false);
+      abortRef.current = null;
     }
   };
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -200,11 +212,11 @@ export default function ChatPage() {
             className="flex-1"
           />
           <button
-            onClick={sendMessage}
-            disabled={streaming || !input.trim()}
-            className="m3-button gap-2 shrink-0 self-end disabled:opacity-50"
+            onClick={streaming ? stop : sendMessage}
+            disabled={!streaming && !input.trim()}
+            className="m3-button gap-2 shrink-0 self-end disabled:opacity-50 flex items-center"
           >
-            <Icon name="send" className="text-base" />
+            {streaming ? <><Icon name="stop" className="text-base" /> Stop</> : <><Icon name="send" className="text-base" /> Send</>}
           </button>
         </div>
       </div>
