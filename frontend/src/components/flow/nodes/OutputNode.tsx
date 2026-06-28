@@ -10,7 +10,7 @@ export function OutputNode(props: NodeProps) {
   return (
     <BaseNode label={(props.data?.label as string) || 'Output'} nodeType="Output" category="output" selected={props.selected || false} inputs={1} outputs={0} warnings={props.data?._warnings as string[] | undefined} feedbackInput>
       <div className="space-y-1">
-        <p className="text-xs text-on-surface-variant">{modeDesc}</p>
+        <p className="text-xs text-on-surface-variant truncate">{modeDesc}</p>
       </div>
       <div className="mt-2 pt-2 border-t border-outline-variant flex items-center gap-1">
         <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-tertiary-container text-on-tertiary-container">{modeLabel}</span>
