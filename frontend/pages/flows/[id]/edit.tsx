@@ -27,7 +27,7 @@ export default function FlowEditPage() {
   const setNodeLabelRef = useRef<((nodeId: string, label: string) => void) | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
-  useAssistantContext({ pageKey: 'flow:' + (flow?.id || ""), description: 'Editing flow "' + (flow?.name || "") + '"' });
+  useAssistantContext({ pageKey: 'flow:' + (flow?.id || ""), description: 'Editing flow' });
 
   // Selected node for config editing
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
