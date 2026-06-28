@@ -12,7 +12,6 @@ export const NODE_TYPES = [
   'output',
   'parallel',
   'hitl',
-  'stop',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -121,14 +120,6 @@ export interface HitlNodeData extends BaseNodeData {
   };
 }
 
-export interface StopNodeData extends BaseNodeData {
-  type: 'stop';
-  config: {
-    message: string;
-    status: 'cancelled' | 'failed';
-  };
-}
-
 export type NodeData =
   | TriggerNodeData
   | LLMAgentNodeData
@@ -138,8 +129,7 @@ export type NodeData =
   | CodeNodeData
   | OutputNodeData
   | ParallelNodeData
-  | HitlNodeData
-  | StopNodeData;
+  | HitlNodeData;
 
 // ── Edge ─────────────────────────────────────────────────────
 

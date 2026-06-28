@@ -1,8 +1,18 @@
 import { z } from 'zod';
-export declare const NODE_TYPES: readonly ["trigger", "llm-agent", "mcp-tool", "retriever", "branch", "code", "output"];
+export declare const NODE_TYPES: readonly ["trigger", "llm-agent", "mcp-tool", "retriever", "branch", "code", "output", "parallel", "hitl"];
 export type NodeType = (typeof NODE_TYPES)[number];
 export type NodeCategory = 'input' | 'processing' | 'tools' | 'output';
-export declare const nodeTypeSchema: z.ZodEnum<["trigger", "llm-agent", "mcp-tool", "retriever", "branch", "code", "output"]>;
+export declare const nodeTypeSchema: z.ZodEnum<{
+    trigger: "trigger";
+    "llm-agent": "llm-agent";
+    "mcp-tool": "mcp-tool";
+    retriever: "retriever";
+    branch: "branch";
+    code: "code";
+    output: "output";
+    parallel: "parallel";
+    hitl: "hitl";
+}>;
 export interface BaseNodeData {
     label: string;
     type: NodeType;
@@ -12,6 +22,10 @@ export interface TriggerNodeData extends BaseNodeData {
     type: 'trigger';
     config: {
         triggerType: 'manual' | 'chat' | 'webhook' | 'schedule';
+        webhookSecret?: string;
+        cronExpression?: string;
+        inputSchema?: string;
+        inputMessage?: string;
     };
 }
 export interface LLMAgentNodeData extends BaseNodeData {
@@ -22,6 +36,9 @@ export interface LLMAgentNodeData extends BaseNodeData {
         systemPrompt: string;
         temperature: number;
         maxTokens: number;
+        responseFormat: 'text' | 'json_object';
+        outputSchema?: string;
+        inputFields?: string[];
     };
 }
 export interface MCPToolNodeData extends BaseNodeData {
@@ -35,6 +52,8 @@ export interface MCPToolNodeData extends BaseNodeData {
 export interface RetrieverNodeData extends BaseNodeData {
     type: 'retriever';
     config: {
+        embeddingProviderId: string;
+        vectorStoreId: string;
         collectionName: string;
         topK: number;
         minScore: number;
@@ -45,6 +64,8 @@ export interface BranchNodeData extends BaseNodeData {
     config: {
         condition: string;
         outputLabels: string[];
+        inputFields?: string[];
+        defaultPath?: string;
     };
 }
 export interface CodeNodeData extends BaseNodeData {
@@ -52,6 +73,8 @@ export interface CodeNodeData extends BaseNodeData {
     config: {
         language: 'javascript' | 'python';
         code: string;
+        outputSchema?: string;
+        inputFields?: string[];
     };
 }
 export interface OutputNodeData extends BaseNodeData {
@@ -60,7 +83,33 @@ export interface OutputNodeData extends BaseNodeData {
         format: 'text' | 'json' | 'markdown';
     };
 }
-export type NodeData = TriggerNodeData | LLMAgentNodeData | MCPToolNodeData | RetrieverNodeData | BranchNodeData | CodeNodeData | OutputNodeData;
+export interface ParallelNodeData extends BaseNodeData {
+    type: 'parallel';
+    config: {
+        subNodes: FlowNode[];
+        subEdges: FlowEdge[];
+    };
+}
+export interface HitlNodeData extends BaseNodeData {
+    type: 'hitl';
+    config: {
+        prompt: string;
+        buttons: Array<{
+            label: string;
+            value: string;
+        }>;
+        allowFeedback?: boolean;
+        maxIterations?: number;
+        assignedTo?: {
+            type: 'user';
+            userId: string;
+        } | {
+            type: 'role';
+            roleId: string;
+        };
+    };
+}
+export type NodeData = TriggerNodeData | LLMAgentNodeData | MCPToolNodeData | RetrieverNodeData | BranchNodeData | CodeNodeData | OutputNodeData | ParallelNodeData | HitlNodeData;
 export interface EdgeCondition {
     label: string;
     expression: string;
@@ -92,7 +141,7 @@ export interface FlowDefinition {
     createdAt: string;
     updatedAt: string;
 }
-export type ExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type ExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'awaiting_approval';
 export interface Execution {
     id: string;
     flowId: string;
@@ -116,7 +165,7 @@ export interface ExecutionStep {
     startedAt: string | null;
     completedAt: string | null;
 }
-export type SSEEventType = 'execution.started' | 'step.started' | 'step.completed' | 'step.failed' | 'stream.token' | 'execution.completed' | 'execution.failed' | 'log';
+export type SSEEventType = 'execution.started' | 'step.started' | 'step.completed' | 'step.failed' | 'stream.token' | 'execution.completed' | 'execution.failed' | 'execution.paused' | 'execution.stopped' | 'log';
 export interface SSEEvent {
     type: SSEEventType;
     executionId: string;

@@ -963,13 +963,6 @@ export class FlowExecutor {
         return inp || input;
       }
 
-      case 'stop': {
-        const config = (nodeData as any).config || {};
-        const msg = config.message || 'Execution stopped';
-        const st = config.status || 'cancelled';
-        throw new FlowStopError(node.id, msg, st);
-      }
-
       default:
         throw new Error(`Unknown node type: ${(nodeData as any).type}`);
     }

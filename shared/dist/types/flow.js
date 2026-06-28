@@ -8,6 +8,8 @@ export const NODE_TYPES = [
     'branch',
     'code',
     'output',
+    'parallel',
+    'hitl',
 ];
 export const nodeTypeSchema = z.enum(NODE_TYPES);
 //# sourceMappingURL=flow.js.map

@@ -25,7 +25,6 @@ import { CodeNode } from './nodes/CodeNode';
 import { OutputNode } from './nodes/OutputNode';
 import { ParallelNode } from './nodes/ParallelNode';
 import { HITLNode } from './nodes/HITLNode';
-import { StopNode } from './nodes/StopNode';
 import { DeletableEdge } from './DeletableEdge';
 
 const edgeTypes = { default: DeletableEdge, smoothstep: DeletableEdge };
@@ -40,7 +39,6 @@ const nodeTypes = {
   output: OutputNode,
   parallel: ParallelNode,
   hitl: HITLNode,
-  stop: StopNode,
 };
 
 interface FlowEditorProps {

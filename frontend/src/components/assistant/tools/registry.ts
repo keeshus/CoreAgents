@@ -171,7 +171,7 @@ const getAvailableNodes: AssistantTool = {
   description: 'List all node types available in the node catalog for adding to the flow.',
   inputSchema: { type: 'object', properties: {} },
   async execute() {
-    return 'Available node types: llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval — simple approve/reject or multi-approver), stop (terminates), output (returns result), parallel (concurrent branches). Click the + button on the left to open the catalog, then select a node type. The trigger node is pre-added and cannot be removed.';
+    return 'Available node types: llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval — simple approve/reject or multi-approver), output (returns result), parallel (concurrent branches). Click the + button on the left to open the catalog, then select a node type. The trigger node is pre-added and cannot be removed.';
   },
 };
 
@@ -265,7 +265,7 @@ const addNode: AssistantTool = {
   inputSchema: {
     type: 'object',
     properties: {
-      type: { type: 'string', enum: ['llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'stop', 'parallel'] },
+      type: { type: 'string', enum: ['llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel'] },
     },
     required: ['type'],
   },
