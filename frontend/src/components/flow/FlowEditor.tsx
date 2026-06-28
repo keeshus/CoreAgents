@@ -91,6 +91,11 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
   nodesRef.current = nodes;
   const onNodesChangeInternal = useCallback((changes: any[]) => {
     rawOnNodesChange(changes.filter((c: any) => {
+      // Prevent deletion of trigger nodes
+      if (c.type === 'remove') {
+        const node = nodesRef.current.find((n: any) => n.id === c.id);
+        if (node?.data?.type === 'trigger') return false;
+      }
       if (c.type !== 'position' && c.type !== 'dimensions') return true;
       if (c.type === 'position') {
         const node = nodesRef.current.find(n => n.id === c.id);
@@ -362,9 +367,6 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
           defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: 'var(--md-outline)', strokeWidth: 2 }, animated: false }}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
-          onNodesDelete={(nodes) => {
-            if (nodes.some(n => (n as any).data?.type === 'trigger')) return false;
-          }}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
           onNodeDragStart={(_event, node) => onNodeDragStart?.(node.id)}
           onNodeDragStop={(_event, node) => {
