@@ -362,6 +362,9 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
           defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: 'var(--md-outline)', strokeWidth: 2 }, animated: false }}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
+          onNodesDelete={(nodes) => {
+            if (nodes.some(n => (n as any).data?.type === 'trigger')) return false;
+          }}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
           onNodeDragStart={(_event, node) => onNodeDragStart?.(node.id)}
           onNodeDragStop={(_event, node) => {

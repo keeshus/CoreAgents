@@ -198,10 +198,12 @@ export default function FlowEditPage() {
 
   const handleDeleteNode = useCallback(() => {
     if (!selectedNodeId) return;
+    const node = nodes.find(n => n.id === selectedNodeId);
+    if (node?.data?.type === 'trigger') return;
     snapshot();
     deleteNodeRef.current?.(selectedNodeId);
     setSelectedNodeId(null);
-  }, [selectedNodeId, snapshot]);
+  }, [selectedNodeId, nodes, snapshot]);
 
   const handleConfigChange = useCallback((newConfig: Record<string, any>) => {
     if (!selectedNodeId) return;
