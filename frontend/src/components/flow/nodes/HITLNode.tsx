@@ -9,10 +9,12 @@ export function HITLNode(props: NodeProps) {
   const maxIter = config?.maxIterations || 0;
   return (
     <BaseNode label={(props.data?.label as string) || 'Human in the Loop'} nodeType="HITL" category="processing" selected={props.selected || false} inputs={1} outputs={labels.length} outputLabels={labels} warnings={props.data?._warnings as string[] | undefined} feedbackInput>
-      <div className="flex flex-wrap gap-1">
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container">pause</span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-surface-container text-on-surface">{labels.length} path{labels.length !== 1 ? 's' : ''}</span>
-        {maxIter > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-surface-container text-on-surface">max {maxIter}</span>}
+      <div className="space-y-1">
+        <div className="flex flex-wrap gap-1">
+          <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container">pause</span>
+          {labels.map((l: string) => <span key={l} className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-surface-container text-on-surface">{l}</span>)}
+        </div>
+        {maxIter > 0 && <p className="text-[9px] text-on-surface-variant">max {maxIter} iterations</p>}
       </div>
       <Tooltip content="Max iterations reached — exit">
         <Handle
