@@ -277,15 +277,17 @@ export function NodeConfigModal({
                 helpText='Use "input" to access upstream data. Return the transformed value.'
                 className="font-mono"
               />
-              <TextField
-                label="Output Structure (documentation)"
-                value={node.data.config.outputSchema || ''}
-                onChange={(v) => onConfigChange({ outputSchema: v })}
-                multiline
-                rows={2}
-                helpText="Optional. Documents what this node outputs so downstream nodes can reference the structure."
-                className="font-mono"
-              />
+              <div>
+                <p className="text-xs font-medium text-on-surface-variant mb-1">Output Structure <span className="text-on-surface-variant">(documentation)</span></p>
+                <textarea
+                  value={node.data.config.outputSchema || ''}
+                  onChange={(e) => onConfigChange({ outputSchema: e.target.value })}
+                  placeholder='{"type":"object","properties":{"result":{"type":"string"}},"required":["result"]}'
+                  rows={2}
+                  className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+                />
+                <p className="mt-1 text-[10px] text-on-surface-variant">Optional. Documents what this node outputs so downstream nodes can reference the structure.</p>
+              </div>
             </div>
           )}
 
@@ -348,15 +350,17 @@ export function NodeConfigModal({
               )}
 
               {node.data.config.triggerType === 'webhook' && (
-                <TextField
-                  label="Expected Input Schema"
-                  value={node.data.config.inputSchema || ''}
-                  onChange={(v) => onConfigChange({ inputSchema: v })}
-                  multiline
-                  rows={3}
-                  helpText="Define required fields and types. Incoming POSTs are validated — invalid requests get 400."
-                  className="font-mono"
-                />
+                <div>
+                  <p className="text-xs font-medium text-on-surface-variant mb-1">Expected Input Schema</p>
+                  <textarea
+                    value={node.data.config.inputSchema || ''}
+                    onChange={(e) => onConfigChange({ inputSchema: e.target.value })}
+                    placeholder='{"type":"object","properties":{...}}'
+                    rows={3}
+                    className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+                  />
+                  <p className="mt-1 text-[10px] text-on-surface-variant">Define required fields and types. Incoming POSTs are validated — invalid requests get 400.</p>
+                </div>
               )}
             </div>
           )}

@@ -137,13 +137,12 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
           <span className="text-xs font-medium text-on-surface-variant block mb-1">
             JSON Schema <span className="text-on-surface-variant">(optional)</span>
           </span>
-          <TextField
-            label=""
+          <textarea
             value={config.outputSchema || ''}
-            onChange={(v) => onChange({ ...config, outputSchema: v })}
+            onChange={(e) => onChange({ ...config, outputSchema: e.target.value })}
             placeholder='{"type":"object","properties":{"summary":{"type":"string"},"sentiment":{"type":"string"}},"required":["summary","sentiment"]}'
-            multiline
             rows={3}
+            className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
           />
           <p className="mt-1 text-[10px] text-on-surface-variant">Describes the expected JSON structure. Used as guidance in the system prompt — tool-calling ensures the output matches the schema across all providers.</p>
         </div>
