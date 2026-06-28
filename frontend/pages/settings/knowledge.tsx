@@ -76,8 +76,8 @@ function EmbeddingProviders() {
                 <p className="text-xs text-on-surface-variant">{ep.provider_type} · {ep.model} · {ep.base_url || 'default'}</p>
               </div>
               <div className="flex gap-1">
-                <button onClick={() => { setForm({ name: ep.name, providerType: ep.provider_type, baseUrl: ep.base_url || '', apiKey: '', model: ep.model }); setEditingId(ep.id); setShowForm(true); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-primary"><Icon name="edit" className="text-sm" /> Edit</button>
-                <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/embedding-providers/${ep.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error"><Icon name="delete" className="text-sm" /> Delete</button>
+                <button onClick={() => { setForm({ name: ep.name, providerType: ep.provider_type, baseUrl: ep.base_url || '', apiKey: '', model: ep.model }); setEditingId(ep.id); setShowForm(true); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors"><Icon name="edit" className="text-sm" /> Edit</button>
+                <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/embedding-providers/${ep.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
               </div>
             </div>
           ))}
@@ -134,7 +134,7 @@ function VectorStores() {
                 <p className="text-sm font-medium">{vs.name}</p>
                 <p className="text-xs text-on-surface-variant">{vs.store_type} · {vs.url}</p>
               </div>
-              <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error"><Icon name="delete" className="text-sm" /> Delete</button>
+              <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
             </div>
           ))}
         </div>

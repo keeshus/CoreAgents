@@ -339,7 +339,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onClose} className="flex items-center gap-1 p-1.5 text-on-surface-variant hover:text-on-surface-variant">
+          <button onClick={onClose} className="flex items-center gap-1 p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">
             <Icon name="close" className="text-base" /> Close
           </button>
         </div>
@@ -399,7 +399,7 @@ className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono r
                             placeholder="Message content..."
                             className="flex-1 text-xs border border-outline rounded-lg px-2.5 py-1.5 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                           />
-                          <button onClick={() => removeHistoryEntry(i)} className="flex items-center gap-1 p-1.5 text-error hover:text-error">
+                          <button onClick={() => removeHistoryEntry(i)} className="flex items-center gap-1 p-1.5 text-error hover:text-error hover:bg-error-container rounded transition-colors">
                             <Icon name="delete" className="text-sm" /> Remove
                           </button>
                         </div>

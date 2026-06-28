@@ -138,7 +138,7 @@ export default function FlowsListPage() {
                 </Tooltip>
                 )}
                 <Tooltip content="Sign Out">
-                  <button onClick={handleLogout} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors">
+                  <button onClick={handleLogout} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">
                     <Icon name="logout" className="text-xl" /> Sign Out
                   </button>
                 </Tooltip>

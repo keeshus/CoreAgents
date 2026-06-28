@@ -286,7 +286,7 @@ export default function EndpointsPage() {
                         list.splice(i, 1);
                         setForm((f) => ({ ...f, models: list.join(', ') }));
                       }}
-                      className="p-1.5 text-on-surface-variant hover:text-error"
+                      className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"
                       aria-label="Remove model"
                     ><Icon name="close" className="text-sm" /></button>
                   </div>
@@ -380,7 +380,7 @@ export default function EndpointsPage() {
                     <Tooltip content="Edit endpoint">
                       <button
                         onClick={() => handleEdit(ep)}
-                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-primary-container rounded transition-colors"
+                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors"
                       >
                         <Icon name="edit" className="text-base" /> Edit
                       </button>

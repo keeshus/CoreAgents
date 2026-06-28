@@ -361,7 +361,7 @@ export default function FlowEditPage() {
             </Link>
           </Tooltip>
           <Tooltip content="Debug run — trace execution step by step">
-            <button onClick={() => setShowDebug(true)} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary transition-colors rounded hover:bg-surface-container-high">
+            <button onClick={() => setShowDebug(true)} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container transition-colors rounded">
               <Icon name="bug_report" className="text-sm" /> Debug
             </button>
           </Tooltip>

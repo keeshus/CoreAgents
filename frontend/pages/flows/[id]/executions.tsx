@@ -136,21 +136,21 @@ export default function ExecutionHistoryPage() {
                 <div className="flex items-center gap-2">
                   {exec.status === 'awaiting_approval' && (
                     <Tooltip content="Pending approval">
-                      <Link href="/approvals" className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary transition-colors">
+                      <Link href="/approvals" className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors">
                         <Icon name="pending" className="text-base" /> Approvals
                       </Link>
                     </Tooltip>
                   )}
                   {exec.status === 'running' && (
                     <Tooltip content="Stop execution">
-                      <button onClick={(e) => cancel(exec.id, e)} disabled={cancelling === exec.id} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors disabled:opacity-30 cursor-pointer">
+                      <button onClick={(e) => cancel(exec.id, e)} disabled={cancelling === exec.id} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors disabled:opacity-30 cursor-pointer">
                         <Icon name="stop_circle" className="text-base" /> Stop
                       </button>
                     </Tooltip>
                   )}
                   <Tooltip content="Delete execution">
-                    <button onClick={(e) => deleteExec(exec.id, e)} disabled={deleting === exec.id} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors cursor-pointer disabled:opacity-30">
-                      <Icon name="delete" className="text-base" /> Delete
+                      <button onClick={(e) => deleteExec(exec.id, e)} disabled={deleting === exec.id} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors cursor-pointer disabled:opacity-30">
+                        <Icon name="delete" className="text-base" /> Delete
                     </button>
                   </Tooltip>
                   <span className="p-2 text-outline-variant">

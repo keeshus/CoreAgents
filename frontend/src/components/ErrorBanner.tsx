@@ -12,7 +12,7 @@ export function ErrorBanner({ message, onDismiss }: ErrorBannerProps) {
       <Icon name="warning" className="text-base shrink-0" />
       <span className="flex-1">{message}</span>
       {onDismiss && (
-        <button onClick={onDismiss} className="flex items-center gap-1 text-red-500 hover:text-red-700"><Icon name="close" className="text-sm font-bold" /> Dismiss</button>
+        <button onClick={onDismiss} className="flex items-center gap-1 text-error hover:text-error hover:bg-error-container rounded px-1.5 py-0.5 transition-colors text-xs"><Icon name="close" className="text-sm font-bold" /> Dismiss</button>
       )}
     </div>
   );

@@ -39,7 +39,7 @@ export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
       <div className="flex items-center justify-between px-1">
         <h3 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider">Add Node</h3>
         {onClose && (
-          <button onClick={onClose} className="flex items-center gap-1 p-0.5 text-outline-variant hover:text-on-surface-variant">
+          <button onClick={onClose} className="flex items-center gap-1 p-0.5 text-outline-variant hover:text-error hover:bg-error-container rounded transition-colors">
             <Icon name="close" className="text-xs" /> Close
           </button>
         )}

@@ -20,7 +20,7 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', c
         <Dialog.Content className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface rounded-xl shadow-m3-4 max-w-sm w-full mx-4 p-6">
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-lg font-semibold text-on-surface m-0">{title}</Dialog.Title>
-            <Dialog.Close className="p-1.5 text-on-surface-variant hover:text-on-surface-variant">
+            <Dialog.Close className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">
               <span className="flex items-center gap-1 text-xs"><Icon name="close" className="text-base" /> Close</span>
             </Dialog.Close>
           </div>

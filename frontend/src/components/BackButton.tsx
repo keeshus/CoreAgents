@@ -7,8 +7,8 @@ interface BackButtonProps {
 
 export function BackButton({ href }: BackButtonProps) {
   return (
-    <Link href={href} className="text-gray-400 hover:text-gray-600">
-      <Icon name="arrow_back" className="text-base" />
+    <Link href={href} className="flex items-center gap-1 leading-none text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded px-1 py-0.5 transition-colors">
+      <Icon name="arrow_back" className="text-base" /> <span>Back</span>
     </Link>
   );
 }

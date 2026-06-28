@@ -288,7 +288,7 @@ export default function MCPServersPage() {
                     <Tooltip content="Edit server">
                       <button
                         onClick={() => handleEdit(srv)}
-                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-primary-container rounded transition-colors"
+                        className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors"
                       >
                         <Icon name="edit" className="text-base" /> Edit
                       </button>

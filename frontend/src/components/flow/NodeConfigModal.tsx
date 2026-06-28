@@ -114,13 +114,13 @@ export function NodeConfigModal({
               <Tooltip content="Delete node">
                 <button
                   onClick={onDelete}
-                  className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error transition-colors"
+                  className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"
                 >
                   <Icon name="delete" className="text-base" /> Delete
                 </button>
               </Tooltip>
             )}
-            <Dialog.Close className="p-1.5 text-on-surface-variant hover:text-on-surface-variant transition-colors cursor-pointer">
+            <Dialog.Close className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors cursor-pointer">
               <span className="flex items-center gap-1 text-xs">
                 <Icon name="close" className="text-base" /> Close
               </span>
@@ -235,7 +235,7 @@ export function NodeConfigModal({
                           list.splice(i, 1);
                           onConfigChange({ outputLabels: list.length > 0 ? list : ['true', 'false'] });
                         }}
-                        className="p-1.5 text-on-surface-variant hover:text-error"
+                        className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"
                       ><Icon name="close" className="text-sm" /></button>
                     </div>
                   ))}

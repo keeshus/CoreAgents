@@ -132,12 +132,12 @@ export default function ApprovalsPage() {
               <>
                 <span className="text-xs text-on-surface-variant mr-1">{user.name}</span>
                 <Tooltip content="Profile">
-                  <Link href="/profile" className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors">
+                  <Link href="/profile" className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors">
                     <Icon name="person" className="text-xl" /> Profile
                   </Link>
                 </Tooltip>
                 <Tooltip content="Sign Out">
-                  <button onClick={handleLogout} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors">
+                  <button onClick={handleLogout} className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">
                     <Icon name="logout" className="text-xl" /> Sign Out
                   </button>
                 </Tooltip>

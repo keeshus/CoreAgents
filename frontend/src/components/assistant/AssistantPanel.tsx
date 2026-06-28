@@ -71,7 +71,7 @@ export function AssistantPanel() {
           )}
         </div>
         <Tooltip content="Clear conversation">
-          <button onClick={clearConversation} className="flex items-center gap-1 p-1 text-xs text-on-surface-variant hover:text-error transition-colors">
+          <button onClick={clearConversation} className="flex items-center gap-1 p-1 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">
             <Icon name="delete" className="text-sm" /> Clear
           </button>
         </Tooltip>

@@ -75,7 +75,7 @@ export default function ChatSessionList() {
                 </Link>
                 <button
                   onClick={() => deleteSession(s.id)}
-                  className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error transition-colors shrink-0"
+                  className="flex items-center gap-1 p-2 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors shrink-0"
                 >
                   <Icon name="delete" className="text-base" /> Delete
                 </button>

@@ -182,7 +182,7 @@ export default function UsersSettingsPage() {
                         <button
                           onClick={() => handleDelete(u.id)}
                           disabled={deleting === u.id}
-                          className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error disabled:opacity-50 transition-colors"
+                          className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container disabled:opacity-50 rounded transition-colors"
                         >
                           {deleting === u.id ? <Icon name="sync" className="text-base animate-spin" /> : <Icon name="delete" className="text-base" />} Delete
                         </button>
@@ -203,7 +203,7 @@ export default function UsersSettingsPage() {
           <div className="bg-surface rounded-lg shadow-m3-4 max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-on-surface">Create User</h3>
-              <button onClick={() => setShowCreate(false)} className="flex items-center gap-1 text-on-surface-variant hover:text-on-surface-variant"><Icon name="close" className="text-base" /> Close</button>
+              <button onClick={() => setShowCreate(false)} className="flex items-center gap-1 text-on-surface-variant hover:text-error hover:bg-error-container p-1.5 rounded transition-colors"><Icon name="close" className="text-base" /> Close</button>
             </div>
             {createError && <div className="bg-error-container border border-red-200 text-error text-sm rounded p-3 mb-4">{createError}</div>}
             <div className="space-y-3">
