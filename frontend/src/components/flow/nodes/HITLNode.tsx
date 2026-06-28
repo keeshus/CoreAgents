@@ -11,12 +11,10 @@ export function HITLNode(props: NodeProps) {
   return (
     <BaseNode label={(props.data?.label as string) || 'Human in the Loop'} nodeType="HITL" category="processing" selected={props.selected || false} inputs={1} outputs={labels.length} outputLabels={labels} warnings={props.data?._warnings as string[] | undefined} feedbackInput>
       <div className="space-y-1">
-        <p className="text-xs text-on-surface-variant">Flow pauses here for human approval</p>
-        {config?.prompt && <p className="text-xs text-on-secondary-container italic truncate">{config.prompt.slice(0, 60)}</p>}
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container flex items-center gap-1 w-fit"><Icon name="pause" className="text-[9px]" /> pause → route</span>
       </div>
       <div className="mt-2 pt-2 border-t border-outline-variant flex items-center gap-1">
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container"><Icon name="pause" className="text-[9px]" /> pause → route</span>
-        <span className="text-[9px] text-on-surface-variant ml-auto">{labels.length} path{labels.length !== 1 ? 's' : ''}{maxIter > 0 ? ` · max ${maxIter} iters` : ' · unlimited'}</span>
+        <span className="text-[9px] text-on-surface-variant">{labels.length} path{labels.length !== 1 ? 's' : ''}{maxIter > 0 ? ` · max ${maxIter} iters` : ' · unlimited'}</span>
       </div>
       <Tooltip content="Max iterations reached — exit">
         <Handle
