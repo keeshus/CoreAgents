@@ -19,9 +19,10 @@ interface BaseNodeProps {
   className?: string;
   warnings?: string[];
   feedbackInput?: boolean;
+  bodyMaxH?: string;
 }
 
-export function BaseNode({ children, label, nodeType, category = 'processing', selected, inputs = 1, outputs = 1, outputLabels, toolInputs = 0, toolOutput = false, className, warnings, feedbackInput }: BaseNodeProps) {
+export function BaseNode({ children, label, nodeType, category = 'processing', selected, inputs = 1, outputs = 1, outputLabels, toolInputs = 0, toolOutput = false, className, warnings, feedbackInput, bodyMaxH = 'max-h-[72px]' }: BaseNodeProps) {
   return (
     <div className={cn(
       'rounded-lg border-2 bg-surface shadow-m3-1 w-[220px] border-outline',
@@ -52,7 +53,7 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
           </Tooltip>
         )}
       </div>
-      <div className="p-3 text-xs overflow-y-auto max-h-[72px]">
+      <div className={`p-3 text-xs overflow-y-auto ${bodyMaxH}`}>
         {children}
       </div>
       {/* Tool inputs — MCP/Retriever tools wire in here (LLM Agent) */}
