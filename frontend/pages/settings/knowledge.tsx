@@ -33,8 +33,12 @@ function EmbeddingProviders() {
   const [saving, setSaving] = useState(false);
 
   const loadData = async () => {
-    const res = await fetch(`${API_URL}/embedding-providers`);
-    setItems(await res.json());
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/embedding-providers`);
+      const data = await res.json();
+      setItems(Array.isArray(data) ? data : []);
+    } catch { setItems([]); }
     setLoading(false);
   };
   useEffect(() => { loadData(); }, []);
@@ -96,8 +100,12 @@ function VectorStores() {
   const [refreshing, setRefreshing] = useState<string | null>(null);
 
   const loadData = async () => {
-    const res = await fetch(`${API_URL}/vector-stores`);
-    setItems(await res.json());
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/vector-stores`);
+      const data = await res.json();
+      setItems(Array.isArray(data) ? data : []);
+    } catch { setItems([]); }
     setLoading(false);
   };
   useEffect(() => { loadData(); }, []);
