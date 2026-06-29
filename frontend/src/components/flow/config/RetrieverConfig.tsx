@@ -21,8 +21,8 @@ export function RetrieverConfig({ config, onChange }: RetrieverConfigProps) {
   const [vectorStores, setVectorStores] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/embedding-providers`).then(r => r.json()).then(setEmbeddingProviders).catch(() => {});
-    fetch(`${API_URL}/vector-stores`).then(r => r.json()).then(setVectorStores).catch(() => {});
+    fetch(`${API_URL}/embedding-providers`).then(r => r.json()).then(data => setEmbeddingProviders(Array.isArray(data) ? data : [])).catch(() => {});
+    fetch(`${API_URL}/vector-stores`).then(r => r.json()).then(data => setVectorStores(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
 
   return (

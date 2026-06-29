@@ -20,8 +20,8 @@ export function CollectionSelector({ vectorStoreId, value, onChange }: Collectio
     // First try the persisted collections, then fall back to on-demand API
     fetch(`${API_URL}/vector-stores`)
       .then(r => r.json())
-      .then((stores: any[]) => {
-        const store = stores.find((s: any) => s.id === vectorStoreId);
+      .then((stores: any) => {
+        const store = (Array.isArray(stores) ? stores : []).find((s: any) => s.id === vectorStoreId);
         if (store?.collections?.length > 0) {
           setCollections(store.collections);
           setLoading(false);
