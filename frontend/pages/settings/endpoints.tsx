@@ -238,37 +238,18 @@ export default function EndpointsPage() {
                 helpText={editingId ? 'Leave blank to keep current' : undefined}
               />
 
-              <div>
-                {(() => {
-                  const parsed = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
-                  if (parsed.length > 0) {
-                    return (
-                      <>
-                        <SelectField
-                          label="Default Model"
-                          value={form.defaultModel}
-                          onChange={(v) => setForm((f) => ({ ...f, defaultModel: v }))}
-                          options={parsed.map((m) => ({ value: m, label: m }))}
-                        />
-                      </>
-                    );
-                  }
-                  return (
-                    <TextField
-                      label="Default Model"
-                      value={form.defaultModel}
-                      onChange={(v) => setForm((f) => ({ ...f, defaultModel: v }))}
-                    />
-                  );
-                })()}
-              </div>
-            </div>
-
             <div className="col-span-2">
               <span className="text-xs font-medium text-on-surface-variant block mb-1">Models</span>
               <div className="space-y-1.5">
                 {(form.models ? form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '') : []).map((model, i) => (
                   <div key={i} className="flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="defaultModel"
+                      checked={form.defaultModel === model}
+                      onChange={() => setForm((f) => ({ ...f, defaultModel: model }))}
+                      className="accent-primary shrink-0"
+                    />
                     <TextField
                       label="Model"
                       value={model}
@@ -297,7 +278,9 @@ export default function EndpointsPage() {
                   className="text-[11px] text-primary hover:underline"
                 >+ Add model</button>
               </div>
+              <p className="mt-1 text-[10px] text-on-surface-variant">Select the radio button to set the default model for this endpoint.</p>
             </div>
+          </div>
 
             <div className="flex items-center gap-2 justify-end">
               <button
