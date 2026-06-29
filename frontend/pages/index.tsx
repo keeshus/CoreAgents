@@ -259,14 +259,14 @@ export default function FlowsListPage() {
                         </Tooltip>
                     ) : (
                       <Tooltip content="Run flow">
-                        <button onClick={() => handleRun(flow.id)} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors cursor-pointer">
+                        <button onClick={() => handleRun(flow.id)} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors cursor-pointer">
                           <Icon name="play_arrow" className="text-sm" /> Run
                         </button>
                       </Tooltip>
                     ))}
                     {can('execution:approve') && !isChat && (
                       <Tooltip content="Executions">
-                        <Link href={`/flows/${flow.id}/executions`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors">
+                        <Link href={`/flows/${flow.id}/executions`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
                           <Icon name="history" className="text-sm" /> Run history
                         </Link>
                       </Tooltip>
