@@ -207,9 +207,11 @@ export default function FlowsListPage() {
                       <>
                     {isChat ? (
                       <>
-                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                          <Icon name="chat" className="text-sm" /> Chat
-                        </span>
+                        <Tooltip content="Conversational interface — user sends messages, agent responds">
+                          <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                            <Icon name="chat" className="text-sm" /> Chat
+                          </span>
+                        </Tooltip>
                         <Tooltip content="Chat with this agent">
                           <Link href={`/chat/${flow.id}`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
                             <Icon name="chat" className="text-sm" /> Chat
@@ -217,17 +219,23 @@ export default function FlowsListPage() {
                         </Tooltip>
                       </>
                     ) : isWebhook ? (
-                      <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                        <Icon name="webhook" className="text-sm" /> Webhook
-                      </span>
+                      <Tooltip content="Triggered by external POST request — configure in flow editor">
+                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                          <Icon name="webhook" className="text-sm" /> Webhook
+                        </span>
+                      </Tooltip>
                     ) : triggerType === 'schedule' ? (
-                      <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                        <Icon name="calendar_today" className="text-sm" /> Schedule
-                      </span>
+                      <Tooltip content="Runs automatically on a cron schedule — configure in flow editor">
+                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                          <Icon name="calendar_today" className="text-sm" /> Schedule
+                        </span>
+                      </Tooltip>
                     ) : (
-                      <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                        <Icon name="terminal" className="text-sm" /> Manual
-                      </span>
+                      <Tooltip content="Triggered manually via the Run button or debug overlay">
+                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                          <Icon name="terminal" className="text-sm" /> Manual
+                        </span>
+                      </Tooltip>
                     )}
                     {!isChat && !isWebhook && (
                       running[flow.id] === 'running' ? (
