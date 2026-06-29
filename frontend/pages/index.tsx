@@ -188,16 +188,49 @@ export default function FlowsListPage() {
                 <div className="space-y-3">
             {flows.map((flow) => (
               <div key={flow.id} className="bg-surface rounded-lg border p-4 flex items-center justify-between hover:shadow-sm transition-shadow">
-                <div>
-                  <Link href={`/flows/${flow.id}/edit`} className="font-medium text-on-surface hover:text-primary">{flow.name}</Link>
-                  <p className="text-xs text-on-surface-variant mt-0.5">{flow.description || 'No description'}</p>
-                  <div className="flex items-center gap-2 mt-1 text-[10px] text-on-surface-variant">
-                    <span>Created: {new Date(flow.created_at).toLocaleString()}{flow.created_by_name ? ` by ${flow.created_by_name}` : ''}</span>
-                    <span>·</span>
-                    <span>Updated: {new Date(flow.updated_at).toLocaleString()}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="shrink-0">
+                    {(() => {
+                      const triggerNode = flow.nodes?.find((n: any) => n.data?.type === 'trigger');
+                      const triggerType = triggerNode?.data?.config?.triggerType || 'manual';
+                      return triggerType === 'chat' ? (
+                        <Tooltip content="Conversational interface — user sends messages, agent responds">
+                          <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                            <Icon name="chat" className="text-sm" />
+                          </span>
+                        </Tooltip>
+                      ) : triggerType === 'webhook' ? (
+                        <Tooltip content="Triggered by external POST request — configure in flow editor">
+                          <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                            <Icon name="webhook" className="text-sm" />
+                          </span>
+                        </Tooltip>
+                      ) : triggerType === 'schedule' ? (
+                        <Tooltip content="Runs automatically on a cron schedule — configure in flow editor">
+                          <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                            <Icon name="calendar_today" className="text-sm" />
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip content="Triggered manually via the Run button or debug overlay">
+                          <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                            <Icon name="terminal" className="text-sm" />
+                          </span>
+                        </Tooltip>
+                      );
+                    })()}
+                  </div>
+                  <div className="min-w-0">
+                    <Link href={`/flows/${flow.id}/edit`} className="font-medium text-on-surface hover:text-primary">{flow.name}</Link>
+                    <p className="text-xs text-on-surface-variant mt-0.5">{flow.description || 'No description'}</p>
+                    <div className="flex items-center gap-2 mt-1 text-[10px] text-on-surface-variant">
+                      <span>Created: {new Date(flow.created_at).toLocaleString()}{flow.created_by_name ? ` by ${flow.created_by_name}` : ''}</span>
+                      <span>·</span>
+                      <span>Updated: {new Date(flow.updated_at).toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {(() => {
                     const triggerNode = flow.nodes?.find((n: any) => n.data?.type === 'trigger');
                     const triggerType = triggerNode?.data?.config?.triggerType || 'manual';
@@ -206,38 +239,12 @@ export default function FlowsListPage() {
                     return (
                       <>
                     {isChat ? (
-                      <>
-                        <Tooltip content="Conversational interface — user sends messages, agent responds">
-                          <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                            <Icon name="chat" className="text-sm" /> Chat
-                          </span>
-                        </Tooltip>
-                        <Tooltip content="Chat with this agent">
-                          <Link href={`/chat/${flow.id}`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
-                            <Icon name="chat" className="text-sm" /> Open Chat
-                          </Link>
-                        </Tooltip>
-                      </>
-                    ) : isWebhook ? (
-                      <Tooltip content="Triggered by external POST request — configure in flow editor">
-                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                          <Icon name="webhook" className="text-sm" /> Webhook
-                        </span>
-                      </Tooltip>
-                    ) : triggerType === 'schedule' ? (
-                      <Tooltip content="Runs automatically on a cron schedule — configure in flow editor">
-                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                          <Icon name="calendar_today" className="text-sm" /> Schedule
-                        </span>
+                      <Tooltip content="Chat with this agent">
+                        <Link href={`/chat/${flow.id}`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
+                          <Icon name="chat" className="text-sm" /> Open Chat
+                        </Link>
                       </Tooltip>
                     ) : (
-                      <Tooltip content="Triggered manually via the Run button or debug overlay">
-                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                          <Icon name="terminal" className="text-sm" /> Manual
-                        </span>
-                      </Tooltip>
-                    )}
-                    {!isChat && !isWebhook && (
                       running[flow.id] === 'running' ? (
                         <Tooltip content="Running...">
                           <span className="flex items-center gap-1 px-2 py-1 text-xs text-primary bg-primary-container rounded"><Icon name="sync" className="text-sm animate-spin" /> Running</span>
