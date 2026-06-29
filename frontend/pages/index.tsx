@@ -208,32 +208,32 @@ export default function FlowsListPage() {
                     {isChat ? (
                       <>
                         <Tooltip content="Conversational interface — user sends messages, agent responds">
-                          <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                            <Icon name="chat" className="text-sm" /> Chat
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-on-surface-variant bg-surface-container-high rounded">
+                            <Icon name="chat" className="text-xs" /> Chat
                           </span>
                         </Tooltip>
                         <Tooltip content="Chat with this agent">
                           <Link href={`/chat/${flow.id}`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
-                            <Icon name="chat" className="text-sm" /> Chat
+                            <Icon name="chat" className="text-sm" /> Open Chat
                           </Link>
                         </Tooltip>
                       </>
                     ) : isWebhook ? (
                       <Tooltip content="Triggered by external POST request — configure in flow editor">
-                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                          <Icon name="webhook" className="text-sm" /> Webhook
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-on-surface-variant bg-surface-container-high rounded">
+                          <Icon name="webhook" className="text-xs" /> Webhook
                         </span>
                       </Tooltip>
                     ) : triggerType === 'schedule' ? (
                       <Tooltip content="Runs automatically on a cron schedule — configure in flow editor">
-                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                          <Icon name="calendar_today" className="text-sm" /> Schedule
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-on-surface-variant bg-surface-container-high rounded">
+                          <Icon name="calendar_today" className="text-xs" /> Schedule
                         </span>
                       </Tooltip>
                     ) : (
                       <Tooltip content="Triggered manually via the Run button or debug overlay">
-                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                          <Icon name="terminal" className="text-sm" /> Manual
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-on-surface-variant bg-surface-container-high rounded">
+                          <Icon name="terminal" className="text-xs" /> Manual
                         </span>
                       </Tooltip>
                     )}
