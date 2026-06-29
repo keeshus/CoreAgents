@@ -198,6 +198,7 @@ export default function FlowsListPage() {
                     const triggerNode = flow.nodes?.find((n: any) => n.data?.type === 'trigger');
                     const triggerType = triggerNode?.data?.config?.triggerType || 'manual';
                     const isChat = triggerType === 'chat';
+                    const isWebhook = triggerType === 'webhook';
                     return (
                       <>
                     {isChat ? (
@@ -206,6 +207,10 @@ export default function FlowsListPage() {
                           <Icon name="chat" className="text-sm" /> Chat
                         </Link>
                       </Tooltip>
+                    ) : isWebhook ? (
+                      <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                        <Icon name="webhook" className="text-sm" /> Webhook
+                      </span>
                     ) : (
                       running[flow.id] === 'running' ? (
                         <Tooltip content="Running...">
