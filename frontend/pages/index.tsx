@@ -191,7 +191,11 @@ export default function FlowsListPage() {
                 <div>
                   <Link href={`/flows/${flow.id}/edit`} className="font-medium text-on-surface hover:text-primary">{flow.name}</Link>
                   <p className="text-xs text-on-surface-variant mt-0.5">{flow.description || 'No description'}</p>
-                  <p className="text-[10px] text-on-surface-variant mt-1">{new Date(flow.updated_at).toLocaleDateString()}</p>
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-on-surface-variant">
+                    <span>Created: {new Date(flow.created_at).toLocaleString()}</span>
+                    <span>·</span>
+                    <span>Updated: {new Date(flow.updated_at).toLocaleString()}</span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {(() => {
