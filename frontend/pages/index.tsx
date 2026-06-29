@@ -211,7 +211,16 @@ export default function FlowsListPage() {
                       <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
                         <Icon name="webhook" className="text-sm" /> Webhook
                       </span>
+                    ) : triggerType === 'schedule' ? (
+                      <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                        <Icon name="calendar_today" className="text-sm" /> Schedule
+                      </span>
                     ) : (
+                      <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                        <Icon name="terminal" className="text-sm" /> Manual
+                      </span>
+                    )}
+                    {!isChat && !isWebhook && (
                       running[flow.id] === 'running' ? (
                         <Tooltip content="Running...">
                           <span className="flex items-center gap-1 px-2 py-1 text-xs text-primary bg-primary-container rounded"><Icon name="sync" className="text-sm animate-spin" /> Running</span>
