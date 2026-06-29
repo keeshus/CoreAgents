@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { useConfirm } from '@/lib/useConfirm';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -11,6 +12,7 @@ export default function ChatSessionList() {
   const { flowId } = router.query;
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const deleteConfirm = useConfirm({ title: 'Delete chat?', message: 'Delete this chat session?' });
 
   useEffect(() => {
     if (!flowId) return;
@@ -29,7 +31,8 @@ export default function ChatSessionList() {
   };
 
   const deleteSession = async (sessionId: string) => {
-    if (!confirm('Delete this chat?')) return;
+    const confirmed = await deleteConfirm.confirm();
+    if (!confirmed) return;
     await fetch(`${API_URL}/chat/sessions/${sessionId}`, { method: 'DELETE' });
     setSessions(sessions.filter(s => s.id !== sessionId));
   };
@@ -87,6 +90,7 @@ export default function ChatSessionList() {
           </div>
         )}
       </div>
+      {deleteConfirm.dialog}
     </div>
   );
 }

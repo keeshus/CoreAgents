@@ -1,4 +1,5 @@
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { useConfirm } from '@/lib/useConfirm';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
@@ -28,6 +29,7 @@ export default function MCPServersPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const deleteConfirm = useConfirm({ title: 'Delete MCP server?', message: 'Are you sure you want to delete this MCP server?' });
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -65,7 +67,8 @@ export default function MCPServersPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this MCP server?')) return;
+    const confirmed = await deleteConfirm.confirm();
+    if (!confirmed) return;
     setDeleting(id);
     try {
       await api.mcpServers.delete(id);
@@ -336,6 +339,7 @@ export default function MCPServersPage() {
             ))}
           </div>
         )}
+        {deleteConfirm.dialog}
       </div>
     </div>
   );

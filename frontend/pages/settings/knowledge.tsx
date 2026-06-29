@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
 import { api } from '@/lib/api-client';
+import { useConfirm } from '@/lib/useConfirm';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -31,6 +32,7 @@ function EmbeddingProviders() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', providerType: 'openai', baseUrl: '', apiKey: '', model: 'text-embedding-ada-002' });
   const [saving, setSaving] = useState(false);
+  const deleteConfirm = useConfirm({ title: 'Delete embedding provider?', message: 'Delete this embedding provider? This cannot be undone.' });
 
   const loadData = async () => {
     setLoading(true);
@@ -81,12 +83,13 @@ function EmbeddingProviders() {
               </div>
               <div className="flex gap-1">
                 <button onClick={() => { setForm({ name: ep.name, providerType: ep.provider_type, baseUrl: ep.base_url || '', apiKey: '', model: ep.model }); setEditingId(ep.id); setShowForm(true); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors"><Icon name="edit" className="text-sm" /> Edit</button>
-                <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/embedding-providers/${ep.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
+                <button onClick={async () => { const ok = await deleteConfirm.confirm({ message: 'Delete embedding provider "' + ep.name + '"? This cannot be undone.' }); if (!ok) return; await fetch(`${API_URL}/embedding-providers/${ep.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
               </div>
             </div>
           ))}
         </div>
       )}
+      {deleteConfirm.dialog}
     </div>
   );
 }
@@ -98,6 +101,7 @@ function VectorStores() {
   const [form, setForm] = useState({ name: '', url: '', apiKey: '', storeType: 'qdrant' });
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const deleteConfirm = useConfirm({ title: 'Delete vector store?', message: 'Delete this vector store? This cannot be undone.' });
 
   const loadData = async () => {
     setLoading(true);
@@ -166,12 +170,13 @@ function VectorStores() {
                 >
                   <Icon name="refresh" className={`text-sm ${refreshing === vs.id ? 'animate-spin' : ''}`} /> Refresh
                 </button>
-                <button onClick={async () => { if (!confirm('Delete?')) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
+                <button onClick={async () => { const ok = await deleteConfirm.confirm({ message: 'Delete vector store "' + vs.name + '"? This cannot be undone.' }); if (!ok) return; await fetch(`${API_URL}/vector-stores/${vs.id}`, { method: 'DELETE' }); loadData(); }} className="flex items-center gap-1 p-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"><Icon name="delete" className="text-sm" /> Delete</button>
               </div>
             </div>
           ))}
         </div>
       )}
+      {deleteConfirm.dialog}
     </div>
   );
 }

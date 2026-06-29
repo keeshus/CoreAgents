@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { api } from '@/lib/api-client';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { useConfirm } from '@/lib/useConfirm';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -47,6 +48,7 @@ export default function EndpointsPage() {
   const [saving, setSaving] = useState(false);
 
   const [deleting, setDeleting] = useState<string | null>(null);
+  const deleteConfirm = useConfirm({ title: 'Delete endpoint?', message: 'Are you sure you want to delete this endpoint? This cannot be undone.' });
   useAssistantContext({ pageKey: 'settings:endpoints', description: 'Managing LLM endpoints' });
 
   const fetchEndpoints = async () => {
@@ -90,7 +92,8 @@ export default function EndpointsPage() {
       setError('Cannot delete the default endpoint. Set another endpoint as default first.');
       return;
     }
-    if (!window.confirm('Are you sure you want to delete this endpoint?')) return;
+    const confirmed = await deleteConfirm.confirm();
+    if (!confirmed) return;
     setDeleting(ep.id);
     try {
       await api.llmEndpoints.delete(ep.id);
@@ -383,6 +386,7 @@ export default function EndpointsPage() {
           </div>
         )}
       </div>
+      {deleteConfirm.dialog}
     </div>
   );
 }

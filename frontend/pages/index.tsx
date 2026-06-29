@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { api } from '@/lib/api-client';
 import { useAuth, useAuthConfig } from '@/lib/auth-context';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { useConfirm } from '@/lib/useConfirm';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
@@ -19,6 +20,7 @@ export default function FlowsListPage() {
   const [sort, setSort] = useState<'updated_at' | 'created_at'>('updated_at');
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<Record<string, 'running' | 'ok' | 'error' | null>>({});
+  const deleteConfirm = useConfirm({ title: 'Delete flow?', message: 'Are you sure you want to delete this flow? This cannot be undone.' });
   const PAGE_SIZE = 20;
   const router = useRouter();
 
@@ -61,7 +63,8 @@ export default function FlowsListPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this flow?')) return;
+    const confirmed = await deleteConfirm.confirm();
+    if (!confirmed) return;
     await api.flows.delete(id);
     setFlows(flows.filter(f => f.id !== id));
   };
@@ -305,6 +308,7 @@ export default function FlowsListPage() {
           </div>
         )}
       </div>
+      {deleteConfirm.dialog}
     </div>
   );
 }

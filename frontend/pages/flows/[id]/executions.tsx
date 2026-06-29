@@ -1,4 +1,5 @@
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { useConfirm } from '@/lib/useConfirm';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -62,10 +63,12 @@ export default function ExecutionHistoryPage() {
   const PAGE_SIZE = 20;
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const deleteConfirm = useConfirm({ title: 'Delete execution?', message: 'Delete this execution record?' });
 
   const deleteExec = async (execId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Delete this execution?')) return;
+    const confirmed = await deleteConfirm.confirm();
+    if (!confirmed) return;
     setDeleting(execId);
     try {
       await fetch(`${API_URL}/executions/${execId}`, { method: 'DELETE' });
@@ -171,6 +174,7 @@ export default function ExecutionHistoryPage() {
           </div>
         )}
       </div>
+      {deleteConfirm.dialog}
     </div>
   );
 

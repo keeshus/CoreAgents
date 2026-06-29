@@ -1,4 +1,5 @@
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { useConfirm } from '@/lib/useConfirm';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
@@ -31,6 +32,7 @@ export default function UsersSettingsPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const deleteConfirm = useConfirm({ title: 'Delete user?', message: 'Delete this user? This cannot be undone.' });
   useAssistantContext({ pageKey: 'settings:users', description: 'Managing users' });
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -99,7 +101,8 @@ export default function UsersSettingsPage() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Delete this user? This cannot be undone.')) return;
+    const confirmed = await deleteConfirm.confirm();
+    if (!confirmed) return;
     setDeleting(userId);
     try {
       const res = await fetch(`${API_URL}/users/${userId}`, {
@@ -196,6 +199,7 @@ export default function UsersSettingsPage() {
         )}
 
       </div>
+      {deleteConfirm.dialog}
 
       {/* Create User Modal */}
       {showCreate && (
