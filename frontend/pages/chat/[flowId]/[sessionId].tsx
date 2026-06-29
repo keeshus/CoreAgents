@@ -89,6 +89,10 @@ export default function ChatPage() {
               if (event.type === 'token') {
                 fullContent += event.data.token;
                 setStreamContent(fullContent);
+              } else if (event.type === 'tool_call') {
+                setMessages(prev => [...prev, { id: Date.now().toString() + Math.random(), role: 'assistant' as const, content: `🔧 Using ${event.data.name}...` }]);
+              } else if (event.type === 'tool_result') {
+                setMessages(prev => [...prev, { id: Date.now().toString() + Math.random(), role: 'assistant' as const, content: `✅ ${event.data.name} completed` }]);
               } else if (event.type === 'done') {
                 setMessages(prev => [...prev, { id: event.data.messageId, role: 'assistant', content: event.data.content }]);
                 setStreamContent('');

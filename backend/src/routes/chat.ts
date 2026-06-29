@@ -181,6 +181,19 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
             res.write(`data: ${JSON.stringify({ type: 'token', data: { token } })}\n\n`);
           }
         }
+        // Stream tool call feedback
+        if (event.type === 'step.started') {
+          const d = event.data as any;
+          if (d.nodeType === 'mcp-tool' || d.nodeType === 'retriever') {
+            res.write(`data: ${JSON.stringify({ type: 'tool_call', data: { name: d.nodeLabel || d.nodeType, input: d.input } })}\n\n`);
+          }
+        }
+        if (event.type === 'step.completed') {
+          const d = event.data as any;
+          if (d.nodeType === 'mcp-tool' || d.nodeType === 'retriever') {
+            res.write(`data: ${JSON.stringify({ type: 'tool_result', data: { name: d.nodeLabel || d.nodeType, output: d.output } })}\n\n`);
+          }
+        }
       },
       executionContext,
     );
