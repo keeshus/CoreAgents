@@ -214,7 +214,7 @@ export default function FlowsListPage() {
                       ) : (
                         <Tooltip content="Triggered manually via the Run button or debug overlay">
                           <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
-                            <Icon name="terminal" className="text-sm" />
+                            <Icon name="play_arrow" className="text-sm" />
                           </span>
                         </Tooltip>
                       );
