@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
+import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -170,7 +172,13 @@ export default function ChatPage() {
                     : 'bg-surface-container-high text-on-surface'
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                {msg.role === 'user' ? (
+                  <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                ) : (
+                  <div className="prose prose-sm max-w-none [&_table]:text-left [&_th]:border [&_th]:border-outline [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-outline [&_td]:px-2 [&_td]:py-1">
+                    <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{msg.content}</ReactMarkdown>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -180,7 +188,9 @@ export default function ChatPage() {
                 <Icon name="smart_toy" className="text-base text-on-surface-variant" />
               </div>
               <div className="max-w-[70%] rounded-lg px-4 py-2 bg-surface-container-high">
-                <p className="text-sm whitespace-pre-wrap break-words">{streamContent}</p>
+                <div className="prose prose-sm max-w-none [&_table]:text-left [&_th]:border [&_th]:border-outline [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-outline [&_td]:px-2 [&_td]:py-1">
+                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{streamContent}</ReactMarkdown>
+                </div>
                 <span className="inline-block w-2 h-4 bg-on-surface-variant animate-pulse ml-0.5" />
               </div>
             </div>
