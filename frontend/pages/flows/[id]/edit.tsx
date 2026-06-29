@@ -143,19 +143,21 @@ export default function FlowEditPage() {
     if (!id) return;
     if (typeof id !== 'string') return;
     if (id === 'new') {
+      const triggerNode = {
+        id: `node_${Date.now()}_trigger`,
+        type: 'trigger',
+        position: { x: 100, y: 200 },
+        data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual', inputSchema: '' } },
+      };
       setFlow({
         id: 'new',
         name: 'New Flow',
         description: '',
-        nodes: [{
-          id: `node_${Date.now()}_trigger`,
-          type: 'trigger',
-          position: { x: 100, y: 200 },
-          data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual', inputSchema: '' } },
-        }],
+        nodes: [triggerNode],
         edges: [],
         version: 1,
       });
+      setNodes([triggerNode]);
       setLoading(false);
       return;
     }
