@@ -247,7 +247,7 @@ export default function FlowsListPage() {
                           <Icon name="chat" className="text-sm" /> Open Chat
                         </Link>
                       </Tooltip>
-                    ) : (
+                    ) : !isWebhook && (
                       running[flow.id] === 'running' ? (
                         <Tooltip content="Running...">
                           <span className="flex items-center gap-1 px-2 py-1 text-xs text-primary bg-primary-container rounded"><Icon name="sync" className="text-sm animate-spin" /> Running</span>
@@ -267,7 +267,7 @@ export default function FlowsListPage() {
                         </button>
                       </Tooltip>
                     ))}
-                    {can('execution:approve') && !isChat && (
+                    {can('execution:approve') && !isChat && !isWebhook && (
                       <Tooltip content="Executions">
                         <Link href={`/flows/${flow.id}/executions`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
                           <Icon name="history" className="text-sm" /> Run history
