@@ -142,6 +142,23 @@ export default function FlowEditPage() {
   useEffect(() => {
     if (!id) return;
     if (typeof id !== 'string') return;
+    if (id === 'new') {
+      setFlow({
+        id: 'new',
+        name: 'New Flow',
+        description: '',
+        nodes: [{
+          id: `node_${Date.now()}_trigger`,
+          type: 'trigger',
+          position: { x: 100, y: 200 },
+          data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual', inputSchema: '' } },
+        }],
+        edges: [],
+        version: 1,
+      });
+      setLoading(false);
+      return;
+    }
     api.flows.get(id).then((f) => {
       setFlow(f);
       const raw = f.nodes || [];
@@ -162,9 +179,15 @@ export default function FlowEditPage() {
 
   const persistFlow = useCallback(async (updates: Record<string, any>) => {
     if (!flow) return;
-    const updated = await api.flows.update(flow.id, { ...flow, ...updates });
-    setFlow(updated);
-  }, [flow]);
+    if (flow.id === 'new') {
+      const created = await api.flows.create({ ...flow, ...updates });
+      setFlow(created);
+      router.replace(`/flows/${created.id}/edit`);
+    } else {
+      const updated = await api.flows.update(flow.id, { ...flow, ...updates });
+      setFlow(updated);
+    }
+  }, [flow, router]);
 
   const handleSave = useCallback(async () => {
     if (!flow) return;
