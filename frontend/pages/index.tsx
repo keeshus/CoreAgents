@@ -206,11 +206,16 @@ export default function FlowsListPage() {
                     return (
                       <>
                     {isChat ? (
-                      <Tooltip content="Chat with this agent">
-                        <Link href={`/chat/${flow.id}`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
+                      <>
+                        <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
                           <Icon name="chat" className="text-sm" /> Chat
-                        </Link>
-                      </Tooltip>
+                        </span>
+                        <Tooltip content="Chat with this agent">
+                          <Link href={`/chat/${flow.id}`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">
+                            <Icon name="chat" className="text-sm" /> Chat
+                          </Link>
+                        </Tooltip>
+                      </>
                     ) : isWebhook ? (
                       <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
                         <Icon name="webhook" className="text-sm" /> Webhook
