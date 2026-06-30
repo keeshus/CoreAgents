@@ -55,6 +55,12 @@ export function getNodeFields(node: any): FieldEntry[] {
 
   switch (type) {
     case 'trigger': {
+      if (config?.triggerType === 'chat') {
+        return [
+          { name: 'message', type: 'string', required: true },
+          { name: 'history', type: 'array<{role,content}>', required: false },
+        ];
+      }
       if (config?.triggerType === 'webhook' && config?.inputSchema) {
         try {
           const raw =
