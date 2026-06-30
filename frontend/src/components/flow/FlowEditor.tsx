@@ -127,14 +127,14 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
       const children = nds.filter(c => c.parentId === n.id);
       const childCount = children.length;
       if (childCount === 0) {
-        if (n.style?.width !== 260 || n.style?.height !== 260) {
+        if (n.style?.width !== 260 || n.style?.height !== 240) {
           changed = true;
-          return { ...n, style: { ...n.style, width: 260, height: 260 }, width: 260, height: 260 };
+          return { ...n, style: { ...n.style, width: 260, height: 240 }, width: 260, height: 240 };
         }
         return n;
       }
-      const targetH = Math.max(280, 140 + childCount * 200);
-      if (Number(n.style?.height || n.height || 260) !== targetH) {
+      const targetH = Math.max(240, 80 + childCount * 150);
+      if (Number(n.style?.height || n.height || 240) !== targetH) {
         changed = true;
         return { ...n, style: { ...n.style, width: 260, height: targetH }, width: 260, height: targetH };
       }
