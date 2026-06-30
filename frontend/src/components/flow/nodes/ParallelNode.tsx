@@ -30,9 +30,10 @@ export function ParallelNode(props: NodeProps) {
 
       <div className="flex-1">
         {count === 0 && (
-          <p className="text-xs text-on-secondary-container text-center pt-16">
-            Drop nodes here
-          </p>
+          <div className="text-center pt-12 px-4">
+            <p className="text-xs text-on-secondary-container">Drop LLM Agent nodes here</p>
+            <p className="text-[9px] text-secondary mt-1">Only LLM Agent nodes are supported inside Parallel containers</p>
+          </div>
         )}
       </div>
 

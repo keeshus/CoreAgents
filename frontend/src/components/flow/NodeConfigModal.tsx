@@ -403,12 +403,12 @@ export function NodeConfigModal({
           {node.data.type === 'parallel' && (
             <div className="space-y-3">
               <p className="text-xs text-on-surface-variant">
-                Drag nodes from the catalog onto the canvas and drop them inside the Parallel
+                Drag LLM Agent nodes from the catalog onto the canvas and drop them inside the Parallel
                 container. They will run concurrently with the same input and their outputs will be
                 merged.
               </p>
               <p className="text-[10px] text-on-surface-variant">
-                Tip: Drag an existing node into the dashed area to add it. Drag it out to remove it.
+                Tip: Drag an existing LLM Agent node into the dashed area to add it. Drag it out to remove it.
               </p>
             </div>
           )}
