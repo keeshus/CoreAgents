@@ -145,7 +145,7 @@ export default function ChatPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="max-w-3xl mx-auto space-y-4">
+        <div className="max-w-4xl mx-auto space-y-4">
           {messages.length === 0 && !streaming && (
             <div className="text-center py-16">
               <Icon name="smart_toy" className="text-5xl text-outline-variant mx-auto mb-3" />
@@ -215,7 +215,7 @@ export default function ChatPage() {
 
       {/* Input */}
       <div className="border-t border-outline-variant bg-surface-container">
-        <div className="max-w-3xl mx-auto p-4 flex gap-3">
+        <div className="max-w-4xl mx-auto p-4 flex gap-3">
           <TextField
             inputRef={inputRef}
             label="Message"
