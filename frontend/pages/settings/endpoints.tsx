@@ -336,7 +336,7 @@ export default function EndpointsPage() {
         {/* Endpoint list */}
         {!loading && endpoints.length > 0 && (
           <div className="space-y-3">
-            {endpoints.map((ep) => (
+            {[...endpoints].sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : 0)).map((ep) => (
               <div
                 key={ep.id}
                 className="bg-surface rounded-lg border border-outline-variant p-4 flex items-start gap-4"
