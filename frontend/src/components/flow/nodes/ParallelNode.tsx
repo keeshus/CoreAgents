@@ -8,13 +8,11 @@ export function ParallelNode(props: NodeProps) {
     s.nodes.filter((n: any) => n.parentId === props.id).length
   );
   const count = childCount || (config?.subNodes || []).length;
-  const w = (props as any).width || (props as any).style?.width || 320;
-  const h = (props as any).height || (props as any).style?.height || 240;
 
   return (
     <div
-      style={{ width: Number(w), height: Number(h), overflow: 'visible' }}
-      className={`rounded-xl border-2 border-dashed bg-secondary-container/30 flex flex-col ${
+      style={{ overflow: 'visible' }}
+      className={`w-full h-full rounded-xl border-2 border-dashed bg-secondary-container/30 flex flex-col ${
         props.selected ? 'border-secondary bg-secondary-container/50 shadow-m3-4' : 'border-secondary-container'
       }`}
     >
