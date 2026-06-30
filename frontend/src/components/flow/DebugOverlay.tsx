@@ -112,9 +112,18 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
   }, [triggerType, chatMessage, chatHistory, manualMessage, webhookPayload]);
 
   const run = useCallback(async () => {
+    // Load the current flow from the canvas for the debug run
+    const runNodes = canvasNodes;
+    const runEdges = canvasEdges;
+
+    if (!runNodes || !runEdges || runNodes.length === 0) {
+      setError('No flow to execute — add nodes to the canvas first');
+      setStatus('failed');
+      return;
+    }
+
     // Pre-populate steps from canvas nodes so all nodes are visible immediately
-    const nodesList = flow?.nodes || canvasNodes || [];
-    setSteps(nodesList
+    setSteps(runNodes
       .filter((n: any) => n.data?.type)
       .map((n: any) => ({
         nodeId: n.id,

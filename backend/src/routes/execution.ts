@@ -191,7 +191,7 @@ router.post(
     const executor = new FlowExecutor();
     activeExecutors.set(execId, executor);
 
-    req.on('close', () => {
+    res.on('close', () => {
       executor.abort();
       activeExecutors.delete(execId);
     });
