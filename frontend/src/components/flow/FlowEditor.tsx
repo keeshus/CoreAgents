@@ -126,6 +126,7 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
       if (n.type !== 'parallel') return n;
       const children = nds.filter(c => c.parentId === n.id);
       const childCount = children.length;
+      const targetH = Math.max(280, 120 + childCount * 180);
       if (childCount === 0) {
         if (n.style?.width !== 260 || n.style?.height !== 260) {
           changed = true;
@@ -133,7 +134,6 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
         }
         return n;
       }
-      const targetH = Math.max(260, childCount * 180 + 80);
       if (Number(n.style?.height || n.height || 260) !== targetH) {
         changed = true;
         return { ...n, style: { ...n.style, width: 260, height: targetH }, width: 260, height: targetH };
