@@ -156,7 +156,25 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
                 </div>
               )}
               <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Returned value</h4>
-              <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{step.output !== undefined && step.output !== null ? (typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2)) : '(no output)'}</pre>
+              <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{(() => {
+                // For output nodes, try to extract the selected field value
+                if (step.selectedField && step.output && typeof step.output === 'object') {
+                  const parts = step.selectedField.split('.');
+                  if (parts.length === 2) {
+                    const fieldName = parts[1];
+                    // Search all values in the output for a string matching the field
+                    for (const val of Object.values(step.output)) {
+                      if (typeof val === 'string') return val;
+                      if (val && typeof val === 'object' && typeof (val as any)[fieldName] === 'string') {
+                        return (val as any)[fieldName];
+                      }
+                    }
+                  }
+                }
+                return step.output !== undefined && step.output !== null
+                  ? (typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2))
+                  : '(no output)';
+              })()}</pre>
             </div>
           )}
 
