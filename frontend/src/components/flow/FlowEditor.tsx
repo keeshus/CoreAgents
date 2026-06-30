@@ -133,7 +133,7 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
         }
         return n;
       }
-      const targetH = Math.max(240, 80 + childCount * 150);
+      const targetH = Math.max(260, 90 + childCount * 170);
       if (Number(n.style?.height || n.height || 240) !== targetH) {
         changed = true;
         return { ...n, style: { ...n.style, width: 260, height: targetH }, width: 260, height: targetH };
@@ -156,7 +156,7 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
       if (n.parentId !== parentId) return n;
       const idx = children.findIndex(c => c.id === n.id);
       if (idx < 0) return n;
-      let ty = 40;
+      let ty = 50;
       for (let i = 0; i < idx; i++) {
         const prev = children[i];
         const h = prev.measured?.height || 140;
