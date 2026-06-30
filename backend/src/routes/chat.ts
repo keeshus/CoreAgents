@@ -172,7 +172,7 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
         createdAt: flow.created_at?.toISOString() || '',
         updatedAt: flow.updated_at?.toISOString() || '',
       },
-      { chat_input: { message, history: historyMessages } },
+      { chat_input: { message, history: historyMessages }, message, history: historyMessages },
       async (nodeId, event) => {
         // Stream tokens to the chat UI
         if (event.type === 'stream.token') {

@@ -103,7 +103,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
 
   const buildInput = useCallback(() => {
     if (triggerType === 'chat') {
-      return { chat_input: { message: chatMessage, history: chatHistory } };
+      return { chat_input: { message: chatMessage, history: chatHistory }, message: chatMessage, history: chatHistory };
     }
     if (triggerType === 'webhook') {
       try { return JSON.parse(webhookPayload); } catch { return { payload: webhookPayload }; }

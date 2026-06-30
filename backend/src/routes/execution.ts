@@ -189,11 +189,11 @@ router.post(
     };
 
     const executor = new FlowExecutor();
-    activeExecutors.set(exec.id, executor);
+    activeExecutors.set(execId, executor);
 
     req.on('close', () => {
       executor.abort();
-      activeExecutors.delete(exec.id);
+      activeExecutors.delete(execId);
     });
 
     try {
@@ -251,7 +251,7 @@ router.post(
           .where(eq(executions.id, exec.id));
       }
 
-      activeExecutors.delete(exec.id);
+      activeExecutors.delete(execId);
       emitSSE({
         type: 'execution.completed',
         executionId: execId,
@@ -261,7 +261,7 @@ router.post(
     } catch (err: unknown) {
       // Handle FlowStop — terminate execution immediately
       if (err instanceof FlowStopError) {
-        activeExecutors.delete(exec.id);
+        activeExecutors.delete(execId);
         if (!isDebug) {
           await db
             .update(executions)
@@ -310,7 +310,7 @@ router.post(
 
       const error = err instanceof Error ? err.message : String(err);
       console.error('Flow execution failed:', error);
-      activeExecutors.delete(exec.id);
+      activeExecutors.delete(execId);
 
       if (!isDebug) {
         await db
