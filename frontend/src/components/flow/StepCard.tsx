@@ -148,15 +148,15 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
             </div>
           )}
 
-          {step.nodeType === 'output' && step.selectedField && (
-            <div className="text-xs text-on-surface-variant mb-2">
-              Selected field: <code className="font-mono bg-surface-container px-1 rounded">{step.selectedField}</code>
-            </div>
-          )}
-          {step.nodeType === 'output' && step.output !== undefined && step.output !== null && (
+          {step.nodeType === 'output' && (
             <div>
+              {step.selectedField && (
+                <div className="text-xs text-on-surface-variant mb-2">
+                  Selected field: <code className="font-mono bg-surface-container px-1 rounded">{step.selectedField}</code>
+                </div>
+              )}
               <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Returned value</h4>
-              <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2)}</pre>
+              <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{step.output !== undefined && step.output !== null ? (typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2)) : '(no output)'}</pre>
             </div>
           )}
 

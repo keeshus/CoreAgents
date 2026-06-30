@@ -204,6 +204,20 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                   break;
                 }
               }
+              // Fallback: grab the last non-__input__ entry as the output value
+              if (!outputNodeId) {
+                const entries = Object.entries(d.output).filter(([k]) => k !== '__input__');
+                if (entries.length > 0) {
+                  outputValue = entries[entries.length - 1][1];
+                  // Find the output node that produced it
+                  for (const n of canvasNodes) {
+                    if (n.data?.type === 'output' && d.output[n.id] === undefined) {
+                      outputNodeId = n.id;
+                      break;
+                    }
+                  }
+                }
+              }
             }
             setFinalOutput(outputValue);
             setStatus('completed');
