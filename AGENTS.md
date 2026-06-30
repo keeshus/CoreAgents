@@ -51,6 +51,7 @@
 
 ## Radix UI Components (preferred)
 - **ALWAYS** use proven Radix UI components instead of custom implementations for common UI patterns.
+- **NEVER** use `alert()`, `confirm()`, or `window.confirm()` — use the `<ConfirmDialog>` component via the `useConfirm` hook for all user-facing warnings, confirmations, and alerts.
 - Radix packages already installed: `react-dialog`, `react-select`, `react-separator`, `react-tooltip`, `react-tabs`, `react-toast`, `react-dropdown-menu`, `react-label`, `react-slot`.
 - Use our wrapper components in `@/components/ui/`:
   - `<TextField>` — M3 text input with floating label

@@ -12,6 +12,7 @@ import * as Separator from '@radix-ui/react-separator';
 import { useTheme } from '@/hooks/useTheme';
 import Link from 'next/link';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useConfirm } from '@/lib/useConfirm';
 
 export default function FlowEditPage() {
   const router = useRouter();
@@ -48,6 +49,7 @@ export default function FlowEditPage() {
   }, [flow?.name, nameAvailable]);
 
   const isChatFlow = useMemo(() => nodes.some(n => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'chat'), [nodes]);
+  const chatWarning = useConfirm({ title: 'Output node required', message: 'Chat flows require an Output node to define the response format. Add an Output node before saving.', confirmLabel: 'OK', variant: 'default' });
 
   // Duplicate label detection
   const labelError = useMemo(() => {
@@ -196,7 +198,7 @@ export default function FlowEditPage() {
   const handleSave = useCallback(async () => {
     if (!flow) return;
     if (isChatFlow && !nodes.some(n => n.data?.type === 'output')) {
-      alert('Chat flows require an Output node to define the response format. Add an Output node before saving.');
+      await chatWarning.confirm();
       return;
     }
     setSaving(true);
@@ -424,6 +426,7 @@ export default function FlowEditPage() {
       {showDebug && flow && (
         <DebugOverlay flowId={flow.id} nodes={nodes} edges={edges} onClose={() => setShowDebug(false)} />
       )}
+      {chatWarning.dialog}
     </div>
   );
 }
