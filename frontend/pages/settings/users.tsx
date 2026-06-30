@@ -178,7 +178,7 @@ export default function UsersSettingsPage() {
                     </td>
                     <td className="p-3 text-on-surface-variant capitalize">{u.provider}</td>
                     <td className="p-3 text-on-surface-variant text-xs">
-                      {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'never'}
+                      {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('nl-NL') : 'never'}
                     </td>
                     <td className="p-3 text-right">
                       <Tooltip content="Delete user">

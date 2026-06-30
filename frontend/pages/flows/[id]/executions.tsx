@@ -36,7 +36,7 @@ const statusConfig: Record<string, { icon: string; color: string; bg: string; la
   awaiting_approval: { icon: 'schedule', color: 'text-on-secondary-container', bg: 'bg-secondary-container', label: 'Awaiting Approval' },
 };
 
-const fmtTime = (t: string | null) => t ? new Date(t).toLocaleTimeString() : '—';
+const fmtTime = (t: string | null) => t ? new Date(t).toLocaleTimeString('nl-NL') : '—';
 const dur = (s: string | null, e: string | null, pausedMs?: number) => {
   if (!s || !e) return null;
   let ms = new Date(e).getTime() - new Date(s).getTime();

@@ -76,7 +76,7 @@ export default function ChatSessionList() {
                     {s.title || 'Untitled Chat'}
                   </p>
                   <p className="text-xs text-on-surface-variant mt-1">
-                    {new Date(s.updated_at).toLocaleString()}
+                    {new Date(s.updated_at).toLocaleString('nl-NL')}
                   </p>
                 </Link>
                 <button

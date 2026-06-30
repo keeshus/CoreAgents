@@ -53,7 +53,7 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
   const iconName = NODE_ICONS[step.nodeType] || 'schedule';
   const hasExpandable = step.input || step.output || hasTokens || hasSystemPrompt || step.error;
 
-  const fmtTime = (t: string) => new Date(t).toLocaleTimeString();
+  const fmtTime = (t: string) => new Date(t).toLocaleTimeString('nl-NL');
   const dur = (s: string | null | undefined, e: string | null | undefined) => {
     if (!s || !e) return null;
     const ms = new Date(e).getTime() - new Date(s).getTime();

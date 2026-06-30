@@ -151,11 +151,11 @@ export default function ProfilePage() {
             </div>
             <div className="flex justify-between">
               <span className="text-on-surface-variant">Member since</span>
-              <span className="text-on-surface">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '—'}</span>
+              <span className="text-on-surface">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('nl-NL') : '—'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-on-surface-variant">Last login</span>
-              <span className="text-on-surface">{profile?.lastLoginAt ? new Date(profile.lastLoginAt).toLocaleString() : '—'}</span>
+              <span className="text-on-surface">{profile?.lastLoginAt ? new Date(profile.lastLoginAt).toLocaleString('nl-NL') : '—'}</span>
             </div>
           </div>
         </div>

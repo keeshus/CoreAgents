@@ -184,7 +184,7 @@ export default function ApprovalsPage() {
                       <span className="text-sm font-semibold text-on-surface">{exec.flow_name || 'Flow'}</span>
                       <span className="text-[10px] text-on-surface-variant font-mono">{exec.id?.slice(0, 8)}</span>
                     </div>
-                    <span className="text-[10px] text-on-surface-variant">{new Date(exec.created_at).toLocaleString()}</span>
+                    <span className="text-[10px] text-on-surface-variant">{new Date(exec.created_at).toLocaleString('nl-NL')}</span>
                   </div>
 
                   {isMulti && (
