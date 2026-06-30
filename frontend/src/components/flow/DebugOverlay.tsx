@@ -195,21 +195,28 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
           } else if (event.type === 'execution.completed') {
             setFinalOutput(d.output);
             setStatus('completed');
+            // Fallback: merge engine steps into current steps (avoids duplicates)
             if (d.steps && d.steps.length > 0) {
-              setSteps(d.steps.map((s: any) => ({
-                nodeId: s.nodeId || s.node_id,
-                nodeType: s.nodeType || s.node_type,
-                nodeLabel: s.nodeLabel || s.node_label,
-                status: s.status,
-                input: s.input,
-                output: s.output,
-                error: s.error || null,
-                startedAt: s.startedAt || s.started_at,
-                completedAt: s.completedAt || s.completed_at,
-                tokens: s.tokens || [],
-                iteration: s.iteration ?? 0,
-                children: s.children,
-              })));
+              setSteps(prev => {
+                const existingIds = new Set(prev.map(s => s.nodeId));
+                const newSteps = d.steps
+                  .filter((s: any) => !existingIds.has(s.nodeId || s.node_id))
+                  .map((s: any) => ({
+                    nodeId: s.nodeId || s.node_id,
+                    nodeType: s.nodeType || s.node_type,
+                    nodeLabel: s.nodeLabel || s.node_label,
+                    status: s.status,
+                    input: s.input,
+                    output: s.output,
+                    error: s.error || null,
+                    startedAt: s.startedAt || s.started_at,
+                    completedAt: s.completedAt || s.completed_at,
+                    tokens: s.tokens || [],
+                    iteration: s.iteration ?? 0,
+                    children: s.children,
+                  }));
+                return newSteps.length > 0 ? [...prev, ...newSteps] : prev;
+              });
             }
           } else if (event.type === 'execution.paused') {
             setHitlPause({
