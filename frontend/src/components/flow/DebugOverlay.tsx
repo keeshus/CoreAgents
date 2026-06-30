@@ -112,7 +112,25 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
   }, [triggerType, chatMessage, chatHistory, manualMessage, webhookPayload]);
 
   const run = useCallback(async () => {
-    setSteps([]);
+    // Pre-populate steps from canvas nodes so all nodes are visible immediately
+    const nodesList = flow?.nodes || canvasNodes || [];
+    setSteps(nodesList
+      .filter((n: any) => n.data?.type)
+      .map((n: any) => ({
+        nodeId: n.id,
+        nodeType: n.data?.type || 'unknown',
+        nodeLabel: n.data?.label || n.data?.type || '',
+        status: 'pending' as const,
+        input: {} as any,
+        output: null,
+        error: null,
+        startedAt: '' as string | undefined,
+                completedAt: null as string | null,
+        tokens: [] as string[],
+        iteration: 0,
+        children: undefined as any,
+      }))
+    );
     setFinalOutput(null);
     setError(null);
     setHitlPause(null);
@@ -159,19 +177,29 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
           const nodeId = event.nodeId || d.nodeId || '';
 
           if (event.type === 'step.started') {
-            setSteps(prev => [...prev, {
-              nodeId,
-              nodeType: d.nodeType || '',
-              nodeLabel: d.nodeLabel || '',
-              status: 'running',
-              input: d.input,
-              output: null,
-              error: null,
-              startedAt: event.timestamp,
-              completedAt: null,
-              tokens: [],
-              iteration: d.iteration ?? 0,
-            }]);
+            setSteps(prev => {
+              const existing = prev.findIndex(s => s.nodeId === nodeId);
+              const step = {
+                nodeId,
+                nodeType: d.nodeType || '',
+                nodeLabel: d.nodeLabel || '',
+                status: 'running' as const,
+                input: d.input,
+                output: null,
+                error: null,
+                startedAt: event.timestamp,
+                completedAt: null as string | null,
+                tokens: [] as string[],
+                iteration: d.iteration ?? 0,
+                children: undefined as any,
+              };
+              if (existing >= 0) {
+                const updated = [...prev];
+                updated[existing] = step;
+                return updated;
+              }
+              return [...prev, step];
+            });
           } else if (event.type === 'stream.token') {
             setSteps(prev => prev.map(s =>
               s.nodeId === nodeId && s.status === 'running'
