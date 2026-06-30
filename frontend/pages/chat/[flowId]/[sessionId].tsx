@@ -140,7 +140,6 @@ export default function ChatPage() {
             <Icon name="arrow_back" className="text-base" /> <span className="text-xs">Back</span>
         </Link>
         <h1 className="text-sm font-semibold text-on-surface">Chat</h1>
-        <span className="text-xs text-on-surface-variant ml-3">Built with Core Agents</span>
       </div>
 
       {/* Messages */}
