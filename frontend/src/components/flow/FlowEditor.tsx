@@ -396,6 +396,7 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
                 const cx = node.position.x + ((node.measured?.width || 200) as number) / 2;
                 const cy = node.position.y + ((node.measured?.height || 80) as number) / 2;
                 if (cx >= px && cx <= px + pw && cy >= py && cy <= py + ph) {
+                  if (node.type !== 'llm-agent') return;
                   setNodes(nds => {
                     const withParent = nds.map(n => n.id === node.id ? { ...n, parentId: p.id, position: { x: 20, y: 50 } } : n);
                     const laidOut = layoutChildren(p.id, withParent);
