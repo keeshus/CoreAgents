@@ -49,9 +49,9 @@ export default function FlowEditPage() {
     if (!flow?.name?.trim()) return 'Flow name is required';
     if (!nameAvailable) return 'Another flow with this name already exists';
     if (isChatFlow) {
-      if (!nodes.some(n => n.data?.type === 'output')) return 'Chat flows require an Output node';
+      if (!nodes.some(n => n.data?.type === 'output')) return 'Chat flow: requires an Output node';
       const badOutputs = nodes.filter(n => n.data?.type === 'output' && (!n.data?.config?.inputFields || n.data.config.inputFields.length !== 1));
-      if (badOutputs.length > 0) return 'Each Output node must have exactly one field selected';
+      if (badOutputs.length > 0) return 'Chat flow: each Output node must have exactly one field selected';
     }
     return null;
   }, [flow?.name, nameAvailable, isChatFlow, nodes]);
