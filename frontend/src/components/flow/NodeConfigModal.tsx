@@ -78,37 +78,26 @@ export function NodeConfigModal({
   }, [node.id, (node as any).parentId, edges, nodes]);
 
   const configInputFields: string[] = node.data.config?.inputFields || [];
-
   const isChatFlow = nodes.some((n: any) => n.data?.config?.triggerType === 'chat');
-  const isOutputNode = node.data.type === 'output';
 
   // Toggle a single input field
   const toggleField = useCallback(
     (fieldPath: string) => {
       const current: string[] = node.data.config?.inputFields || [];
       if (current.includes(fieldPath)) {
-        // Cannot uncheck when chat+output (must keep exactly one field)
-        if (isChatFlow && isOutputNode) return;
         onConfigChange({ inputFields: current.filter((f) => f !== fieldPath) });
       } else if (!fieldPath.includes('.')) {
-        // Toggling a label: for chat+output, replace selection instead of adding
-        if (isChatFlow && isOutputNode) {
-          onConfigChange({ inputFields: [fieldPath] });
-        } else {
-          onConfigChange({ inputFields: [...current.filter(f => f.split('.')[0] !== fieldPath), fieldPath] });
-        }
+        // Toggling a label: remove per-field entries for this label, just use label
+        onConfigChange({ inputFields: [...current.filter(f => f.split('.')[0] !== fieldPath), fieldPath] });
       } else {
-        // Toggling a specific field: for chat+output, replace selection
-        if (isChatFlow && isOutputNode) {
-          onConfigChange({ inputFields: [fieldPath] });
-        } else {
-          const label = fieldPath.split('.')[0];
-          const withoutLabel = current.filter(f => f !== label);
-          onConfigChange({ inputFields: [...withoutLabel, fieldPath] });
-        }
+        // Toggling a specific field
+        const label = fieldPath.split('.')[0];
+        // If label was selected by label key, remove the label key and use per-field
+        const withoutLabel = current.filter(f => f !== label);
+        onConfigChange({ inputFields: [...withoutLabel, fieldPath] });
       }
     },
-    [node.data.config?.inputFields, onConfigChange, isChatFlow, isOutputNode],
+    [node.data.config?.inputFields, onConfigChange],
   );
 
   // Check if a specific field path is selected
