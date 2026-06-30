@@ -388,25 +388,13 @@ export function NodeConfigModal({
 
           {node.data.type === 'output' && (
             <div className="space-y-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={node.data.config?.streaming === true}
-                  onChange={(e) => onConfigChange({ streaming: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-primary"
-                />
-                <div>
-                  <span className="text-xs font-medium text-on-surface-variant">Streaming</span>
-                  <p className="text-[10px] text-on-surface-variant">Return upstream LLM content directly as plain text for real-time streaming</p>
-                </div>
-              </label>
               {isChatFlow ? (
                 <div className="text-xs text-on-surface-variant bg-surface-container rounded border p-2">
                   <p className="font-medium text-on-surface-variant mb-1">Chat output</p>
                   <p className="text-[10px] text-on-surface-variant">
-                    Chat flows require a single plain text response. Select <strong>exactly one field</strong>
-                    from the upstream node (above) to return as the response. Use <strong>Streaming</strong> for
-                    real-time output. Multi-field or no-field selection is not allowed for chat flows.
+                    Chat flows automatically stream responses to the chat window. Select <strong>exactly one field</strong>
+                    from the upstream node (above) to return as the plain text response.
+                    Multi-field or no-field selection is not allowed for chat flows.
                   </p>
                 </div>
               ) : (
