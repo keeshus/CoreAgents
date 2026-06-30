@@ -260,31 +260,29 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                   }
                 }
               }
-              // Ensure all output nodes from the canvas appear in steps
+              // Ensure all nodes from the canvas appear in steps
               if (canvasNodes) {
                 for (const n of canvasNodes) {
-                  if (n.data?.type === 'output' && !existingIds.has(n.id)) {
-                    existingIds.add(n.id);
-                    // Build input from accumulated result (all upstream outputs)
-                    const stepInputData = d.output && typeof d.output === 'object'
-                      ? Object.fromEntries(Object.entries(d.output).filter(([k]) => k !== n.id && k !== '__input__'))
-                      : {};
-                    toAdd.push({
-                      nodeId: n.id,
-                      nodeType: 'output',
-                      nodeLabel: n.data?.label || 'Output',
-                      status: 'completed',
-                      input: stepInputData,
-                      output: n.id === outputNodeId ? outputValue : d.output?.[n.id],
-                      selectedField: n.data?.config?.inputFields?.[0],
-                      error: null,
-                      startedAt: '',
-                      completedAt: null,
-                      tokens: [],
-                      iteration: 0,
-                      children: undefined,
-                    });
-                  }
+                  if (existingIds.has(n.id)) continue;
+                  existingIds.add(n.id);
+                  const stepInputData = d.output && typeof d.output === 'object'
+                    ? Object.fromEntries(Object.entries(d.output).filter(([k]) => k !== n.id && k !== '__input__'))
+                    : {};
+                  toAdd.push({
+                    nodeId: n.id,
+                    nodeType: n.data?.type || 'unknown',
+                    nodeLabel: n.data?.label || n.data?.type || 'Node',
+                    status: 'completed',
+                    input: stepInputData,
+                    output: d.output?.[n.id],
+                    selectedField: n.data?.type === 'output' ? n.data?.config?.inputFields?.[0] : undefined,
+                    error: null,
+                    startedAt: '',
+                    completedAt: null,
+                    tokens: [],
+                    iteration: 0,
+                    children: undefined,
+                  });
                 }
               }
               return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
