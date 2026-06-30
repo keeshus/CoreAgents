@@ -12,7 +12,6 @@ import * as Separator from '@radix-ui/react-separator';
 import { useTheme } from '@/hooks/useTheme';
 import Link from 'next/link';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { useConfirm } from '@/lib/useConfirm';
 
 export default function FlowEditPage() {
   const router = useRouter();
@@ -43,13 +42,21 @@ export default function FlowEditPage() {
     return () => clearTimeout(timer);
   }, [flow?.name, flow?.id]);
 
-  // Validation: save button disabled when flow name is empty or not unique
-  const hasErrors = useMemo(() => {
-    return !flow?.name?.trim() || !nameAvailable;
-  }, [flow?.name, nameAvailable]);
-
   const isChatFlow = useMemo(() => nodes.some(n => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'chat'), [nodes]);
-  const chatWarning = useConfirm({ title: 'Output node required', message: 'Chat flows require an Output node to define the response format. Add an Output node before saving.', confirmLabel: 'OK', variant: 'default' });
+
+  // Validation: save button disabled when flow name is empty or not unique
+  const saveError = useMemo(() => {
+    if (!flow?.name?.trim()) return 'Flow name is required';
+    if (!nameAvailable) return 'Another flow with this name already exists';
+    if (isChatFlow) {
+      if (!nodes.some(n => n.data?.type === 'output')) return 'Chat flows require an Output node';
+      const badOutputs = nodes.filter(n => n.data?.type === 'output' && (!n.data?.config?.inputFields || n.data.config.inputFields.length !== 1));
+      if (badOutputs.length > 0) return 'Each Output node must have exactly one field selected';
+    }
+    return null;
+  }, [flow?.name, nameAvailable, isChatFlow, nodes]);
+
+  const hasErrors = saveError !== null;
 
   // Duplicate label detection
   const labelError = useMemo(() => {
@@ -196,19 +203,7 @@ export default function FlowEditPage() {
   }, [flow, router]);
 
   const handleSave = useCallback(async () => {
-    if (!flow) return;
-    if (isChatFlow) {
-      const hasOutput = nodes.some(n => n.data?.type === 'output');
-      if (!hasOutput) {
-        await chatWarning.confirm({ message: 'Chat flows require an Output node to define the response format. Add an Output node before saving.' });
-        return;
-      }
-      const badOutputs = nodes.filter(n => n.data?.type === 'output' && (!n.data?.config?.inputFields || n.data.config.inputFields.length !== 1));
-      if (badOutputs.length > 0) {
-        await chatWarning.confirm({ title: 'Output field required', message: 'Each Output node in a chat flow must have exactly one field selected from the upstream node (above). Open the Output node config and select one field.' });
-        return;
-      }
-    }
+    if (!flow || hasErrors) return;
     setSaving(true);
     try {
       // Sync child nodes into parallel node configs, ensure parent nodes come first
@@ -417,7 +412,7 @@ export default function FlowEditPage() {
           </Tooltip>
           <Separator.Root orientation="vertical" className="w-px h-4 bg-outline-variant" />
           {hasErrors ? (
-            <Tooltip content={!flow?.name?.trim() ? 'Flow name is required' : 'Another flow with this name already exists'}>
+            <Tooltip content={saveError!}>
               <button onClick={handleSave} disabled={saving || hasErrors} className="m3-button disabled:opacity-50">
                 <Icon name="save" className="text-sm" /> {saving ? 'Saving...' : 'Save'}
               </button>
@@ -434,7 +429,6 @@ export default function FlowEditPage() {
       {showDebug && flow && (
         <DebugOverlay flowId={flow.id} nodes={nodes} edges={edges} onClose={() => setShowDebug(false)} />
       )}
-      {chatWarning.dialog}
     </div>
   );
 }
