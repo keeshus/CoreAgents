@@ -9,6 +9,7 @@ import type {
 } from 'core-agents-shared';
 import { topologicalSort } from './dag.js';
 import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
+import { randomUUID } from 'node:crypto';
 
 const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
 
@@ -59,6 +60,7 @@ export interface ExecutionContext {
 
 export class FlowExecutor {
   private abortController: AbortController;
+  private currentRunId = '';
 
   constructor() {
     this.abortController = new AbortController();
@@ -75,6 +77,8 @@ export class FlowExecutor {
     context: ExecutionContext,
     options?: { replayFrom?: string; replayOutputs?: Record<string, unknown>; inputOverride?: Record<string, unknown>; initialIteration?: number },
   ): Promise<{ output: Record<string, unknown>; steps: ExecutionStep[] }> {
+    const runId = randomUUID();
+    this.currentRunId = runId;
     const { sorted, cycles } = topologicalSort(flow.nodes, flow.edges);
 
     if (cycles.length > 0) {
@@ -699,7 +703,7 @@ export class FlowExecutor {
               if (toolResult === 'Tool not found') {
                 try {
                   const { callBuiltInTool } = await import('../tools/built-in.js');
-                  toolResult = await callBuiltInTool(tc.name, tc.input || {});
+                  toolResult = await callBuiltInTool(tc.name, { ...tc.input, _runId: this.currentRunId });
                 } catch (err) {
                   toolResult = `Error: ${err instanceof Error ? err.message : String(err)}`;
                 }

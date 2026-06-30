@@ -7,21 +7,26 @@
 import { resolve, dirname } from 'node:path';
 import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import pg from 'pg';
-
-const { Pool } = pg;
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const STORE_MAX_VALUE_SIZE = 1024 * 100; // 100KB max per stored value
 const FILE_MAX_SIZE = 1024 * 1024 * 5;   // 5MB max per file read/write
-const WORKSPACE_DIR = process.env.WORKSPACE_DIR || resolve(process.cwd(), 'workspace');
 
-let pool: pg.Pool | null = null;
-function getPool(): pg.Pool {
-  if (!pool) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// In-memory store — automatically cleaned up when the process exits
+const store = new Map<string, { value: unknown; updatedAt: string }>();
+
+function storeKey(runId: string | undefined, key: string): string {
+  return runId ? `${runId}:${key}` : key;
+}
+
+// Per-execution temp directory for file tools
+let tempDir: string | null = null;
+function getTempDir(): string {
+  if (!tempDir) {
+    tempDir = mkdtempSync(resolve(tmpdir(), 'agent-'));
   }
-  return pool;
+  return tempDir;
 }
 
 // ── Interfaces ──────────────────────────────────────────────────────────────────
@@ -155,13 +160,15 @@ export async function callBuiltInTool(name: string, args: Record<string, unknown
       return JSON.stringify({ status: response.status, body: text });
     }
     case 'store_get': {
+      const runId = args?._runId as string | undefined;
       const key = args?.key as string;
       if (!key) throw new Error('Key is required');
-      const result = await getPool().query('SELECT value FROM agent_store WHERE key = $1', [key]);
-      if (result.rows.length === 0) return JSON.stringify({ found: false });
-      return JSON.stringify({ found: true, value: result.rows[0].value });
+      const entry = store.get(storeKey(runId, key));
+      if (!entry) return JSON.stringify({ found: false });
+      return JSON.stringify({ found: true, value: entry.value, updatedAt: entry.updatedAt });
     }
     case 'store_set': {
+      const runId = args?._runId as string | undefined;
       const key = args?.key as string;
       const value = args?.value;
       if (!key) throw new Error('Key is required');
@@ -170,26 +177,28 @@ export async function callBuiltInTool(name: string, args: Record<string, unknown
       if (serialized.length > STORE_MAX_VALUE_SIZE) {
         throw new Error(`Value exceeds maximum size of ${STORE_MAX_VALUE_SIZE / 1024}KB`);
       }
-      await getPool().query(
-        'INSERT INTO agent_store (key, value, updated_at) VALUES ($1, $2::jsonb, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2::jsonb, updated_at = NOW()',
-        [key, JSON.stringify(parsed)]
-      );
+      store.set(storeKey(runId, key), { value: parsed, updatedAt: new Date().toISOString() });
       return JSON.stringify({ stored: true, key });
     }
     case 'store_delete': {
+      const runId = args?._runId as string | undefined;
       const key = args?.key as string;
       if (!key) throw new Error('Key is required');
-      await getPool().query('DELETE FROM agent_store WHERE key = $1', [key]);
+      store.delete(storeKey(runId, key));
       return JSON.stringify({ deleted: true, key });
     }
     case 'store_list': {
-      const result = await getPool().query('SELECT key, updated_at FROM agent_store ORDER BY key');
-      return JSON.stringify({ keys: result.rows.map(r => ({ key: r.key, updatedAt: r.updated_at })) });
+      const runId = args?._runId as string | undefined;
+      const prefix = runId ? `${runId}:` : '';
+      const keys = Array.from(store.entries())
+        .filter(([k]) => !prefix || k.startsWith(prefix))
+        .map(([k, v]) => ({ key: prefix ? k.slice(prefix.length) : k, updatedAt: v.updatedAt }));
+      return JSON.stringify({ keys });
     }
     case 'file_read': {
       const path = args?.path as string;
       if (!path) throw new Error('Path is required');
-      const safe = resolveSafePath(WORKSPACE_DIR, path);
+      const safe = resolveSafePath(getTempDir(), path);
       const stats = await stat(safe);
       if (stats.size > FILE_MAX_SIZE) throw new Error(`File exceeds maximum size of ${FILE_MAX_SIZE / 1024 / 1024}MB`);
       const content = await readFile(safe, 'utf-8');
@@ -201,14 +210,14 @@ export async function callBuiltInTool(name: string, args: Record<string, unknown
       if (!path) throw new Error('Path is required');
       if (content === undefined) throw new Error('Content is required');
       if (content.length > FILE_MAX_SIZE) throw new Error(`Content exceeds maximum size of ${FILE_MAX_SIZE / 1024 / 1024}MB`);
-      const safe = resolveSafePath(WORKSPACE_DIR, path);
+      const safe = resolveSafePath(getTempDir(), path);
       await mkdir(dirname(safe), { recursive: true });
       await writeFile(safe, content, 'utf-8');
       return JSON.stringify({ written: true, path });
     }
     case 'file_list': {
       const dir = (args?.path as string) || '.';
-      const safe = resolveSafePath(WORKSPACE_DIR, dir);
+      const safe = resolveSafePath(getTempDir(), dir);
       if (!existsSync(safe)) throw new Error(`Directory "${dir}" does not exist`);
       const entries = await readdir(safe, { withFileTypes: true });
       return JSON.stringify({
