@@ -260,7 +260,37 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                   }
                 }
               }
-              // Ensure all nodes from the canvas appear in steps
+              // Ensure all nodes from the canvas appear in steps (sorted topologically)
+              if (canvasNodes && canvasEdges && toAdd.length > 0) {
+                // Compute topological order
+                const inDegree = new Map<string, number>();
+                const adj = new Map<string, string[]>();
+                for (const n of canvasNodes) {
+                  inDegree.set(n.id, 0);
+                  adj.set(n.id, []);
+                }
+                for (const e of canvasEdges) {
+                  adj.get(e.source)?.push(e.target);
+                  inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+                }
+                const queue: string[] = [];
+                for (const [id, deg] of inDegree) {
+                  if (deg === 0) queue.push(id);
+                }
+                const topoOrder: string[] = [];
+                while (queue.length > 0) {
+                  const id = queue.shift()!;
+                  topoOrder.push(id);
+                  for (const neighbor of adj.get(id) || []) {
+                    const newDeg = (inDegree.get(neighbor) || 1) - 1;
+                    inDegree.set(neighbor, newDeg);
+                    if (newDeg === 0) queue.push(neighbor);
+                  }
+                }
+                // Sort toAdd by topological order
+                const orderMap = new Map(topoOrder.map((id, i) => [id, i]));
+                toAdd.sort((a, b) => (orderMap.get(a.nodeId) ?? 999) - (orderMap.get(b.nodeId) ?? 999));
+              }
               if (canvasNodes) {
                 for (const n of canvasNodes) {
                   if (existingIds.has(n.id)) continue;
