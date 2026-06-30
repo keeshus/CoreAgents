@@ -157,9 +157,10 @@ export function NodeConfigModal({
                 {node.data.type === 'output' ? 'Select Output Fields' : 'Select Input Nodes'}
               </h4>
               <div className="bg-surface border border-outline-variant rounded p-2 space-y-1">
-                {upstreamLabels.map((label) => {
-                  const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
-                  const fields = upNode ? getNodeFields(upNode) : [];
+                  {upstreamLabels.map((label) => {
+                    const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
+                    const allFields = upNode ? getNodeFields(upNode) : [];
+                    const fields = isChatFlow && node.data.type === 'output' ? allFields.filter(f => f.type === 'string') : allFields;
                   const labelSelected = configInputFields.includes(label);
                   return (
                     <div key={label}>
