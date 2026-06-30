@@ -195,6 +195,57 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
           } else if (event.type === 'execution.completed') {
             setFinalOutput(d.output);
             setStatus('completed');
+            // Fallback: merge engine steps + canvas nodes to ensure all nodes appear
+            setSteps(prev => {
+              const existingIds = new Set(prev.map(s => s.nodeId));
+              const toAdd: StepInfo[] = [];
+              // Add any missing steps from engine result
+              if (d.steps) {
+                for (const s of d.steps) {
+                  const nid = s.nodeId || s.node_id;
+                  if (nid && !existingIds.has(nid)) {
+                    existingIds.add(nid);
+                    toAdd.push({
+                      nodeId: nid,
+                      nodeType: s.nodeType || s.node_type || 'unknown',
+                      nodeLabel: s.nodeLabel || s.node_label || '',
+                      status: s.status || 'completed',
+                      input: s.input,
+                      output: s.output,
+                      error: s.error || null,
+                      startedAt: s.startedAt || s.started_at,
+                      completedAt: s.completedAt || s.completed_at,
+                      tokens: s.tokens || [],
+                      iteration: s.iteration ?? 0,
+                      children: s.children,
+                    });
+                  }
+                }
+              }
+              // Add missing output nodes from canvas definition
+              if (canvasNodes) {
+                for (const n of canvasNodes) {
+                  if (n.data?.type === 'output' && !existingIds.has(n.id)) {
+                    existingIds.add(n.id);
+                    toAdd.push({
+                      nodeId: n.id,
+                      nodeType: 'output',
+                      nodeLabel: n.data?.label || 'Output',
+                      status: 'completed',
+                      input: {},
+                      output: d.output,
+                      error: null,
+                      startedAt: '',
+                      completedAt: null,
+                      tokens: [],
+                      iteration: 0,
+                      children: undefined,
+                    });
+                  }
+                }
+              }
+              return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+            });
             // Fallback: merge engine steps into current steps (avoids duplicates)
             if (d.steps && d.steps.length > 0) {
               setSteps(prev => {
