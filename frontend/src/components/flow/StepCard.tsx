@@ -10,7 +10,7 @@ const NODE_ICONS: Record<string, string> = {
   parallel: 'view_column',
   hitl: 'schedule',
   stop: 'stop',
-  output: 'check_circle',
+  output: 'output',
 };
 
 const NODE_LABELS: Record<string, string> = {

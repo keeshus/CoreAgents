@@ -207,76 +207,56 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
             }
             setFinalOutput(outputValue);
             setStatus('completed');
-            // Fallback: add any missing steps from the engine result
-            if (d.steps || outputNodeId) {
-              setSteps(prev => {
-                const existingIds = new Set(prev.map(s => s.nodeId));
-                const toAdd: any[] = [];
-                if (d.steps) {
-                  for (const s of d.steps) {
-                    const nid = s.nodeId || s.node_id;
-                    if (nid && !existingIds.has(nid)) {
-                      existingIds.add(nid);
-                      toAdd.push({
-                        nodeId: nid,
-                        nodeType: s.nodeType || s.node_type || 'unknown',
-                        nodeLabel: s.nodeLabel || s.node_label || '',
-                        status: s.status || 'completed',
-                        input: s.input,
-                        output: s.output,
-                        error: s.error || null,
-                        startedAt: s.startedAt || s.started_at,
-                        completedAt: s.completedAt || s.completed_at,
-                        tokens: s.tokens || [],
-                        iteration: s.iteration ?? 0,
-                        children: s.children,
-                      });
-                    }
+            // Fallback: add any missing steps from engine result + all output nodes
+            setSteps(prev => {
+              const existingIds = new Set(prev.map(s => s.nodeId));
+              const toAdd: any[] = [];
+              if (d.steps) {
+                for (const s of d.steps) {
+                  const nid = s.nodeId || s.node_id;
+                  if (nid && !existingIds.has(nid)) {
+                    existingIds.add(nid);
+                    toAdd.push({
+                      nodeId: nid,
+                      nodeType: s.nodeType || s.node_type || 'unknown',
+                      nodeLabel: s.nodeLabel || s.node_label || '',
+                      status: s.status || 'completed',
+                      input: s.input,
+                      output: s.output,
+                      error: s.error || null,
+                      startedAt: s.startedAt || s.started_at,
+                      completedAt: s.completedAt || s.completed_at,
+                      tokens: s.tokens || [],
+                      iteration: s.iteration ?? 0,
+                      children: s.children,
+                    });
                   }
                 }
-                // Ensure output node step exists (use extracted value for output)
-                if (outputNodeId && !existingIds.has(outputNodeId)) {
-                  const outputNode = canvasNodes?.find(n => n.id === outputNodeId);
-                  toAdd.push({
-                    nodeId: outputNodeId,
-                    nodeType: 'output',
-                    nodeLabel: outputNode?.data?.label || 'Output',
-                    status: 'completed',
-                    input: undefined,
-                    output: outputValue,
-                    error: null,
-                    startedAt: '',
-                    completedAt: null,
-                    tokens: [],
-                    iteration: 0,
-                    children: undefined,
-                  });
+              }
+              // Ensure all output nodes from the canvas appear in steps
+              if (canvasNodes) {
+                for (const n of canvasNodes) {
+                  if (n.data?.type === 'output' && !existingIds.has(n.id)) {
+                    existingIds.add(n.id);
+                    toAdd.push({
+                      nodeId: n.id,
+                      nodeType: 'output',
+                      nodeLabel: n.data?.label || 'Output',
+                      status: 'completed',
+                      input: undefined,
+                      output: n.id === outputNodeId ? outputValue : d.output?.[n.id],
+                      error: null,
+                      startedAt: '',
+                      completedAt: null,
+                      tokens: [],
+                      iteration: 0,
+                      children: undefined,
+                    });
+                  }
                 }
-                return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
-              });
-            }
-            if (d.steps && d.steps.length > 0) {
-              setSteps(prev => {
-                const existingIds = new Set(prev.map(s => s.nodeId));
-                const newSteps = d.steps
-                  .filter((s: any) => !existingIds.has(s.nodeId || s.node_id))
-                  .map((s: any) => ({
-                    nodeId: s.nodeId || s.node_id,
-                    nodeType: s.nodeType || s.node_type,
-                    nodeLabel: s.nodeLabel || s.node_label,
-                    status: s.status,
-                    input: s.input,
-                    output: s.output,
-                    error: s.error || null,
-                    startedAt: s.startedAt || s.started_at,
-                    completedAt: s.completedAt || s.completed_at,
-                    tokens: s.tokens || [],
-                    iteration: s.iteration ?? 0,
-                    children: s.children,
-                  }));
-                return newSteps.length > 0 ? [...prev, ...newSteps] : prev;
-              });
-            }
+              }
+              return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+            });
           } else if (event.type === 'execution.paused') {
             setHitlPause({
               executionId: event.executionId || '',
