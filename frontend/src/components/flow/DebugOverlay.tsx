@@ -122,9 +122,33 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
       return;
     }
 
-    // Pre-populate steps from canvas nodes so all nodes are visible immediately
+    // Pre-populate steps from canvas nodes (sorted by topological order) so all nodes are visible immediately
+    const topoOrder = (() => {
+      const inDeg = new Map<string, number>();
+      const adj = new Map<string, string[]>();
+      for (const n of runNodes) { inDeg.set(n.id, 0); adj.set(n.id, []); }
+      for (const e of runEdges) {
+        adj.get(e.source)?.push(e.target);
+        inDeg.set(e.target, (inDeg.get(e.target) || 0) + 1);
+      }
+      const q: string[] = [];
+      for (const [id, deg] of inDeg) { if (deg === 0) q.push(id); }
+      const order: string[] = [];
+      while (q.length > 0) {
+        const id = q.shift()!;
+        order.push(id);
+        for (const n of adj.get(id) || []) {
+          const d = (inDeg.get(n) || 1) - 1;
+          inDeg.set(n, d);
+          if (d === 0) q.push(n);
+        }
+      }
+      return new Map(order.map((id, i) => [id, i]));
+    })();
+
     setSteps(runNodes
       .filter((n: any) => n.data?.type)
+      .sort((a: any, b: any) => (topoOrder.get(a.id) ?? 999) - (topoOrder.get(b.id) ?? 999))
       .map((n: any) => ({
         nodeId: n.id,
         nodeType: n.data?.type || 'unknown',
@@ -133,7 +157,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
         input: {} as any,
         output: null,
         error: null,
-        startedAt: '' as string | undefined,
+        startedAt: '' as string,
                 completedAt: null as string | null,
         tokens: [] as string[],
         iteration: 0,
