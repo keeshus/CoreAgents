@@ -197,6 +197,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
             let outputValue = d.output;
             let outputNodeId: string | undefined;
             if (canvasNodes && d.output && typeof d.output === 'object') {
+              // First try: look up output nodes by their canvas ID in the result
               for (const n of canvasNodes) {
                 if (n.data?.type === 'output' && d.output[n.id] !== undefined) {
                   outputValue = d.output[n.id];
@@ -204,18 +205,30 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
                   break;
                 }
               }
-              // Fallback: grab the last non-__input__ entry as the output value
+              // Second try: use the output from the engine's last step
+              if (!outputNodeId && d.steps) {
+                for (const s of d.steps) {
+                  if ((s.nodeType || s.node_type) === 'output' && s.output !== undefined) {
+                    outputValue = s.output;
+                    outputNodeId = s.nodeId || s.node_id;
+                    break;
+                  }
+                }
+              }
+              // Fallback: grab the last non-__input__ entry
               if (!outputNodeId) {
                 const entries = Object.entries(d.output).filter(([k]) => k !== '__input__');
                 if (entries.length > 0) {
-                  outputValue = entries[entries.length - 1][1];
-                  // Find the output node that produced it
+                  const [lastKey, lastVal] = entries[entries.length - 1];
+                  outputValue = lastVal;
+                  // Try to find an output node without a matching result key
                   for (const n of canvasNodes) {
-                    if (n.data?.type === 'output' && d.output[n.id] === undefined) {
+                    if (n.data?.type === 'output') {
                       outputNodeId = n.id;
                       break;
                     }
                   }
+                  if (!outputNodeId) outputNodeId = lastKey;
                 }
               }
             }
