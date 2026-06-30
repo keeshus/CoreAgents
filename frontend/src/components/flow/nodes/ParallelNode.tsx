@@ -13,13 +13,13 @@ export function ParallelNode(props: NodeProps) {
 
   return (
     <div
-      style={{ width: Number(w), height: Number(h) }}
-      className={`rounded-xl border-2 border-dashed bg-secondary-container/30 flex flex-col overflow-hidden ${
+      style={{ width: Number(w), height: Number(h), overflow: 'visible' }}
+      className={`rounded-xl border-2 border-dashed bg-secondary-container/30 flex flex-col ${
         props.selected ? 'border-secondary bg-secondary-container/50 shadow-m3-4' : 'border-secondary-container'
       }`}
     >
-      <Handle type="target" position={Position.Left} id="input-0" className="!bg-secondary" />
-      <Handle type="source" position={Position.Right} id="output-0" className="!bg-secondary" />
+      <Handle type="target" position={Position.Left} id="input-0" className="!bg-secondary !z-50" />
+      <Handle type="source" position={Position.Right} id="output-0" className="!bg-secondary !z-50" />
 
       <div className="px-3 py-2 border-b border-secondary-container bg-secondary-container/50 shrink-0">
         <span className="text-sm font-semibold text-on-secondary-container">{(props.data?.label as string) || 'Parallel'}</span>

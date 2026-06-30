@@ -155,13 +155,15 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
           }
           return n;
         }
+        // Only resize when measured dimensions are available
+        const hasMeasured = children.some(c => c.measured?.height || c.height);
+        if (!hasMeasured) return n;
         const widestChild = Math.max(...children.map(c => {
-          const cw = Number(c.measured?.width || c.width) || 200;
-          return cw;
+          return Number(c.measured?.width || c.width) || 200;
         }));
         const totalHeight = children.reduce((sum, c) => {
-          return sum + Number(c.measured?.height || c.height || 130) + 20;
-        }, 30); // 30px initial offset
+          return sum + (Number(c.measured?.height || c.height) || 130) + 20;
+        }, 30);
         const newW = Math.max(340, widestChild + 60);
         const newH = Math.max(240, totalHeight + 60);
         if (Math.abs(Number(n.style?.width || n.width || 340) - newW) > 5 || Math.abs(Number(n.style?.height || n.height || 240) - newH) > 5) {
