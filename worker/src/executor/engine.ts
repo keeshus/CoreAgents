@@ -203,6 +203,13 @@ export class FlowExecutor {
           // Propagated skip: upstream node was skipped, so skip this one too
           if (incomingEdges.some((e, i) => (sourceOutputs[i] as any)?.skipped === true)) {
             nodeOutputs.set(node.id, { skipped: true, reason: 'Upstream skipped' });
+            onEvent(node.id, {
+              type: 'step.skipped',
+              executionId: '',
+              nodeId: node.id,
+              data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label || node.data.type, reason: 'Upstream skipped', iteration: currentIteration },
+              timestamp: new Date().toISOString(),
+            });
             continue;
           }
           if (incomingEdges.some(e => e.condition?.label || e.sourceHandle)) {
@@ -221,6 +228,13 @@ export class FlowExecutor {
               // Default path matched — continue processing instead of skipping
             } else {
               nodeOutputs.set(node.id, { skipped: true, reason: 'No matching route' });
+              onEvent(node.id, {
+                type: 'step.skipped',
+                executionId: '',
+                nodeId: node.id,
+                data: { nodeId: node.id, nodeType: node.data.type, nodeLabel: node.data.label || node.data.type, reason: 'No matching route', iteration: currentIteration },
+                timestamp: new Date().toISOString(),
+              });
               continue;
             }
           }

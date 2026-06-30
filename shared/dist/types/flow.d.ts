@@ -158,14 +158,14 @@ export interface ExecutionStep {
     executionId: string;
     nodeId: string;
     nodeType: NodeType;
-    status: 'pending' | 'running' | 'completed' | 'failed';
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
     input: Record<string, unknown> | null;
     output: Record<string, unknown> | null;
     error: string | null;
     startedAt: string | null;
     completedAt: string | null;
 }
-export type SSEEventType = 'execution.started' | 'step.started' | 'step.completed' | 'step.failed' | 'stream.token' | 'execution.completed' | 'execution.failed' | 'execution.paused' | 'execution.stopped' | 'log';
+export type SSEEventType = 'execution.started' | 'step.started' | 'step.completed' | 'step.failed' | 'step.skipped' | 'stream.token' | 'execution.completed' | 'execution.failed' | 'execution.paused' | 'execution.stopped' | 'log';
 export interface SSEEvent {
     type: SSEEventType;
     executionId: string;

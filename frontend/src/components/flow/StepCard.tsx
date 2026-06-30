@@ -72,6 +72,7 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
         {step.status === 'completed' && <Icon name="check_circle" className="text-base text-success shrink-0" />}
         {step.status === 'failed' && <Icon name="cancel" className="text-base text-error shrink-0" />}
         {step.status === 'pending' && <Icon name="schedule" className="text-base text-on-surface-variant shrink-0" />}
+        {step.status === 'skipped' && <Icon name="skip_next" className="text-base text-on-surface-variant shrink-0" />}
 
         <div className="flex items-center gap-2 shrink-0 w-4 mr-2">
           <Icon name={iconName} className="text-base text-on-surface-variant" />
@@ -96,7 +97,8 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
             <span className={`text-[10px] capitalize ${
               step.status === 'completed' ? 'text-success' :
               step.status === 'failed' ? 'text-error' :
-              step.status === 'running' ? 'text-primary' : 'text-on-surface-variant'
+              step.status === 'running' ? 'text-primary' :
+              step.status === 'skipped' ? 'text-on-surface-variant' : 'text-on-surface-variant'
             }`}>
               {step.status.replace('_', ' ')}
             </span>
@@ -202,6 +204,7 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
                     <div className="flex items-center gap-2">
                       {child.status === 'completed' && <Icon name="check_circle" className="text-xs text-success" />}
                       {child.status === 'failed' && <Icon name="cancel" className="text-xs text-error" />}
+                      {child.status === 'skipped' && <Icon name="skip_next" className="text-xs text-on-surface-variant" />}
                       <span className="font-medium text-on-surface-variant">{NODE_LABELS[child.type] || child.type}</span>
                       <span className="text-[10px] text-on-surface-variant">{child.nodeId?.slice(0, 8)}</span>
                     </div>

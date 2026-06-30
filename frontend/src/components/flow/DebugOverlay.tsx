@@ -22,7 +22,7 @@ interface StepInfo {
   nodeId: string;
   nodeType: string;
   nodeLabel?: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
   input: any;
   output: any;
   error: string | null;
@@ -246,6 +246,10 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
           } else if (event.type === 'step.failed') {
             setSteps(prev => prev.map(s =>
               s.nodeId === nodeId ? { ...s, status: 'failed', error: d.error || null, completedAt: event.timestamp } : s
+            ));
+          } else if (event.type === 'step.skipped') {
+            setSteps(prev => prev.map(s =>
+              s.nodeId === nodeId ? { ...s, status: 'skipped', completedAt: event.timestamp } : s
             ));
           } else if (event.type === 'log' && d.subNodeId) {
             setSteps(prev => prev.map(s => {

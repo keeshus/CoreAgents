@@ -196,7 +196,7 @@ export interface ExecutionStep {
   executionId: string;
   nodeId: string;
   nodeType: NodeType;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
   input: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   error: string | null;
@@ -211,6 +211,7 @@ export type SSEEventType =
   | 'step.started'
   | 'step.completed'
   | 'step.failed'
+  | 'step.skipped'
   | 'stream.token'
   | 'execution.completed'
   | 'execution.failed'
