@@ -57,7 +57,7 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
         {children}
       </div>
       {/* Tool inputs — MCP/Retriever tools wire in here (LLM Agent) */}
-      {!hideHandles && Array.from({ length: toolInputs }).map((_, i) => (
+      {Array.from({ length: toolInputs }).map((_, i) => (
         <Tooltip key={`tool-input-${i}`} content="Connect tools here">
           <Handle
             type="target"
@@ -69,7 +69,7 @@ export function BaseNode({ children, label, nodeType, category = 'processing', s
         </Tooltip>
       ))}
       {/* Tool output — MCP/Retriever nodes output to LLM Agent's tools input */}
-      {!hideHandles && toolOutput && (
+      {toolOutput && (
         <Tooltip content="Connect to LLM Agent's tools input">
           <Handle
             key="tool-output"

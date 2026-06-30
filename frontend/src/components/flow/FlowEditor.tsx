@@ -133,7 +133,7 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
         }
         return n;
       }
-      const targetH = Math.max(260, 90 + childCount * 170);
+      const targetH = Math.max(250, 60 + childCount * 170);
       if (Number(n.style?.height || n.height || 240) !== targetH) {
         changed = true;
         return { ...n, style: { ...n.style, width: 260, height: targetH }, width: 260, height: targetH };
