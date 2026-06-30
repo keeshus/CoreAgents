@@ -940,17 +940,26 @@ export class FlowExecutor {
           }
         }
 
-        if (inputFields.length === 0) {
-          // No field selection — return all accumulated data as-is
-          return inp || input;
-        }
-
         // Single dot-path field: extract the inner value directly
         if (inputFields.length === 1 && inputFields[0].includes('.')) {
           const [rawLabel, field] = inputFields[0].split('.');
           const slugLabel = slugify(rawLabel);
-          const labelData = (inp as Record<string, unknown>)?.[slugLabel] as Record<string, unknown> | undefined;
-          if (labelData && field in labelData) return labelData[field];
+          // Try by slugified label key first
+          const byLabel = (inp as Record<string, unknown>)?.[slugLabel] as Record<string, unknown> | undefined;
+          if (byLabel && field in byLabel) return byLabel[field];
+          // Fallback: scan all values for an object containing the target field as a string
+          if (inp && typeof inp === 'object') {
+            for (const val of Object.values(inp)) {
+              if (val && typeof val === 'object' && !Array.isArray(val) && typeof (val as any)[field] === 'string') {
+                return (val as any)[field];
+              }
+            }
+          }
+        }
+
+        if (inputFields.length === 0) {
+          // No field selection — return all accumulated data as-is
+          return inp || input;
         }
 
         // Single label-only field: return the value under that label
