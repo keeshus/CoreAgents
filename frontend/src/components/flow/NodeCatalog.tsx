@@ -18,9 +18,10 @@ const NODE_ICONS: Record<string, string> = {
 interface NodeCatalogProps {
   onAddNode: (type: string, defaultConfig: Record<string, any>) => void;
   onClose?: () => void;
+  disabledTypes?: string[];
 }
 
-export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
+export function NodeCatalog({ onAddNode, onClose, disabledTypes = [] }: NodeCatalogProps) {
   const [catalog, setCatalog] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,10 +57,11 @@ export function NodeCatalog({ onAddNode, onClose }: NodeCatalogProps) {
                   <Tooltip content={entry.description}>
                     <button
                       key={entry.type}
-                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors text-xs text-on-surface-variant font-medium"
-                      onClick={() => onAddNode(entry.type, entry.defaultConfig)}
+                      disabled={disabledTypes.includes(entry.type)}
+                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-xs font-medium ${disabledTypes.includes(entry.type) ? 'text-outline-variant cursor-not-allowed' : 'hover:bg-surface-container-high text-on-surface-variant cursor-pointer'}`}
+                      onClick={() => { if (!disabledTypes.includes(entry.type)) onAddNode(entry.type, entry.defaultConfig); }}
                     >
-                      <Icon name={iconName} className="text-sm text-on-surface-variant" />
+                      <Icon name={iconName} className={`text-sm ${disabledTypes.includes(entry.type) ? 'text-outline-variant' : 'text-on-surface-variant'}`} />
                       {entry.label}
                     </button>
                   </Tooltip>

@@ -47,6 +47,8 @@ export default function FlowEditPage() {
     return !flow?.name?.trim() || !nameAvailable;
   }, [flow?.name, nameAvailable]);
 
+  const isChatFlow = useMemo(() => nodes.some(n => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'chat'), [nodes]);
+
   // Duplicate label detection
   const labelError = useMemo(() => {
     if (!selectedNodeId) return '';
@@ -193,6 +195,10 @@ export default function FlowEditPage() {
 
   const handleSave = useCallback(async () => {
     if (!flow) return;
+    if (isChatFlow && !nodes.some(n => n.data?.type === 'output')) {
+      alert('Chat flows require an Output node to define the response format. Add an Output node before saving.');
+      return;
+    }
     setSaving(true);
     try {
       // Sync child nodes into parallel node configs, ensure parent nodes come first
@@ -213,9 +219,10 @@ export default function FlowEditPage() {
   }, [flow, nodes, edges, persistFlow]);
 
   const handleAddNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
+    if (type === 'hitl' && isChatFlow) return;
     snapshot();
     addNodeRef.current?.(type, defaultConfig);
-  }, [snapshot]);
+  }, [snapshot, isChatFlow]);
 
   const handleNodeClick = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -357,7 +364,7 @@ export default function FlowEditPage() {
         <span className="pointer-events-auto mt-1.5 text-[9px] text-primary font-bold tracking-wider uppercase">Add Node</span>
         {showCatalog && (
           <div className="pointer-events-auto fixed left-16 top-1/2 -translate-y-1/2 z-40">
-            <NodeCatalog onAddNode={(type, config) => { handleAddNode(type, config); setShowCatalog(false); }} onClose={() => setShowCatalog(false)} />
+            <NodeCatalog onAddNode={(type, config) => { handleAddNode(type, config); setShowCatalog(false); }} onClose={() => setShowCatalog(false)} disabledTypes={isChatFlow ? ['hitl'] : []} />
           </div>
         )}
       </div>

@@ -379,24 +379,24 @@ export function NodeConfigModal({
                   <p className="text-[10px] text-on-surface-variant">Return upstream LLM content directly as plain text for real-time streaming</p>
                 </div>
               </label>
-              <div className="text-xs text-on-surface-variant bg-surface-container rounded border p-2">
-                <p className="font-medium text-on-surface-variant mb-1">Output behavior</p>
-                <ul className="list-disc list-inside space-y-0.5">
-                  <li>No fields selected → all accumulated data (JSON)</li>
-                  <li>One field selected → just the field value</li>
-                  <li>Multiple fields selected → combined as JSON object</li>
-                </ul>
-                {nodes.some((n: any) => (n.data?.config?.triggerType === 'chat')) && (
-                  <div className="mt-2 p-2 bg-secondary-container border border-secondary rounded">
-                    <p className="font-medium text-on-secondary-container text-[11px]">Chat trigger detected</p>
-                    <p className="text-[10px] text-on-secondary-container mt-0.5">
-                      Chat responses require a single string value. Use <strong>Streaming</strong> or <strong>one field</strong> pointing to the content
-                      (e.g. <code className="bg-secondary-container px-0.5 rounded">Label.content</code>) to return plain text.
-                      JSON objects will be serialized in the chat.
-                    </p>
-                  </div>
-                )}
-              </div>
+              {nodes.some((n: any) => (n.data?.config?.triggerType === 'chat')) ? (
+                <div className="text-xs text-on-surface-variant bg-surface-container rounded border p-2">
+                  <p className="font-medium text-on-surface-variant mb-1">Chat output</p>
+                  <p className="text-[10px] text-on-surface-variant">
+                    Chat flows must return a plain text response. Use <strong>Streaming</strong> or select <strong>one field</strong>
+                    from the upstream node (above) to return a single string value. Multi-field or no-field selection will be serialized to text.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-xs text-on-surface-variant bg-surface-container rounded border p-2">
+                  <p className="font-medium text-on-surface-variant mb-1">Output behavior</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    <li>No fields selected → all accumulated data (JSON)</li>
+                    <li>One field selected → just the field value</li>
+                    <li>Multiple fields selected → combined as JSON object</li>
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
