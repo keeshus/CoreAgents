@@ -266,7 +266,10 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
               // First try: look up output nodes by their canvas ID in the result
               for (const n of canvasNodes) {
                 if (n.data?.type === 'output' && d.output[n.id] !== undefined) {
-                  outputValue = d.output[n.id];
+                  const val = d.output[n.id];
+                  // Skip output nodes that were not executed (skipped)
+                  if (typeof val === 'object' && val !== null && val.skipped === true) continue;
+                  outputValue = val;
                   outputNodeId = n.id;
                   break;
                 }
