@@ -125,6 +125,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
     try {
       const input = buildInput();
       const body: any = { input: { _debug: true, ...input } };
+      // Always send the latest flow from the editor canvas
       if (canvasNodes) body.nodes = canvasNodes;
       if (canvasEdges) body.edges = canvasEdges;
       const res = await fetch(`${API_URL}/flows/${flowId}/execute`, {
