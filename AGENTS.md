@@ -65,3 +65,4 @@
 ## Checking for compliance
 - Run `npm run build` to catch TypeScript errors.
 - Visually confirm all icons render correctly in both light and dark modes.
+- If the flow editor returns 404 after a git pull/restart, delete `frontend/.next/dev/types/routes.d.ts` and restart Next.js — it's a generated file that can get corrupted.
