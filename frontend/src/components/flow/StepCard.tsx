@@ -73,7 +73,7 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
         {step.status === 'failed' && <Icon name="cancel" className="text-base text-error shrink-0" />}
         {step.status === 'pending' && <Icon name="schedule" className="text-base text-on-surface-variant shrink-0" />}
 
-        <div className="flex items-center gap-2 shrink-0 w-4">
+        <div className="flex items-center gap-2 shrink-0 w-4 mr-2">
           <Icon name={iconName} className="text-base text-on-surface-variant" />
         </div>
 
