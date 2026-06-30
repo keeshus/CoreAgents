@@ -174,13 +174,6 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
       },
       { chat_input: { message, history: historyMessages }, message, history: historyMessages },
       async (nodeId, event) => {
-        // Stream tokens to the chat UI
-        if (event.type === 'stream.token') {
-          const token = event.data?.token as string;
-          if (token) {
-            res.write(`data: ${JSON.stringify({ type: 'token', data: { token } })}\n\n`);
-          }
-        }
         // Stream tool call feedback
         if (event.type === 'step.started') {
           const d = event.data as any;

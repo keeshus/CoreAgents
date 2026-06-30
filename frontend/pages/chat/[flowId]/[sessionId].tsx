@@ -15,7 +15,6 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [streamContent, setStreamContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -41,7 +40,7 @@ export default function ChatPage() {
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamContent]);
+  }, [messages, streaming]);
 
   useAssistantContext({ pageKey: 'chat:' + flowId, description: 'Chatting with an agent' });
 
@@ -51,7 +50,6 @@ export default function ChatPage() {
     setInput('');
     setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: userMessage }]);
     setStreaming(true);
-    setStreamContent('');
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -73,7 +71,6 @@ export default function ChatPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let fullContent = '';
 
       while (true) {
         if (controller.signal.aborted) { reader.cancel(); break; }
@@ -88,20 +85,15 @@ export default function ChatPage() {
           if (line.startsWith('data: ')) {
             try {
               const event = JSON.parse(line.slice(6));
-              if (event.type === 'token') {
-                fullContent += event.data.token;
-                setStreamContent(fullContent);
-              } else if (event.type === 'tool_call') {
+              if (event.type === 'tool_call') {
                 setMessages(prev => [...prev, { id: Date.now().toString() + Math.random(), role: 'assistant' as const, content: `🔧 Using ${event.data.name}...` }]);
               } else if (event.type === 'tool_result') {
                 setMessages(prev => [...prev, { id: Date.now().toString() + Math.random(), role: 'assistant' as const, content: `✅ ${event.data.name} completed` }]);
               } else if (event.type === 'done') {
                 setMessages(prev => [...prev, { id: event.data.messageId, role: 'assistant', content: event.data.content }]);
-                setStreamContent('');
               } else if (event.type === 'error') {
                 console.error('Chat error:', event.data.error);
                 setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Error: ${event.data.error}` }]);
-                setStreamContent('');
               }
             } catch {
               // Skip malformed frames
@@ -112,7 +104,6 @@ export default function ChatPage() {
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `Error: ${err.message}` }]);
-      setStreamContent('');
     } finally {
       setStreaming(false);
       abortRef.current = null;
@@ -181,20 +172,7 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
-          {streaming && streamContent && (
-            <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
-                <Icon name="smart_toy" className="text-base text-on-surface-variant" />
-              </div>
-              <div className="max-w-[70%] rounded-lg px-4 py-2 bg-surface-container-high">
-                <div className="prose prose-sm max-w-none [&_table]:text-left [&_th]:border [&_th]:border-outline [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-outline [&_td]:px-2 [&_td]:py-1">
-                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{streamContent}</ReactMarkdown>
-                </div>
-                <span className="inline-block w-2 h-4 bg-on-surface-variant animate-pulse ml-0.5" />
-              </div>
-            </div>
-          )}
-          {streaming && !streamContent && (
+          {streaming && (
             <div className="flex gap-3">
               <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center shrink-0">
                 <Icon name="sync" className="text-base text-on-surface-variant animate-spin" />
