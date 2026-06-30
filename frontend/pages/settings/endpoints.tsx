@@ -246,20 +246,16 @@ export default function EndpointsPage() {
               <div className="space-y-1.5">
                 {(form.models ? form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '') : []).map((model, i) => (
                   <div key={i} className={`flex items-center gap-1 p-2 rounded transition-colors ${form.defaultModel === model ? 'bg-secondary-container ring-1 ring-primary' : ''}`}>
-                    <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                      <input
-                        type="radio"
-                        name="defaultModel"
-                        checked={form.defaultModel === model}
-                        onChange={() => setForm((f) => ({ ...f, defaultModel: model }))}
-                        className="accent-primary shrink-0"
-                      />
+                    <span
+                      onClick={() => setForm((f) => ({ ...f, defaultModel: model }))}
+                      className="flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
                       {form.defaultModel === model ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary text-on-primary font-medium whitespace-nowrap">Default</span>
                       ) : (
                         <span className="text-[10px] text-on-surface-variant whitespace-nowrap">Set default</span>
                       )}
-                    </label>
+                    </span>
                     <TextField
                       label="Model"
                       value={model}
