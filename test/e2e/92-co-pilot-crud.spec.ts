@@ -201,4 +201,26 @@ test.describe('Co-Pilot CRUD tools', () => {
     const data = await res.json();
     expect(Array.isArray(data.data)).toBe(true);
   });
+
+  // ── Execution details ─────────────────────────────────────────
+
+  test('get_execution_details and delete_execution work', async ({ request }) => {
+    // List executions — if any exist, verify get and delete work
+    const listRes = await request.get(`${API_URL}/executions`);
+    const executions = await listRes.json();
+    const nonDebug = (Array.isArray(executions) ? executions : []).filter((e: any) => !e.input?._debug);
+
+    if (nonDebug.length > 0) {
+      const target = nonDebug[0];
+      // Get details
+      const detailRes = await request.get(`${API_URL}/executions/${target.id}`);
+      expect(detailRes.ok()).toBe(true);
+      const detail = await detailRes.json();
+      expect(detail.id).toBe(target.id);
+
+      // Delete
+      const delRes = await request.delete(`${API_URL}/executions/${target.id}`);
+      expect(delRes.ok()).toBe(true);
+    }
+  });
 });

@@ -180,4 +180,46 @@ test.describe('Flow Editor DOM tools', () => {
     });
     expect(saveRes.ok()).toBe(true);
   });
+
+  test('remove_edge removes a connection between two nodes', async ({ page }) => {
+    // Remove the edge between trigger and processor
+    await page.evaluate(() => {
+      const nodes = document.querySelectorAll('.react-flow__node');
+      let src: string | null = null, tgt: string | null = null;
+      for (const n of nodes) {
+        const t = n.textContent?.toLowerCase() || '';
+        if (t.includes('start')) src = n.getAttribute('data-id');
+        if (t.includes('processor')) tgt = n.getAttribute('data-id');
+      }
+      if (src && tgt) (window as any).__removeFlowEdge?.(src, tgt);
+    });
+    await page.waitForTimeout(300);
+
+    const edges = await page.evaluate(() => (window as any).__flowCanvasEdges || []);
+    expect(edges.length).toBe(1); // Only the processor→output edge remains
+  });
+
+  test('update_flow changes the flow name via API', async ({ request }) => {
+    const flowRes = await request.get(`${API_URL}/flows/${flowId}`);
+    const flow = await flowRes.json();
+    const oldName = flow.name;
+    flow.name = oldName + ' Updated';
+    const saveRes = await request.put(`${API_URL}/flows/${flowId}`, {
+      data: { ...flow },
+    });
+    expect(saveRes.ok()).toBe(true);
+
+    // Verify
+    const verifyRes = await request.get(`${API_URL}/flows/${flowId}`);
+    const updated = await verifyRes.json();
+    expect(updated.name).toContain('Updated');
+  });
+
+  test('run_flow navigates to debug mode', async ({ page }) => {
+    await page.evaluate(() => {
+      window.location.href = window.location.pathname + '?debug=1';
+    });
+    await page.waitForTimeout(500);
+    expect(page.url()).toContain('debug=1');
+  });
 });

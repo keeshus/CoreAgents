@@ -10,15 +10,15 @@ COPY shared/src ./shared/src/
 COPY frontend/package*.json ./frontend/
 COPY frontend/tsconfig.json ./frontend/
 COPY frontend/next.config.js ./frontend/
-COPY frontend/playwright.config.ts ./frontend/
 
 RUN npm install -w shared -w frontend && npm cache clean --force
 
 COPY frontend/src ./frontend/src/
 COPY frontend/pages ./frontend/pages/
 COPY frontend/public ./frontend/public/
-COPY frontend/e2e ./frontend/e2e/
+COPY test/playwright.config.ts ./test/
+COPY test/e2e ./test/e2e/
 
 RUN cd shared && npx tsc
 
-ENTRYPOINT ["npx", "playwright", "test", "--config=frontend/playwright.config.ts"]
+ENTRYPOINT ["npx", "playwright", "test", "--config=test/playwright.config.ts"]

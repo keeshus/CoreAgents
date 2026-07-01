@@ -70,10 +70,10 @@
   docker compose -f docker-compose.e2e.yml up -d --wait
   
   # Run tests headless
-  npx playwright test --config frontend/playwright.config.ts --retries=0
+  npx playwright test --config test/playwright.config.ts --retries=0
   
   # Or with browser for debugging
-  npx playwright test --config frontend/playwright.config.ts --retries=0 --headed
+  npx playwright test --config test/playwright.config.ts --retries=0 --headed
   
   # Clean up
   docker compose -f docker-compose.e2e.yml down -v --timeout 10
