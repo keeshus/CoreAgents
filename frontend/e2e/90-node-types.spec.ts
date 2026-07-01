@@ -95,6 +95,48 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
+  test('llm agent returns structured json output', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+    const name = uniqueFlowName('LLMJsonTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        {
+          id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 },
+          data: {
+            label: 'LLM Agent',
+            type: 'llm-agent',
+            config: {
+              endpointId: mockEndpointId,
+              model: 'mock-gpt-4',
+              systemPrompt: 'You extract data. MOCK_RESPONSE: {"name":"E2E","score":95}',
+              temperature: 0.7,
+              maxTokens: 256,
+              responseFormat: 'json_object',
+              outputSchema: '{"type":"object","properties":{"name":{"type":"string"},"score":{"type":"number"}},"required":["name","score"]}',
+            },
+          },
+        },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['llm_agent.content'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { message: 'extract data' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    // With json_object, the content should contain the structured JSON
+    const output = completed!.data?.output;
+    const content = output?.l1?.content || '';
+    expect(content).toContain('"name"');
+    expect(content).toContain('"E2E"');
+    await deleteFlow(request, flow.id);
+  });
+
   test('parallel node runs sub-nodes concurrently', async ({ request }) => {
     const name = uniqueFlowName('ParallelTest');
     const res = await createFlow(request, {

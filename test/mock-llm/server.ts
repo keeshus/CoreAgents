@@ -137,6 +137,36 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // POST /v1/embeddings — return fixed mock embeddings
+  if (req.method === 'POST' && path === '/v1/embeddings') {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+
+    let params: any = {};
+    try { params = JSON.parse(body); } catch {
+      jsonResponse(res, 400, { error: 'Invalid JSON body' });
+      return;
+    }
+
+    const input = params.input || '';
+    const inputs = Array.isArray(input) ? input : [input];
+
+    const data = inputs.map((text: string, i: number) => ({
+      object: 'embedding',
+      index: i,
+      // Return a deterministic fake embedding vector (1536 dimensions)
+      embedding: Array.from({ length: 1536 }, (_, j) => (text.charCodeAt(j % text.length || 0) || 0) / 255),
+    }));
+
+    jsonResponse(res, 200, {
+      object: 'list',
+      data,
+      model: params.model || 'mock-embedding-model',
+      usage: { prompt_tokens: inputs.length, total_tokens: inputs.length },
+    });
+    return;
+  }
+
   jsonResponse(res, 404, { error: 'Not found', path });
 });
 

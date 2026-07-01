@@ -10,7 +10,7 @@ import { registerStore, createQdrantStore, createNeo4jStore } from '../vector-st
 const router = Router();
 
 // Initialize pgvector fallback
-registerStore('pgvector', createQdrantStore('')); // placeholder, real one uses db
+registerStore('pgvector', createQdrantStore('http://qdrant-e2e:6333')); // placeholder, real one uses db
 
 // Load persisted stores on startup
 (async () => {

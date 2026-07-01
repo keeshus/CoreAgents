@@ -111,3 +111,11 @@ services:
     container_name: core-agents-e2e-mock-llm
     ports:
       - "3002:3002"
+
+  mock-mcp-e2e:
+    build:
+      context: ./test/mock-mcp
+      dockerfile: Dockerfile
+    container_name: core-agents-e2e-mock-mcp
+    ports:
+      - "3003:3003"
