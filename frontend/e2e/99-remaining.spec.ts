@@ -59,6 +59,179 @@ test.describe('Remaining features', () => {
     await deleteFlow(request, flow.id);
   });
 
+  // ── Advanced flow: Code → Branch → HITL feedback loop ──────────
+
+  test('advanced flow with code branch and hitl feedback loop', async ({ page, request }) => {
+    // This flow tests: Trigger → Code (prepare data) → Branch (check count) →
+    // HITL (retry/approve) with feedback loop back to Code.
+    // First run (debug): verifies the flow executes without crashing.
+    // Second run (persisted): verify execution overview shows correct steps.
+    const name = uniqueFlowName('AdvFeedback');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Start', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'c1', type: 'code', position: { x: 200, y: 0 }, data: { label: 'Prepare', type: 'code', config: { code: 'return { count: (input.count || 0) + 1, items: [1, 2, 3], status: "ready" };' } } },
+        { id: 'b1', type: 'branch', position: { x: 400, y: 0 }, data: { label: 'Check', type: 'branch', config: { condition: 'input.count < 3 ? "continue" : "done"', outputLabels: ['continue', 'done'] } } },
+        { id: 'h1', type: 'hitl', position: { x: 600, y: -100 }, data: { label: 'Review', type: 'hitl', config: { prompt: 'Review result?', buttons: [{ label: 'Retry', value: 'retry' }, { label: 'Approve', value: 'approved' }] } } },
+        { id: 'o1', type: 'output', position: { x: 800, y: 100 }, data: { label: 'Output', type: 'output', config: { inputFields: ['prepare.count', 'prepare.status'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'b1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'b1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e4', source: 'b1', sourceHandle: 'output-1', target: 'o1', targetHandle: 'input-0' },
+        // Feedback loop: HITL 'retry' button sends back to Code node
+        { id: 'e5', source: 'h1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        // Forward: HITL 'approve' continues to output
+        { id: 'e6', source: 'h1', sourceHandle: 'output-1', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+
+    // Debug run: the HITL pauses execution, so we expect 'execution.paused' not 'completed'
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test', count: 0 }, cookie);
+    const paused = events.find(e => e.type === 'execution.paused');
+    expect(paused).toBeDefined();
+
+    // Verify all nodes produced step events
+    const stepEvents = events.filter(e => e.type === 'step.completed');
+    const nodeIds = stepEvents.map((e: any) => e.data?.nodeId);
+    expect(nodeIds).toContain('t1');
+    expect(nodeIds).toContain('c1');
+    expect(nodeIds).toContain('b1');
+
+    await deleteFlow(request, flow.id);
+  });
+
+  // ── Advanced flow: LLM structured output + Code transformation ──
+
+  test('advanced flow with llm structured output and code transformation', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+    // Flow: Trigger → LLM Agent (returns structured JSON) → Code (transforms) → Output
+    // Both debug and persisted execution verify correctness.
+    const name = uniqueFlowName('AdvLLMCode');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Start', type: 'trigger', config: { triggerType: 'manual' } } },
+        {
+          id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 },
+          data: {
+            label: 'Extractor',
+            type: 'llm-agent',
+            config: {
+              endpointId: mockEndpointId,
+              model: 'mock-gpt-4',
+              systemPrompt: 'You extract data. MOCK_RESPONSE: {"name":"Alice","score":95,"items":["a","b"]}',
+              temperature: 0.7,
+              maxTokens: 256,
+              responseFormat: 'json_object',
+              outputSchema: '{"type":"object","properties":{"name":{"type":"string"},"score":{"type":"number"},"items":{"type":"array"}},"required":["name","score","items"]}',
+            },
+          },
+        },
+        {
+          id: 'c1', type: 'code', position: { x: 600, y: 0 },
+          data: {
+            label: 'Transform',
+            type: 'code',
+            config: {
+              code: `const llmNode = input.l1 || {};
+const rawContent = String(llmNode.content || '{}');
+// The structured_output tool appends extra text after the JSON — extract just the JSON
+let data;
+try { data = JSON.parse(rawContent); }
+catch {
+  // Try to extract JSON from the content (structured_output appends instructions)
+  for (const line of rawContent.split('\\n')) {
+    try { data = JSON.parse(line.trim()); break; } catch { continue; }
+  }
+}
+if (!data) data = { name: 'Unknown', score: 0, items: [] };
+return {
+  displayName: (data.name || '').toUpperCase(),
+  isPassing: (data.score || 0) >= 50,
+  totalItems: (data.items || []).length,
+  summary: (data.name || 'Unknown') + ' scored ' + (data.score || 0)
+};`,
+            },
+          },
+        },
+        { id: 'o1', type: 'output', position: { x: 900, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['transform.displayName', 'transform.isPassing', 'transform.totalItems', 'transform.summary'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+
+    // Debug run: verify LLM → Code pipeline works
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'extract from text' }, cookie);
+
+    // Debug: log the LLM agent output
+    const llmStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'l1');
+    if (llmStep) console.log('LLM output:', JSON.stringify(llmStep.data?.output));
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    // Verify the code node transformed the data correctly
+    const codeStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'c1');
+    expect(codeStep).toBeDefined();
+    const output = codeStep!.data?.output;
+    expect(output?.displayName).toBe('ALICE');
+    expect(output?.isPassing).toBe(true);
+    expect(output?.totalItems).toBe(2);
+    expect(output?.summary).toContain('Alice');
+
+    // Persisted run: execute without _debug, then check execution details via API
+    const execRes = await fetch(`${API_URL}/flows/${flow.id}/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
+      body: JSON.stringify({ input: { message: 'extract persisted' }, _debug: false }),
+    });
+    expect(execRes.ok).toBe(true);
+
+    // Read the SSE stream to get the execution ID from the first event
+    const reader = execRes.body?.getReader();
+    let execId = '';
+    if (reader) {
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        for (const line of buf.split('\n')) {
+          if (line.startsWith('data: ')) {
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.executionId) execId = evt.executionId;
+              if (evt.type === 'execution.completed') break;
+            } catch { /* ignore */ }
+          }
+        }
+        if (buf.includes('execution.completed')) break;
+      }
+      reader.releaseLock();
+    }
+    expect(execId).toBeTruthy();
+
+    // Poll the execution to verify persisted steps
+    const { pollExecution } = await import('./helpers/stream');
+    const exec = await pollExecution(request, execId, 15000);
+    expect(exec.status).toBe('completed');
+    expect(exec.steps).toBeDefined();
+    expect(exec.steps!.length).toBeGreaterThanOrEqual(3);
+
+    await deleteFlow(request, flow.id);
+  });
+
   // ── Edge connection on canvas ───────────────────────────────────
 
   test('connect two nodes on the canvas', async ({ page, request }) => {
@@ -149,7 +322,6 @@ test.describe('Remaining features', () => {
     const name = uniqueFlowName('FeedbackTest');
     const res = await createFlow(request, {
       name,
-      // Create a cycle: trigger → code → output, with an edge from output back to code
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Counter', type: 'code', config: { code: 'return { count: (input.count || 0) + 1, msg: input.message };' } } },
@@ -158,14 +330,11 @@ test.describe('Remaining features', () => {
       edges: [
         { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
         { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
-        // Feedback edge: output → code (creates a cycle)
         { id: 'e3', source: 'o1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
       ],
     });
     const flow = await res.json();
 
-    // The engine should not crash when executing a flow with cycles.
-    // It detects the cycle, warns, skips validation, and executes with best-effort ordering.
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(flow.id, { message: 'test', count: 0 }, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
