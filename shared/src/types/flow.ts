@@ -12,7 +12,6 @@ export const NODE_TYPES = [
   'output',
   'parallel',
   'hitl',
-  'stop',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];

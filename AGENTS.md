@@ -62,7 +62,30 @@
 - For separators: use `@radix-ui/react-separator` (`<Separator.Root orientation="vertical" />`).
 - **NEVER** build custom modal/dropdown/tooltip/separator implementations — Radix handles accessibility, focus trapping, keyboard navigation, and portal rendering.
 
+## E2E Tests
+- **ALWAYS run E2E tests before committing and pushing any changes** — they catch regressions in both frontend and backend.
+- Workflow:
+  ```bash
+  # Start Docker stack (infra + backend + frontend + worker + mock-llm)
+  docker compose -f docker-compose.e2e.yml up -d --wait
+  
+  # Run tests headless
+  npx playwright test --config frontend/playwright.config.ts --retries=0
+  
+  # Or with browser for debugging
+  npx playwright test --config frontend/playwright.config.ts --retries=0 --headed
+  
+  # Clean up
+  docker compose -f docker-compose.e2e.yml down -v --timeout 10
+  ```
+- Test suites: frontend/e2e/ — 46 tests across 13 spec files
+- Tests use `data-testid` attributes for reliable locators — add them when creating new components
+- Use `uniqueFlowName()` from `helpers/api.ts` for unique flow names to avoid 409 conflicts
+- The mock LLM server at `test/mock-llm/` provides OpenAI-compatible responses for LLM Agent node tests
+- Debug executions use `debugExecute()` from `helpers/stream.ts` which reads SSE events
+
 ## Checking for compliance
 - Run `npm run build` to catch TypeScript errors.
+- Run E2E tests before every commit.
 - Visually confirm all icons render correctly in both light and dark modes.
 - If the flow editor returns 404 after a git pull/restart, delete `frontend/.next/dev/types/routes.d.ts` and restart Next.js — it's a generated file that can get corrupted.

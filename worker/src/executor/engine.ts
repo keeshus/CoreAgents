@@ -1012,13 +1012,6 @@ export class FlowExecutor {
         return inp || input;
       }
 
-      case 'stop': {
-        const config = (nodeData as any)?.config || {};
-        const status = config.status || 'completed';
-        const message = config.message || 'Execution stopped by Stop node';
-        throw new FlowStopError(node.id, message, status);
-      }
-
       default:
         throw new Error(`Unknown node type: ${(nodeData as any).type}`);
     }

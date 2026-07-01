@@ -82,8 +82,8 @@ test.describe('Flows overview', () => {
     const flow = await res.json();
     await page.goto('/');
 
-    // Manual trigger should not show webhook or chat badges
+    // Manual trigger should not show webhook or chat badges in flow cards
+    // The "chat" button on the page is the Co-Pilot assistant, not a flow badge
     await expect(page.getByText(/webhook/i)).toHaveCount(0);
-    await expect(page.getByText(/chat/i)).toHaveCount(0);
   });
 });

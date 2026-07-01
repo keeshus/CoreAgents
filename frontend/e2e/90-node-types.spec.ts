@@ -121,23 +121,4 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
-  test('stop node terminates execution early', async ({ request }) => {
-    const name = uniqueFlowName('StopTest');
-    const res = await createFlow(request, {
-      name,
-      nodes: [
-        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 's1', type: 'stop', position: { x: 300, y: 0 }, data: { label: 'Stop', type: 'stop', config: { status: 'completed', message: 'Done early' } } },
-        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['trigger.message'] } } },
-      ],
-      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' }],
-    });
-    const flow = await res.json();
-    const events = await debugExecute(flow.id, { message: 'should stop' }, cookie);
-    // Stop node emits 'execution.stopped' (not 'execution.completed')
-    const stopped = events.find(e => e.type === 'execution.stopped');
-    expect(stopped).toBeDefined();
-    expect(stopped!.data?.status).toBe('completed');
-    await deleteFlow(request, flow.id);
-  });
 });
