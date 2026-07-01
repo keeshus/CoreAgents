@@ -153,9 +153,9 @@ export function TemplateAutocomplete({
     }, 0);
   }, [value, onChange]);
 
-  // Filter by search text and by selectedFields
+  // Filter by what the user typed after {{ and by selectedFields
   const filtered = (filter
-    ? allSuggestions.filter(s => s.label.toLowerCase().includes(filter))
+    ? allSuggestions.filter(s => s.path.toLowerCase().includes(filter) || s.label.toLowerCase().includes(filter))
     : allSuggestions
   ).filter(s => {
     if (!selectedFields || selectedFields.length === 0) return true; // all pass through
