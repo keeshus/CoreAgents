@@ -267,13 +267,12 @@ router.post('/register', asyncHandler(async (req, res) => {
           'group:read',
         ],
       },
-      {
-        name: 'reader', description: 'Can view flows and approve requests', is_system: true,
-        permissions: [
-          'flow:read', 'chat:create', 'execution:approve',
-          'group:read', 'endpoint:read', 'mcp:read', 'embedding:read', 'store:read',
-        ],
-      },
+    {
+      name: 'reader', description: 'Can approve Human-in-the-Loop requests', is_system: true,
+      permissions: [
+        'execution:approve',
+      ],
+    },
     ];
     await db.insert(roles).values(defaultRoles);
   }

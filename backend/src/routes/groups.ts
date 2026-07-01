@@ -9,6 +9,11 @@ const router = Router();
 
 router.use(authenticate);
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(id: string): boolean {
+  return UUID_RE.test(id);
+}
+
 // GET /api/groups — list all groups with member count (requires group:read)
 router.get('/', requirePermission('group:read'), asyncHandler(async (_req, res) => {
   const rows = await db
@@ -28,6 +33,7 @@ router.get('/', requirePermission('group:read'), asyncHandler(async (_req, res) 
 // GET /api/groups/:id — single group with members
 router.get('/:id', requirePermission('group:read'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
   const [group] = await db.select().from(groups).where(eq(groups.id, id));
   if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
   const members = await db
@@ -56,6 +62,7 @@ router.post('/', requirePermission('group:write'), asyncHandler(async (req, res)
 // PUT /api/groups/:id — update group name/description (local groups only)
 router.put('/:id', requirePermission('group:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
   const { name, description } = req.body || {};
   const [group] = await db.select().from(groups).where(eq(groups.id, id));
   if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
@@ -70,6 +77,7 @@ router.put('/:id', requirePermission('group:write'), asyncHandler(async (req, re
 // DELETE /api/groups/:id — delete group (local groups only)
 router.delete('/:id', requirePermission('group:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
   const [group] = await db.select().from(groups).where(eq(groups.id, id));
   if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
   if (group.provider !== 'local') { res.status(403).json({ error: 'Cannot delete SSO-provisioned groups' }); return; }
@@ -81,6 +89,7 @@ router.delete('/:id', requirePermission('group:write'), asyncHandler(async (req,
 // POST /api/groups/:id/members — add member to group (local groups only)
 router.post('/:id/members', requirePermission('group:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
   const { userId } = req.body || {};
   if (!userId) { res.status(400).json({ error: 'userId is required' }); return; }
   const [group] = await db.select().from(groups).where(eq(groups.id, id));
@@ -95,6 +104,7 @@ router.post('/:id/members', requirePermission('group:write'), asyncHandler(async
 // DELETE /api/groups/:id/members/:userId — remove member (local groups only)
 router.delete('/:id/members/:userId', requirePermission('group:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
   const userId = req.params.userId as string;
   const [group] = await db.select().from(groups).where(eq(groups.id, id));
   if (!group) { res.status(404).json({ error: 'Group not found' }); return; }

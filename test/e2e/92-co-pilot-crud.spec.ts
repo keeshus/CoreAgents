@@ -96,7 +96,7 @@ test.describe('Co-Pilot CRUD tools', () => {
   test('create_user, list, delete_user and update_user_role work', async ({ request }) => {
     // Create
     const createRes = await request.post(`${API_URL}/users`, {
-      data: { email: 'e2e-crud@test.local', password: 'Test1234!', name: 'E2E CRUD User' },
+      data: { email: `e2e-crud-${Date.now()}@test.local`, password: 'Test1234!', name: 'E2E CRUD User' },
     });
     expect(createRes.ok()).toBe(true);
     const user = await createRes.json();
@@ -109,12 +109,12 @@ test.describe('Co-Pilot CRUD tools', () => {
     // Get roles
     const rolesRes = await request.get(`${API_URL}/roles`);
     const roles = await rolesRes.json();
-    const approverRole = roles.find((r: any) => r.name === 'approver');
-    expect(approverRole).toBeDefined();
+    const readerRole = roles.find((r: any) => r.name === 'reader');
+    expect(readerRole).toBeDefined();
 
     // Update role
     const roleRes = await request.put(`${API_URL}/users/${user.id}/role`, {
-      data: { role_id: approverRole.id },
+      data: { role_id: readerRole.id },
     });
     expect(roleRes.ok()).toBe(true);
 

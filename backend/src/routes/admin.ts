@@ -49,10 +49,9 @@ router.post('/roles/seed', requirePermission('admin'), asyncHandler(async (_req,
       ],
     },
     {
-      name: 'reader', description: 'Can view flows and approve requests', is_system: true,
+      name: 'reader', description: 'Can approve Human-in-the-Loop requests', is_system: true,
       permissions: [
-        'flow:read', 'chat:create', 'execution:approve',
-        'group:read', 'endpoint:read', 'mcp:read', 'embedding:read', 'store:read',
+        'execution:approve',
       ],
     },
   ];

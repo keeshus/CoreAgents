@@ -21,6 +21,7 @@ yarn-error.log*
 .vscode
 example-transaction-files/
 test/e2e/.auth/
+/e2e/
 test-results/
 error
 ponto-key

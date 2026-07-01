@@ -25,7 +25,7 @@ describe('requirePermission', () => {
   });
 
   it('returns 403 if user lacks the required permission', () => {
-    req.user = { userId: '1', email: 'a@b.com', role: 'approver', permissions: ['flow:read'] };
+    req.user = { userId: '1', email: 'a@b.com', role: 'reader', permissions: ['flow:read'] };
     const middleware = requirePermission('flow:create');
     middleware(req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
@@ -49,7 +49,7 @@ describe('requirePermission', () => {
   });
 
   it('rejects if user has none of multiple required permissions', () => {
-    req.user = { userId: '1', email: 'a@b.com', role: 'approver', permissions: ['flow:read'] };
+    req.user = { userId: '1', email: 'a@b.com', role: 'reader', permissions: ['flow:read'] };
     const middleware = requirePermission('flow:create', 'flow:delete');
     middleware(req, res, next);
     expect(res.status).toHaveBeenCalledWith(403);
@@ -60,13 +60,13 @@ describe('requirePermission', () => {
 
 describe('role permissions', () => {
   const rolePermissions: Record<string, string[]> = {
-    admin: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'endpoint:read', 'endpoint:write', 'mcp:read', 'mcp:write', 'embedding:read', 'embedding:write', 'store:read', 'store:write', 'document:write', 'knowledge:write', 'chat:create', 'execution:approve'],
-    editor: ['flow:create', 'flow:edit', 'execution:approve', 'endpoint:read', 'mcp:read', 'embedding:read', 'store:read', 'document:write', 'knowledge:write', 'chat:create'],
-    viewer: ['execution:approve'],
+    admin: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'flow:read', 'endpoint:read', 'endpoint:write', 'mcp:read', 'mcp:write', 'embedding:read', 'embedding:write', 'store:read', 'store:write', 'document:write', 'knowledge:write', 'chat:create', 'execution:approve', 'group:read', 'group:write'],
+    editor: ['flow:create', 'flow:edit', 'flow:read', 'execution:approve', 'endpoint:read', 'mcp:read', 'embedding:read', 'store:read', 'document:write', 'knowledge:write', 'chat:create', 'group:read'],
+    reader: ['execution:approve'],
   };
 
   it('admin has all permissions', () => {
-    const all = ['flow:create', 'flow:edit', 'flow:delete', 'endpoint:read', 'endpoint:write', 'execution:approve', 'chat:create'];
+    const all = ['flow:create', 'flow:edit', 'flow:delete', 'flow:read', 'endpoint:read', 'endpoint:write', 'execution:approve', 'chat:create', 'group:read', 'group:write'];
     for (const perm of all) {
       expect(rolePermissions.admin).toContain(perm);
     }
@@ -75,21 +75,26 @@ describe('role permissions', () => {
   it('editor can create and edit flows', () => {
     expect(rolePermissions.editor).toContain('flow:create');
     expect(rolePermissions.editor).toContain('flow:edit');
+    expect(rolePermissions.editor).toContain('flow:read');
     expect(rolePermissions.editor).toContain('chat:create');
     expect(rolePermissions.editor).toContain('endpoint:read');
+    expect(rolePermissions.editor).toContain('group:read');
     expect(rolePermissions.editor).not.toContain('flow:delete');
     expect(rolePermissions.editor).not.toContain('endpoint:write');
+    expect(rolePermissions.editor).not.toContain('group:write');
   });
 
-  it('approver can only approve HITL', () => {
-    expect(rolePermissions.viewer).toContain('execution:approve');
-    expect(rolePermissions.viewer).not.toContain('flow:read');
-    expect(rolePermissions.viewer).not.toContain('flow:create');
-    expect(rolePermissions.viewer).not.toContain('flow:edit');
-    expect(rolePermissions.viewer).not.toContain('flow:delete');
-    expect(rolePermissions.viewer).not.toContain('endpoint:read');
-    expect(rolePermissions.viewer).not.toContain('endpoint:write');
-    expect(rolePermissions.viewer).not.toContain('chat:create');
+  it('reader can only approve HITL', () => {
+    expect(rolePermissions.reader).toContain('execution:approve');
+    expect(rolePermissions.reader).not.toContain('flow:read');
+    expect(rolePermissions.reader).not.toContain('flow:create');
+    expect(rolePermissions.reader).not.toContain('flow:edit');
+    expect(rolePermissions.reader).not.toContain('flow:delete');
+    expect(rolePermissions.reader).not.toContain('endpoint:read');
+    expect(rolePermissions.reader).not.toContain('endpoint:write');
+    expect(rolePermissions.reader).not.toContain('chat:create');
+    expect(rolePermissions.reader).not.toContain('group:read');
+    expect(rolePermissions.reader).not.toContain('group:write');
   });
 
   it('only admin can write to settings domains', () => {
@@ -98,78 +103,58 @@ describe('role permissions', () => {
     expect(rolePermissions.admin).toContain('embedding:write');
     expect(rolePermissions.admin).toContain('store:write');
     expect(rolePermissions.editor).not.toContain('endpoint:write');
-    expect(rolePermissions.viewer).not.toContain('endpoint:write');
+    expect(rolePermissions.reader).not.toContain('endpoint:write');
   });
 
   it('only admin can delete flows', () => {
     expect(rolePermissions.admin).toContain('flow:delete');
     expect(rolePermissions.editor).not.toContain('flow:delete');
-    expect(rolePermissions.viewer).not.toContain('flow:delete');
+    expect(rolePermissions.reader).not.toContain('flow:delete');
   });
 });
 
 // ── Test group-to-role mapping ──────────────────────────────────────
 
 describe('resolveRoleFromGroups', () => {
-  // Replicate the function from auth.ts to test it in isolation
+  // Replicate the updated function from auth.ts (takes pre-resolved groupNames array)
   function resolveRoleFromGroups(
-    claims: Record<string, unknown>,
-    adminGroups: string[],
-    editorGroups: string[],
+    groupNames: string[],
+    adminMapping: string[],
+    editorMapping: string[],
   ): string {
-    const groups: string[] = [];
-    if (Array.isArray(claims.groups)) groups.push(...claims.groups.map(String));
-    if (claims.realm_access && typeof claims.realm_access === 'object') {
-      const ra = claims.realm_access as Record<string, unknown>;
-      if (Array.isArray(ra.roles)) groups.push(...ra.roles.map(String));
-    }
-    if (groups.some(g => adminGroups.includes(g))) return 'admin';
-    if (groups.some(g => editorGroups.includes(g))) return 'editor';
-    return 'approver';
+    if (groupNames.some(g => adminMapping.includes(g))) return 'admin';
+    if (groupNames.some(g => editorMapping.includes(g))) return 'editor';
+    return 'reader';
   }
 
-  const adminGroups = ['core-agents-admin', 'admin'];
-  const editorGroups = ['core-agents-editor', 'editor'];
+  const adminMapping = ['core-agents-admin', 'admin'];
+  const editorMapping = ['core-agents-editor', 'editor'];
 
   it('returns admin for admin group', () => {
-    expect(resolveRoleFromGroups({ groups: ['core-agents-admin'] }, adminGroups, editorGroups)).toBe('admin');
-    expect(resolveRoleFromGroups({ groups: ['admin'] }, adminGroups, editorGroups)).toBe('admin');
+    expect(resolveRoleFromGroups(['core-agents-admin'], adminMapping, editorMapping)).toBe('admin');
+    expect(resolveRoleFromGroups(['admin'], adminMapping, editorMapping)).toBe('admin');
   });
 
   it('returns editor for editor group', () => {
-    expect(resolveRoleFromGroups({ groups: ['core-agents-editor'] }, adminGroups, editorGroups)).toBe('editor');
-    expect(resolveRoleFromGroups({ groups: ['editor'] }, adminGroups, editorGroups)).toBe('editor');
+    expect(resolveRoleFromGroups(['core-agents-editor'], adminMapping, editorMapping)).toBe('editor');
+    expect(resolveRoleFromGroups(['editor'], adminMapping, editorMapping)).toBe('editor');
   });
 
-  it('returns viewer for unknown groups', () => {
-    expect(resolveRoleFromGroups({ groups: ['user', 'approver'] }, adminGroups, editorGroups)).toBe('approver');
-    expect(resolveRoleFromGroups({ groups: [] }, adminGroups, editorGroups)).toBe('approver');
+  it('returns reader for unknown groups', () => {
+    expect(resolveRoleFromGroups(['user', 'approver'], adminMapping, editorMapping)).toBe('reader');
+    expect(resolveRoleFromGroups([], adminMapping, editorMapping)).toBe('reader');
   });
 
-  it('returns viewer for no groups', () => {
-    expect(resolveRoleFromGroups({}, adminGroups, editorGroups)).toBe('approver');
-    expect(resolveRoleFromGroups({ email: 'test@test.com' }, adminGroups, editorGroups)).toBe('approver');
+  it('returns reader for no groups', () => {
+    expect(resolveRoleFromGroups([], adminMapping, editorMapping)).toBe('reader');
   });
 
   it('admin group takes priority over editor', () => {
-    expect(resolveRoleFromGroups({ groups: ['editor', 'admin'] }, adminGroups, editorGroups)).toBe('admin');
+    expect(resolveRoleFromGroups(['editor', 'admin'], adminMapping, editorMapping)).toBe('admin');
   });
 
-  it('handles Keycloak realm_access.roles format', () => {
-    const claims = { realm_access: { roles: ['core-agents-editor'] } };
-    expect(resolveRoleFromGroups(claims, adminGroups, editorGroups)).toBe('editor');
-  });
-
-  it('handles both groups and realm_access.roles', () => {
-    const claims = {
-      groups: ['user'],
-      realm_access: { roles: ['admin'] },
-    };
-    expect(resolveRoleFromGroups(claims, adminGroups, editorGroups)).toBe('admin');
-  });
-
-  it('returns viewer when admin/editor groups are empty', () => {
-    expect(resolveRoleFromGroups({ groups: ['admin'] }, [], [])).toBe('approver');
-    expect(resolveRoleFromGroups({ groups: ['editor'] }, [], [])).toBe('approver');
+  it('returns reader when admin/editor mappings are empty', () => {
+    expect(resolveRoleFromGroups(['admin'], [], [])).toBe('reader');
+    expect(resolveRoleFromGroups(['editor'], [], [])).toBe('reader');
   });
 });

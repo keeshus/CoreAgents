@@ -82,7 +82,7 @@ export const api = {
     get: (id: string) => request<any>(`/flows/${id}`),
     checkName: (name: string, excludeId?: string) =>
       request<{ available: boolean }>(`/flows/check-name?name=${encodeURIComponent(name)}${excludeId ? `&exclude=${encodeURIComponent(excludeId)}` : ''}`),
-    create: (data: { name: string; description?: string; nodes?: any[]; edges?: any[] }) =>
+    create: (data: { name: string; description?: string; nodes?: any[]; edges?: any[]; group_id?: string | null }) =>
       request<any>('/flows', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
       request<any>(`/flows/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

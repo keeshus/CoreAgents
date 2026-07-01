@@ -2,12 +2,14 @@ import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useRouter } from 'next/router';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { api } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth-context';
 import { FlowEditor } from '@/components/flow/FlowEditor';
 import { NodeCatalog } from '@/components/flow/NodeCatalog';
 import { NodeConfigModal } from '@/components/flow/NodeConfigModal';
 import { DebugOverlay } from '@/components/flow/DebugOverlay';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
+import { SelectField } from '@/components/ui/SelectField';
 import * as Separator from '@radix-ui/react-separator';
 import { useTheme } from '@/hooks/useTheme';
 import Link from 'next/link';
@@ -201,6 +203,17 @@ export default function FlowEditPage() {
     }).finally(() => setLoading(false));
   }, [id]);
 
+  // ── Group assignment ──────────────────────────────────
+  const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/groups', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+      .then(setGroups)
+      .catch(() => {});
+  }, [user]);
+
   // Auto-open debug overlay from ?debug=1
   useEffect(() => {
     if (router.query.debug === '1') setShowDebug(true);
@@ -337,6 +350,18 @@ export default function FlowEditPage() {
           <Link href="/" className="flex items-center gap-1 leading-none text-on-surface-variant hover:text-on-surface-variant shrink-0"><Icon name="arrow_back" className="text-sm" /> <span>Back</span></Link>
           <TextField label="Flow name" value={flow.name} onChange={(v) => setFlow((prev: any) => ({ ...prev, name: v }))} className="min-w-[80px] max-w-[160px]" />
           <TextField label="Description" value={flow.description || ''} onChange={(v) => setFlow((prev: any) => ({ ...prev, description: v }))} className="min-w-[100px] max-w-[200px] focus:max-w-[400px] transition-all" />
+          {groups.length > 0 && (
+            <SelectField
+              label="Group"
+              value={flow.group_id || ''}
+              onChange={(v) => setFlow((prev: any) => ({ ...prev, group_id: v || null }))}
+              options={[
+                { value: '', label: 'No group' },
+                ...groups.map(g => ({ value: g.id, label: g.name })),
+              ]}
+              className="min-w-[120px]"
+            />
+          )}
         </div>
       </div>
 

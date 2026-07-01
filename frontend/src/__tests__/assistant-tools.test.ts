@@ -14,9 +14,9 @@ const toolPerms: Record<string, string> = {
   get_pending_approvals: 'execution:approve', approve_execution: 'execution:approve', reject_execution: 'execution:approve',
 };
 
-const adminPerms = ['admin','flow:create','flow:edit','flow:delete','endpoint:read','endpoint:write','mcp:read','mcp:write','embedding:read','embedding:write','store:read','store:write','document:write','knowledge:write','chat:create','execution:approve'];
-const editorPerms = ['flow:create','flow:edit','execution:approve','endpoint:read','mcp:read','embedding:read','store:read','document:write','knowledge:write','chat:create'];
-const approverPerms = ['execution:approve'];
+const adminPerms = ['admin','flow:create','flow:edit','flow:delete','flow:read','endpoint:read','endpoint:write','mcp:read','mcp:write','embedding:read','embedding:write','store:read','store:write','document:write','knowledge:write','chat:create','execution:approve','group:read','group:write'];
+const editorPerms = ['flow:create','flow:edit','flow:read','execution:approve','endpoint:read','mcp:read','embedding:read','store:read','document:write','knowledge:write','chat:create','group:read'];
+const readerPerms = ['execution:approve'];
 
 function filterTools(toolNames: string[], userPerms: string[]): string[] {
   return toolNames.filter(name => !toolPerms[name] || userPerms.includes(toolPerms[name]));
@@ -75,7 +75,7 @@ describe('tool permission filter', () => {
     const tools = ['list_endpoints', 'create_endpoint', 'list_mcp_servers'];
     expect(filterTools(tools, adminPerms)).toEqual(tools);
     expect(filterTools(tools, editorPerms)).toEqual(['list_endpoints', 'list_mcp_servers']);
-    expect(filterTools(tools, approverPerms)).toEqual([]);
+    expect(filterTools(tools, readerPerms)).toEqual([]);
   });
 
   it('filters out admin-only tools for editors', () => {
@@ -88,7 +88,7 @@ describe('tool permission filter', () => {
     const tools = ['get_pending_approvals', 'approve_execution', 'reject_execution'];
     expect(filterTools(tools, adminPerms)).toEqual(tools);
     expect(filterTools(tools, editorPerms)).toEqual(tools);
-    expect(filterTools(tools, approverPerms)).toEqual(tools);
+    expect(filterTools(tools, readerPerms)).toEqual(tools);
   });
 
   it('filters write tools for editors', () => {
@@ -99,7 +99,7 @@ describe('tool permission filter', () => {
 
   it('leaves tools without permission requirement unchanged', () => {
     const tools = ['read_code', 'replace_code', 'navigate_to', 'get_flow_json'];
-    expect(filterTools(tools, approverPerms)).toEqual(tools);
+    expect(filterTools(tools, readerPerms)).toEqual(tools);
     expect(filterTools(tools, editorPerms)).toEqual(tools);
     expect(filterTools(tools, adminPerms)).toEqual(tools);
   });
@@ -146,7 +146,7 @@ describe('getToolGroupNames', () => {
 describe('end-to-end: page tools filtered by role', () => {
   it('viewer on approvals page gets only approval tools', () => {
     const tools = getToolsForPage('approvals');
-    const filtered = filterTools(tools, approverPerms);
+    const filtered = filterTools(tools, readerPerms);
     expect(filtered).toContain('get_pending_approvals');
     expect(filtered).toContain('approve_execution');
     expect(filtered).toContain('reject_execution');
@@ -180,7 +180,7 @@ describe('end-to-end: page tools filtered by role', () => {
 
   it('viewer on flow editor gets navigation + unrestricted tools', () => {
     const tools = getToolsForPage('flow:abc');
-    const filtered = filterTools(tools, approverPerms);
+    const filtered = filterTools(tools, readerPerms);
     // Flow editor tools without explicit permission requirements pass through
     expect(filtered).toContain('navigate_to');
     expect(filtered).toContain('read_code');

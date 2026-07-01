@@ -254,12 +254,12 @@ export default function GroupsSettingsPage() {
                       {isLocal && (
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <Tooltip content="Edit group">
-                            <button onClick={() => openEdit(g)} className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container rounded transition-colors">
+                            <button data-testid="group-edit-btn" onClick={() => openEdit(g)} className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-primary-container rounded transition-colors">
                               <Icon name="edit" className="text-sm" />
                             </button>
                           </Tooltip>
                           <Tooltip content="Delete group">
-                            <button onClick={() => handleDelete(g.id)} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">
+                            <button data-testid="group-delete-btn" onClick={() => handleDelete(g.id)} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">
                               <Icon name="delete" className="text-sm" />
                             </button>
                           </Tooltip>
