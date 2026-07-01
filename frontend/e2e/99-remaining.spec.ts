@@ -142,4 +142,35 @@ test.describe('Remaining features', () => {
 
     await deleteFlow(request, flow.id);
   });
+
+  // ── Feedback loops ─────────────────────────────────────────────
+
+  test('feedback loop (cycle) does not crash the engine', async ({ request }) => {
+    const name = uniqueFlowName('FeedbackTest');
+    const res = await createFlow(request, {
+      name,
+      // Create a cycle: trigger → code → output, with an edge from output back to code
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Counter', type: 'code', config: { code: 'return { count: (input.count || 0) + 1, msg: input.message };' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['counter.count'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        // Feedback edge: output → code (creates a cycle)
+        { id: 'e3', source: 'o1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+
+    // The engine should not crash when executing a flow with cycles.
+    // It detects the cycle, warns, skips validation, and executes with best-effort ordering.
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test', count: 0 }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    await deleteFlow(request, flow.id);
+  });
 });
