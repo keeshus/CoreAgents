@@ -28,8 +28,22 @@ const readCode: AssistantTool = {
   description: 'Read the current code in the Code Node editor. Open a Code Node config first.',
   inputSchema: { type: 'object', properties: {} },
   async execute() {
-    const ta = document.querySelector('.fixed.inset-0.z-50 textarea.font-mono') as HTMLTextAreaElement;
-    if (ta && ta.value) return ta.value;
+    // Find the code editor by looking for the TextField with label "JavaScript Code"
+    const modal = document.querySelector('.fixed.inset-0.z-50');
+    if (!modal) return 'No code editor found. Open a Code Node configuration panel first.';
+    const labels = modal.querySelectorAll('span.text-xs.font-medium, span.text-sm.font-medium, label');
+    for (const label of labels) {
+      if (label.textContent?.trim() === 'JavaScript Code') {
+        const container = label.closest('.relative') || label.parentElement?.closest('.space-y-3');
+        if (container) {
+          const ta = container.querySelector('textarea');
+          if (ta) return ta.value || '(empty)';
+        }
+      }
+    }
+    // Fallback: try the TextField's textarea directly
+    const codeField = findModalField('JavaScript Code');
+    if (codeField) return (codeField as HTMLTextAreaElement).value || '(empty)';
     return 'No code editor found. Open a Code Node configuration panel first.';
   },
 };
@@ -43,10 +57,9 @@ const replaceCode: AssistantTool = {
     required: ['code'],
   },
   async execute({ code }) {
-    const ta = document.querySelector('.fixed.inset-0.z-50 textarea.font-mono') as HTMLTextAreaElement;
-    if (ta) {
-      ta.value = code;
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    const field = findModalField('JavaScript Code');
+    if (field) {
+      reactSetValue(field as HTMLInputElement | HTMLTextAreaElement, code as string);
       return 'Code updated in the editor.';
     }
     return 'No code editor found. Open a Code Node configuration panel first.';
@@ -58,19 +71,25 @@ const replaceCode: AssistantTool = {
 // ── DOM helpers for node config panels ──────────────────────────────────────
 
 function getFieldLabel(el: Element): string | null {
-  // 1. Check the nearest preceding span with label class (sibling before the input)
+  // 1. If the element has an id, check for a label with htmlFor pointing to it
+  const elId = el.getAttribute('id');
+  if (elId) {
+    const forLabel = document.querySelector(`label[for="${elId}"]`);
+    if (forLabel) return forLabel.textContent?.trim() || null;
+  }
+  // 2. Check the nearest preceding span with label class (sibling before the input)
   let prev = el.previousElementSibling;
   while (prev) {
     if (prev.matches('span.text-xs.font-medium, span.text-sm.font-medium')) return prev.textContent?.trim() || null;
     prev = prev.previousElementSibling;
   }
-  // 2. Check parent label's first span
+  // 3. Check parent label
   const parent = el.closest('label');
   if (parent) {
     const span = parent.querySelector('span.text-xs.font-medium, span.text-sm.font-medium');
     if (span) return span.textContent?.trim() || null;
   }
-  // 3. Fallback to placeholder
+  // 4. Fallback to placeholder
   return el.getAttribute('placeholder') || null;
 }
 
