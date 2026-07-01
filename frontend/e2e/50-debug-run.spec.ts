@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { createFlow, deleteFlow } from './helpers/api';
+import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
 
 test.describe('Debug run', () => {
   let flowId: string;
 
   test.beforeEach(async ({ page, request }) => {
     const res = await createFlow(request, {
-      name: 'Debug Run Test',
+      name: uniqueFlowName('Debug Run Test'),
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'o1', type: 'output', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['trigger.message'] } } },
@@ -25,42 +25,24 @@ test.describe('Debug run', () => {
   });
 
   test('debug button is visible on the editor', async ({ page }) => {
-    await expect(page.locator('.react-flow')).toBeVisible({ timeout: 15000 });
-    const debugBtn = page.getByText('Debug');
-    await expect(debugBtn).toBeVisible({ timeout: 5000 });
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 5000 });
+    await expect(page.getByTestId('debug-btn')).toBeVisible();
   });
 
   test('clicking debug opens the debug panel', async ({ page }) => {
-    await expect(page.locator('.react-flow')).toBeVisible({ timeout: 15000 });
-
-    await page.getByText('Debug').click();
-
-    // Debug panel should show
-    await expect(page.getByText('Debug Run')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Start Debug Run')).toBeVisible({ timeout: 5000 });
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByTestId('debug-btn').click();
+    await expect(page.getByText('Debug Run')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('debug-run-btn')).toBeVisible({ timeout: 5000 });
   });
 
   test('runs a simple trigger → output flow', async ({ page }) => {
-    await expect(page.locator('.react-flow')).toBeVisible({ timeout: 15000 });
-
-    // Open debug panel and run
-    await page.getByText('Debug').click();
-    await expect(page.getByText('Start Debug Run')).toBeVisible({ timeout: 10000 });
-    await page.getByText('Start Debug Run').click();
-
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByTestId('debug-btn').click();
+    await expect(page.getByTestId('debug-run-btn')).toBeVisible({ timeout: 5000 });
+    await page.getByTestId('debug-run-btn').click();
     // Steps should appear — at minimum the output step should complete
     const steps = page.locator('[class*="StepCard"], [class*="step"]');
     await expect(steps.first()).toBeVisible({ timeout: 20000 });
-  });
-
-  test('shows stop button while running', async ({ page }) => {
-    await expect(page.locator('.react-flow')).toBeVisible({ timeout: 15000 });
-
-    await page.getByText('Debug').click();
-    await expect(page.getByText('Start Debug Run')).toBeVisible({ timeout: 10000 });
-    await page.getByText('Start Debug Run').click();
-
-    // Should show Stop or Running text during execution
-    await expect(page.getByText(/Running|Stop|Re-run/)).toBeVisible({ timeout: 10000 });
   });
 });

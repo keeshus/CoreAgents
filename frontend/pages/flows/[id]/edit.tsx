@@ -380,7 +380,7 @@ export default function FlowEditPage() {
       {/* Floating add node — left side */}
       <div className="pointer-events-none fixed left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center">
         <Tooltip content="Add node">
-          <button id="add-node-btn" onClick={() => setShowCatalog(p => !p)} className="pointer-events-auto w-10 h-10 bg-primary border-2 border-primary rounded-xl shadow-lg flex items-center justify-center text-white hover:bg-primary hover:shadow-xl transition-all">
+          <button id="add-node-btn" data-testid="add-node-btn" onClick={() => setShowCatalog(p => !p)} className="pointer-events-auto w-10 h-10 bg-primary border-2 border-primary rounded-xl shadow-lg flex items-center justify-center text-white hover:bg-primary hover:shadow-xl transition-all">
             <Icon name="add" className="text-xl" />
           </button>
         </Tooltip>
@@ -418,7 +418,7 @@ export default function FlowEditPage() {
             </Link>
           </Tooltip>
           <Tooltip content="Debug run — trace execution step by step">
-            <button onClick={() => setShowDebug(true)} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container transition-colors rounded">
+            <button data-testid="debug-btn" onClick={() => setShowDebug(true)} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container transition-colors rounded">
               <Icon name="bug_report" className="text-sm" /> Debug
             </button>
           </Tooltip>

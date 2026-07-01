@@ -114,7 +114,7 @@ export function NodeConfigModal({
     <Dialog.Root open={!!node} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30" onClick={() => onClose()} />
-        <Dialog.Content className="fixed z-50 top-12 left-1/2 -translate-x-1/2 bg-surface rounded-lg shadow-m3-4 w-full max-w-2xl max-h-[80vh] mx-4 flex flex-col overflow-hidden" onOpenAutoFocus={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
+        <Dialog.Content data-testid="node-config-modal" className="fixed z-50 top-12 left-1/2 -translate-x-1/2 bg-surface rounded-lg shadow-m3-4 w-full max-w-2xl max-h-[80vh] mx-4 flex flex-col overflow-hidden" onOpenAutoFocus={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">

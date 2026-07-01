@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createFlow, deleteFlow } from './helpers/api';
+import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
 
 test.describe('Flows overview', () => {
   test.beforeEach(async ({ page }) => {
@@ -23,7 +23,7 @@ test.describe('Flows overview', () => {
   });
 
   test('created flow appears in the list', async ({ page, request }) => {
-    const res = await createFlow(request, { name: 'Test Flow E2E', description: 'E2E test flow' });
+    const res = await createFlow(request, { name: uniqueFlowName('Test Flow E2E'), description: 'E2E test flow' });
     const flow = await res.json();
     await page.goto('/');
     await expect(page.getByText('Test Flow E2E')).toBeVisible();
@@ -32,8 +32,8 @@ test.describe('Flows overview', () => {
   });
 
   test('search filters the list', async ({ page, request }) => {
-    const res1 = await createFlow(request, { name: 'Alpha Flow' });
-    const res2 = await createFlow(request, { name: 'Beta Flow' });
+    const res1 = await createFlow(request, { name: uniqueFlowName('Alpha Flow') });
+    const res2 = await createFlow(request, { name: uniqueFlowName('Beta Flow') });
     const flow1 = await res1.json();
     const flow2 = await res2.json();
 
@@ -54,7 +54,7 @@ test.describe('Flows overview', () => {
   });
 
   test('delete flow removes it from list', async ({ page, request }) => {
-    const res = await createFlow(request, { name: 'Delete Me' });
+    const res = await createFlow(request, { name: uniqueFlowName('Delete Me') });
     const flow = await res.json();
     await page.goto('/');
 
@@ -73,7 +73,7 @@ test.describe('Flows overview', () => {
 
   test('shows correct trigger type badge for manual trigger', async ({ page, request }) => {
     const res = await createFlow(request, {
-      name: 'Manual Trigger Flow',
+      name: uniqueFlowName('Manual Trigger Flow'),
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: {} } },
       ],

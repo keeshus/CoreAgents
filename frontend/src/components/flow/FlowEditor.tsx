@@ -336,7 +336,8 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
 
   return (
       <div className="w-full h-full bg-surface">
-        <ReactFlow
+          <ReactFlow
+            data-testid="flow-canvas"
           nodes={nodes}
           edges={edges}
           onNodesChange={onNodesChangeInternal}

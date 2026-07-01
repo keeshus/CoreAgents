@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { createFlow, deleteFlow } from './helpers/api';
+import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
 
 test.describe('Flow save and reload', () => {
   let flowId: string;
 
   test.beforeEach(async ({ page, request }) => {
     const res = await createFlow(request, {
-      name: 'Save Load Test',
+      name: uniqueFlowName('Save Load Test'),
       description: 'Testing persistence',
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 50, y: 50 }, data: { label: 'My Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
@@ -59,9 +59,8 @@ test.describe('Flow save and reload', () => {
 
     // Reload
     await page.reload();
-    await page.waitForTimeout(2000);
 
-    // Nodes should still be there after reload
+    // Wait for nodes after reload
     await expect(page.locator('.react-flow__node')).toHaveCount(2, { timeout: 15000 });
 
     // Check that save button indicates no unsaved changes (optional)

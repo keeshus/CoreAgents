@@ -631,6 +631,7 @@ className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono r
                 </div>
               )}
               <button
+                data-testid="debug-run-btn"
                 onClick={status === 'running' ? stop : run}
                 disabled={status === 'running' ? false : (triggerType === 'webhook' && webhookPayloadError !== null)}
                 className="m3-button text-sm w-full disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1"

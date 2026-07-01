@@ -11,6 +11,17 @@
 #   cd backend && DATABASE_URL=postgres://coreagents:coreagents@localhost:5432/coreagents npx drizzle-kit push
 
 services:
+  nginx-e2e:
+    image: nginx:alpine
+    container_name: core-agents-e2e-nginx
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./nginx.e2e.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - postgres-e2e
+    restart: unless-stopped
+
   postgres-e2e:
     image: postgres:17-alpine
     container_name: core-agents-e2e-db

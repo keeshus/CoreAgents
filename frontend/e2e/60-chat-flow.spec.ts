@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { createFlow, deleteFlow } from './helpers/api';
+import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
 
 test.describe('Chat flow', () => {
   let flowId: string;
 
   test.beforeEach(async ({ page, request }) => {
     const res = await createFlow(request, {
-      name: 'Chat Flow E2E',
+      name: uniqueFlowName('Chat Flow E2E'),
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
         { id: 'o1', type: 'output', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['chat.message'] } } },

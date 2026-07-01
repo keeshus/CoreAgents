@@ -69,6 +69,7 @@ export function NodeCatalog({ onAddNode, onClose, disabledTypes = [], disabledRe
                     <Tooltip content={tooltipContent}>
                       <button
                         key={entry.type}
+                        data-testid={`catalog-${entry.type}`}
                         disabled={isDisabled}
                         className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-xs font-medium ${isDisabled ? 'text-outline-variant cursor-not-allowed' : 'hover:bg-surface-container-high text-on-surface-variant cursor-pointer'}`}
                         onClick={() => { if (!isDisabled) onAddNode(entry.type, entry.defaultConfig); }}
