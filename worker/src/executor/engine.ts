@@ -916,7 +916,7 @@ export class FlowExecutor {
             }
             const strVal = String(result).trim();
             // Try to match the value against an output label
-            matchedLabel = labels.find(l => l && l.toLowerCase() === strVal.toLowerCase()) || '';
+            matchedLabel = labels.find((l: string) => l && l.toLowerCase() === strVal.toLowerCase()) || '';
             if (matchedLabel) {
               verdict = true;
             } else {
