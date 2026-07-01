@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 
 const NODE_ICONS: Record<string, string> = {
@@ -27,42 +28,62 @@ const NODE_LABELS: Record<string, string> = {
   subflow: 'Subflow',
 };
 
-interface StepData {
-  nodeId?: string;
+interface StepInfo {
+  nodeId: string;
   nodeType: string;
   nodeLabel?: string;
-  status: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
   input: any;
   output: any;
   error: string | null;
-  startedAt?: string;
-  completedAt?: string | null;
-  tokens?: string[];
+  startedAt: string;
+  completedAt: string | null;
+  tokens: string[];
+  iteration?: number;
   children?: Array<{ nodeId: string; type: string; output?: any; error?: string; status: string }>;
-  selectedField?: string;
+  hierarchy?: { path: string; depth: number };
 }
 
-interface StepCardProps {
-  step: StepData;
+interface StepTreeProps {
+  steps: StepInfo[];
+  hierarchy?: Record<string, { path: string; depth: number }>;
+  onStepClick?: (stepId: string) => void;
+  showInputs?: boolean;
+  showOutputs?: boolean;
+  compact?: boolean;
+  onViewSubExecution?: (executionId: string) => void;
+  subExecutionLinks?: Record<string, string>;
+}
+
+function fmtTime(t: string) {
+  return new Date(t).toLocaleTimeString('nl-NL');
+}
+
+function dur(s: string | null | undefined, e: string | null | undefined) {
+  if (!s || !e) return null;
+  const ms = new Date(e).getTime() - new Date(s).getTime();
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function StepCardInner({ step, expanded, onToggle, compact, showInputs, showOutputs, onViewSubExecution, subExecutionLinks }: {
+  step: StepInfo;
   expanded: boolean;
   onToggle: () => void;
-}
-
-export function StepCard({ step, expanded, onToggle }: StepCardProps) {
+  compact?: boolean;
+  showInputs?: boolean;
+  showOutputs?: boolean;
+  onViewSubExecution?: (executionId: string) => void;
+  subExecutionLinks?: Record<string, string>;
+}) {
   const isLLM = step.nodeType === 'llm-agent';
+  const isSubflow = step.nodeType === 'subflow';
   const hasSystemPrompt = step.input?.systemPrompt;
   const hasTokens = step.tokens && step.tokens.length > 0;
   const stepLabel = step.nodeLabel || step.input?._nodeLabel || NODE_LABELS[step.nodeType] || step.nodeType;
   const iconName = NODE_ICONS[step.nodeType] || 'schedule';
-  const hasExpandable = step.input || step.output || hasTokens || hasSystemPrompt || step.error || step.selectedField;
-
-  const fmtTime = (t: string) => new Date(t).toLocaleTimeString('nl-NL');
-  const dur = (s: string | null | undefined, e: string | null | undefined) => {
-    if (!s || !e) return null;
-    const ms = new Date(e).getTime() - new Date(s).getTime();
-    return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
-  };
+  const hasExpandable = !compact && (step.input || step.output || hasTokens || hasSystemPrompt || step.error);
   const duration = dur(step.startedAt, step.completedAt);
+  const subExecutionId = subExecutionLinks?.[step.nodeId];
 
   return (
     <div className="bg-surface rounded-lg border overflow-hidden">
@@ -83,6 +104,9 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm font-medium text-on-surface shrink-0">{stepLabel}</span>
+            {isSubflow && (
+              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-secondary-container text-secondary uppercase tracking-wider shrink-0">Subflow</span>
+            )}
             {isLLM && step.input?.model && <span className="text-[10px] text-on-surface-variant font-mono truncate">{step.input.model}</span>}
             {step.output?.toolCalls?.length > 0 && (
               <span className="text-[10px] text-on-surface-variant font-mono truncate">
@@ -117,6 +141,15 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
         )}
         {step.error && <Icon name="warning" className="text-base text-error shrink-0" />}
 
+        {subExecutionId && onViewSubExecution && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onViewSubExecution(subExecutionId); }}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] text-primary hover:bg-secondary-container rounded transition-colors"
+          >
+            <Icon name="open_in_new" className="text-xs" /> View
+          </button>
+        )}
+
         {hasExpandable && (
           expanded ? <Icon name="expand_less" className="text-base text-on-surface-variant shrink-0" /> : <Icon name="expand_more" className="text-base text-on-surface-variant shrink-0" />
         )}
@@ -131,96 +164,28 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
             </div>
           )}
 
-          {hasSystemPrompt && (
+          {showInputs && hasSystemPrompt && (
             <div>
               <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">System Prompt</h4>
               <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">{step.input.systemPrompt}</pre>
             </div>
           )}
 
-          {step.nodeType === 'branch' && step.input?.condition && (
+          {showInputs && step.nodeType === 'branch' && step.input?.condition && (
             <div>
               <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Condition</h4>
               <code className="text-xs bg-surface border rounded p-2 block font-mono">{step.input.condition}</code>
             </div>
           )}
 
-          {step.input && (
+          {showInputs && step.input && (
             <div>
               <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Input</h4>
               <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{JSON.stringify(step.input, null, 2)}</pre>
             </div>
           )}
 
-          {step.nodeType === 'output' && (
-            <div>
-              {step.selectedField && (
-                <div className="text-xs text-on-surface-variant mb-2">
-                  Selected field: <code className="font-mono bg-surface-container px-1 rounded">{step.selectedField}</code>
-                </div>
-              )}
-              <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Returned value</h4>
-              <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{(() => {
-                // For output nodes, try to extract the selected field value
-                if (step.selectedField && step.output && typeof step.output === 'object') {
-                  const parts = step.selectedField.split('.');
-                  if (parts.length === 2) {
-                    const fieldName = parts[1];
-                    // Search all values in the output for a string matching the field
-                    for (const val of Object.values(step.output)) {
-                      if (typeof val === 'string') return val;
-                      if (val && typeof val === 'object' && typeof (val as any)[fieldName] === 'string') {
-                        return (val as any)[fieldName];
-                      }
-                    }
-                  }
-                }
-                return step.output !== undefined && step.output !== null
-                  ? (typeof step.output === 'string' ? step.output : JSON.stringify(step.output, null, 2))
-                  : '(no output)';
-              })()}</pre>
-            </div>
-          )}
-
-          {isLLM && hasTokens && (
-            <div>
-              <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">
-                {step.status === 'running' ? 'Streaming Tokens' : 'LLM Response'}
-              </h4>
-              <div className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto text-on-surface">
-                {step.tokens!.join('')}
-                {step.status === 'running' && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5 align-middle" />}
-              </div>
-            </div>
-          )}
-
-          {step.nodeType === 'parallel' && step.children && step.children.length > 0 && (
-            <div>
-              <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Sub-nodes ({step.children.length})</h4>
-              <div className="space-y-1.5">
-                {step.children.map(child => (
-                  <div key={child.nodeId} className={`p-2 rounded border text-xs ${
-                    child.status === 'completed' ? 'bg-success-container border-success' :
-                    child.status === 'failed' ? 'bg-error-container border-error' : 'bg-surface-container border-outline-variant'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      {child.status === 'completed' && <Icon name="check_circle" className="text-xs text-success" />}
-                      {child.status === 'failed' && <Icon name="cancel" className="text-xs text-error" />}
-                      {child.status === 'skipped' && <Icon name="skip_next" className="text-xs text-on-surface-variant" />}
-                      <span className="font-medium text-on-surface-variant">{NODE_LABELS[child.type] || child.type}</span>
-                      <span className="text-[10px] text-on-surface-variant">{child.nodeId?.slice(0, 8)}</span>
-                    </div>
-                    {child.error && <p className="text-error mt-1 font-mono">{child.error}</p>}
-                    {child.output && (
-                      <pre className="mt-1 text-[10px] bg-surface rounded p-1.5 max-h-24 overflow-y-auto font-mono whitespace-pre-wrap break-all">{JSON.stringify(child.output, null, 2)}</pre>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step.output && (
+          {showOutputs && step.output && (
             <div>
               <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">{isLLM ? 'LLM Response' : 'Output'}</h4>
               {isLLM && typeof step.output.content === 'string' && (
@@ -241,20 +206,87 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
                   </div>
                 </div>
               )}
-              {step.output.reviewedContent && (
-                <div className="mb-2">
-                  <h5 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Reviewed Content</h5>
-                  <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{JSON.stringify(step.output.reviewedContent, null, 2)}</pre>
-                </div>
-              )}
               <div className="mt-2">
                 <h5 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Full Output</h5>
                 <pre className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto font-mono">{JSON.stringify(step.output, null, 2)}</pre>
               </div>
             </div>
           )}
+
+          {isLLM && hasTokens && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">
+                {step.status === 'running' ? 'Streaming Tokens' : 'LLM Response'}
+              </h4>
+              <div className="text-xs bg-surface border rounded p-2 whitespace-pre-wrap break-all max-h-48 overflow-y-auto text-on-surface">
+                {step.tokens!.join('')}
+                {step.status === 'running' && <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5 align-middle" />}
+              </div>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+export function StepTree({ steps, hierarchy, onStepClick, showInputs, showOutputs, compact, onViewSubExecution, subExecutionLinks }: StepTreeProps) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }));
+  const toggleGroup = (path: string) => setExpandedGroups(p => ({ ...p, [path]: !p[path] }));
+
+  const hierarchyMap = hierarchy || {};
+  const stepsWithHierarchy = steps.map(s => ({
+    ...s,
+    hierarchy: s.hierarchy || hierarchyMap[s.nodeId],
+  }));
+
+  const subflowGroups = stepsWithHierarchy.filter(s => s.nodeType === 'subflow');
+  const subflowNodeIds = new Set(subflowGroups.map(s => s.nodeId));
+  const nonSubflowSteps = stepsWithHierarchy.filter(s => !subflowNodeIds.has(s.nodeId) || s.nodeType === 'subflow');
+
+  return (
+    <div className="space-y-1.5">
+      {nonSubflowSteps.map((step, i) => {
+        const depth = step.hierarchy?.depth ?? 0;
+        const key = step.nodeId + (step.iteration ?? 0) + i;
+
+        return (
+          <div key={key} style={{ marginLeft: depth ? `${depth * 1}em` : undefined }}>
+            <StepCardInner
+              step={step}
+              expanded={expanded[key] || false}
+              onToggle={() => toggle(key)}
+              compact={compact}
+              showInputs={showInputs}
+              showOutputs={showOutputs}
+              onViewSubExecution={onViewSubExecution}
+              subExecutionLinks={subExecutionLinks}
+            />
+
+            {step.nodeType === 'subflow' && (
+              <div className="ml-6 mt-1 space-y-1 border-l-2 border-outline-variant pl-3">
+                {step.children && step.children.length > 0 && step.children.map((child, ci) => (
+                  <div key={child.nodeId + ci} className="flex items-center gap-2 p-2 rounded text-xs bg-surface-container/50 border">
+                    {child.status === 'completed' && <Icon name="check_circle" className="text-xs text-success shrink-0" />}
+                    {child.status === 'failed' && <Icon name="cancel" className="text-xs text-error shrink-0" />}
+                    {child.status === 'running' && <Icon name="sync" className="text-xs text-primary animate-spin shrink-0" />}
+                    {child.status === 'skipped' && <Icon name="skip_next" className="text-xs text-on-surface-variant shrink-0" />}
+                    <span className="font-medium text-on-surface-variant">{NODE_LABELS[child.type] || child.type}</span>
+                    <span className="text-[10px] text-on-surface-variant">{child.nodeId?.slice(0, 8)}</span>
+                    {child.error && <span className="text-error ml-auto">{child.error}</span>}
+                    {child.output && (
+                      <pre className="text-[10px] bg-surface rounded p-1 max-h-16 overflow-y-auto font-mono whitespace-pre-wrap break-all ml-auto max-w-[200px]">{JSON.stringify(child.output, null, 2)}</pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

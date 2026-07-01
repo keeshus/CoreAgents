@@ -18,6 +18,7 @@ export default function FlowsListPage() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'updated_at' | 'created_at'>('updated_at');
+  const [activeTab, setActiveTab] = useState<'flows' | 'subflows'>('flows');
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<Record<string, 'running' | 'ok' | 'error' | null>>({});
   const deleteConfirm = useConfirm({ title: 'Delete flow?', message: 'Are you sure you want to delete this flow? This cannot be undone.' });
@@ -50,8 +51,9 @@ export default function FlowsListPage() {
       setLoading(false);
       return;
     }
-    api.flows.list({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, search: search || undefined, sort }).then(({ data, total }) => { setFlows(data || []); setTotal(total || 0); }).catch(() => { setFlows([]); setTotal(0); }).finally(() => setLoading(false));
-  }, [user, authLoading, isReader, page, search, sort]);
+    const isSubflowFilter = activeTab === 'subflows';
+    api.flows.list({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, search: search || undefined, sort, is_subflow: isSubflowFilter }).then(({ data, total }) => { setFlows(data || []); setTotal(total || 0); }).catch(() => { setFlows([]); setTotal(0); }).finally(() => setLoading(false));
+  }, [user, authLoading, isReader, page, search, sort, activeTab]);
 
   const handleLogout = async () => {
     await logout();
@@ -59,7 +61,7 @@ export default function FlowsListPage() {
   };
 
   const handleCreate = () => {
-    router.push('/flows/new/edit');
+    router.push(activeTab === 'subflows' ? '/flows/new/edit?triggerType=subflow' : '/flows/new/edit');
   };
 
   const handleDelete = async (id: string) => {
@@ -162,6 +164,24 @@ export default function FlowsListPage() {
           <p className="text-on-surface-variant text-sm">Loading...</p>
         ) : (
           <div>
+            <div className="flex items-center gap-4 mb-4 border-b border-outline-variant">
+              <button
+                onClick={() => { setActiveTab('flows'); setPage(0); setSearch(''); }}
+                className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'flows'
+                    ? 'text-primary border-primary'
+                    : 'text-on-surface-variant border-transparent hover:text-on-surface'
+                }`}
+              >Flows</button>
+              <button
+                onClick={() => { setActiveTab('subflows'); setPage(0); setSearch(''); }}
+                className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'subflows'
+                    ? 'text-primary border-primary'
+                    : 'text-on-surface-variant border-transparent hover:text-on-surface'
+                }`}
+              >Subflows</button>
+            </div>
             <div className="flex items-center gap-3 mb-4">
               <TextField label="Search" value={search} onChange={(v) => { setSearch(v); setPage(0); }} className="flex-1" />
               <SelectField
@@ -175,15 +195,15 @@ export default function FlowsListPage() {
               />
               {can('flow:create') && (
                 <button onClick={handleCreate} className="m3-button gap-2 shrink-0">
-                  <Icon name="add" className="text-base" /> New Flow
+                  <Icon name="add" className="text-base" /> {activeTab === 'subflows' ? 'New Subflow' : 'New Flow'}
                 </button>
               )}
             </div>
             {flows.length === 0 ? (
               <div className="text-center py-16 bg-surface rounded-xl border">
-                <p className="text-on-surface-variant mb-2">{search ? 'No flows match your search' : 'No flows yet'}</p>
+                <p className="text-on-surface-variant mb-2">{search ? 'No flows match your search' : activeTab === 'subflows' ? 'No subflows yet' : 'No flows yet'}</p>
                 {can('flow:create') && !search && (
-                  <button onClick={handleCreate} className="text-primary hover:text-primary text-sm font-medium">Create your first flow</button>
+                  <button onClick={handleCreate} className="text-primary hover:text-primary text-sm font-medium">Create your first {activeTab === 'subflows' ? 'subflow' : 'flow'}</button>
                 )}
               </div>
             ) : (
@@ -225,6 +245,9 @@ export default function FlowsListPage() {
                   </div>
                   <div className="min-w-0">
                     <Link href={`/flows/${flow.id}/edit`} className="font-medium text-on-surface hover:text-primary">{flow.name}</Link>
+                    {flow.is_subflow && (
+                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-secondary-container text-secondary uppercase tracking-wider ml-2">Subflow</span>
+                    )}
                     <p className="text-xs text-on-surface-variant mt-0.5">{flow.description || 'No description'}</p>
                     <div className="flex items-center gap-2 mt-1 text-[10px] text-on-surface-variant">
                       <span>Created: {new Date(flow.created_at).toLocaleString('nl-NL')}{flow.created_by_name ? ` by ${flow.created_by_name}` : ''}</span>

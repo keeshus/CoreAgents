@@ -9,6 +9,8 @@ import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
 import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
 import { TemplateAutocomplete } from '@/components/flow/config/TemplateAutocomplete';
 import { HITLNodeConfig } from '@/components/flow/config/HITLNodeConfig';
+import { SubflowNodeConfig } from '@/components/flow/config/SubflowNodeConfig';
+import { TriggerConfig } from '@/components/flow/config/TriggerConfig';
 import { Tooltip } from '@/components/ui/Tooltip';
 
 const NODE_LABELS: Record<string, string> = {
@@ -362,73 +364,7 @@ export function NodeConfigModal({
           )}
 
           {node.data.type === 'trigger' && (
-            <div className="space-y-3">
-              <SelectField
-                label="Trigger Type"
-                value={node.data.config.triggerType || 'manual'}
-                onChange={(v) => onConfigChange({ triggerType: v })}
-                options={[
-                  { value: 'manual', label: 'Manual' },
-                  { value: 'chat', label: 'Chat' },
-                  { value: 'webhook', label: 'Webhook' },
-                  { value: 'schedule', label: 'Schedule' },
-                ]}
-              />
-
-              {node.data.config.triggerType === 'webhook' && (
-                <>
-                  <TextField
-                    label="Webhook Secret"
-                    value={node.data.config.webhookSecret || ''}
-                    onChange={(v) => onConfigChange({ webhookSecret: v })}
-                    helpText="Pass as ?secret=... in the webhook URL"
-                  />
-                  <div className="bg-surface-container rounded p-2">
-                    <p className="text-[10px] font-medium text-on-surface-variant mb-1">Webhook URL</p>
-                    <code className="text-[10px] text-on-surface-variant break-all">
-                      {process.env.NEXT_PUBLIC_API_URL || '/api'}/webhook/
-                      {flowId}
-                      {node.data.config.webhookSecret ? '?secret=••••••••' : ''}
-                    </code>
-                  </div>
-                </>
-              )}
-
-              {node.data.config.triggerType === 'schedule' && (
-                <TextField
-                  label="Cron Expression"
-                  value={node.data.config.cronExpression || ''}
-                  onChange={(v) => onConfigChange({ cronExpression: v })}
-                  helpText="minute hour day-of-month month day-of-week. E.g. &quot;0 9 * * *&quot; = daily at 9am, &quot;*/15 * * * *&quot; = every 15 min"
-                />
-              )}
-
-              {(node.data.config.triggerType === 'schedule' ||
-                node.data.config.triggerType === 'manual') && (
-                <TextField
-                  label="Input Message"
-                  value={node.data.config.inputMessage || ''}
-                  onChange={(v) => onConfigChange({ inputMessage: v })}
-                  multiline
-                  rows={2}
-                  helpText="Sent to the next node each trigger. Plain text becomes the message, JSON objects are passed as structured input."
-                />
-              )}
-
-              {node.data.config.triggerType === 'webhook' && (
-                <div>
-                  <p className="text-xs font-medium text-on-surface-variant mb-1">Expected Input Schema</p>
-                  <textarea
-                    value={node.data.config.inputSchema || ''}
-                    onChange={(e) => onConfigChange({ inputSchema: e.target.value })}
-                    placeholder='{"type":"object","properties":{...}}'
-                    rows={Math.max(3, Math.min(10, (node.data.config.inputSchema || '').split('\n').length))}
-                    className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary max-h-[200px]"
-                  />
-                  <p className="mt-1 text-[10px] text-on-surface-variant">Define required fields and types. Incoming POSTs are validated — invalid requests get 400.</p>
-                </div>
-              )}
-            </div>
+            <TriggerConfig config={node.data.config} onChange={onConfigChange} flowId={flowId} />
           )}
 
           {node.data.type === 'output' && (
@@ -478,6 +414,16 @@ export function NodeConfigModal({
             />
           )}
 
+          {node.data.type === 'subflow' && (
+            <SubflowNodeConfig
+              config={node.data.config}
+              onChange={onConfigChange}
+              nodeId={node.id}
+              nodes={nodes}
+              edges={edges}
+            />
+          )}
+
           {![
             'llm-agent',
             'mcp-tool',
@@ -488,6 +434,7 @@ export function NodeConfigModal({
             'output',
             'parallel',
             'hitl',
+            'subflow',
           ].includes(node.data.type) && (
             <pre className="text-xs bg-surface-container p-3 rounded overflow-auto">
               {JSON.stringify(node.data.config, null, 2)}

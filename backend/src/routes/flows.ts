@@ -4,6 +4,8 @@ import { db } from '../db/connection.js';
 import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions, userAssignments, users, groups, groupMembers } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { FlowExecutor } from '../../../worker/src/executor/engine.js';
+import { topologicalSort } from '../../../worker/src/executor/dag.js';
 
 const router = Router();
 
@@ -14,15 +16,22 @@ router.get(
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const offset = parseInt(req.query.offset as string) || 0;
     const search = (req.query.search as string) || '';
+    const isSubflow = req.query.is_subflow as string | undefined;
     const sortBy = (req.query.sort as string) === 'created_at' ? flows.created_at : flows.updated_at;
     const orderDir = (req.query.order as string) === 'asc' ? asc : desc;
-    const whereClause = search
-      ? sql`(${flows.name}::text ILIKE ${'%' + search + '%'} OR ${flows.description}::text ILIKE ${'%' + search + '%'})`
-      : undefined;
+    const conditions: ReturnType<typeof sql>[] = [];
+    if (search) {
+      conditions.push(sql`(${flows.name}::text ILIKE ${'%' + search + '%'} OR ${flows.description}::text ILIKE ${'%' + search + '%'})`);
+    }
+    if (isSubflow === 'true') {
+      conditions.push(eq(flows.is_subflow, true));
+    } else if (isSubflow === 'false') {
+      conditions.push(eq(flows.is_subflow, false));
+    }
 
     // Apply group-based filtering for non-admin users
     const isAdmin = req.user?.permissions?.includes('admin');
-    let effectiveWhere = whereClause;
+    let effectiveWhere = conditions.length > 0 ? and(...conditions) : undefined;
 
     if (!isAdmin) {
       const userGroupIds = await db
@@ -37,7 +46,6 @@ router.get(
 
       effectiveWhere = effectiveWhere ? and(effectiveWhere, groupFilter) : groupFilter;
     }
-
     const baseQuery = db.select({
       id: flows.id,
       name: flows.name,
@@ -45,6 +53,7 @@ router.get(
       nodes: flows.nodes,
       edges: flows.edges,
       version: flows.version,
+      is_subflow: flows.is_subflow,
       created_by: flows.created_by,
       created_by_name: users.name,
       created_at: flows.created_at,
@@ -95,6 +104,7 @@ router.get(
       nodes: flows.nodes,
       edges: flows.edges,
       version: flows.version,
+      is_subflow: flows.is_subflow,
       created_by: flows.created_by,
       created_by_name: users.name,
       group_id: flows.group_id,
@@ -131,6 +141,8 @@ router.post(
       return;
     }
 
+    const isSubflow = deriveIsSubflow(nodes);
+
     const result = await db
       .insert(flows)
       .values({
@@ -138,6 +150,7 @@ router.post(
         description,
         nodes,
         edges,
+        is_subflow: isSubflow,
         created_by: req.user?.userId,
         group_id,
       })
@@ -161,7 +174,10 @@ router.put(
 
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (nodes !== undefined) updateData.nodes = nodes;
+    if (nodes !== undefined) {
+      updateData.nodes = nodes;
+      updateData.is_subflow = deriveIsSubflow(nodes);
+    }
     if (edges !== undefined) updateData.edges = edges;
     if (group_id !== undefined) updateData.group_id = group_id;
 
@@ -217,6 +233,67 @@ router.delete(
     });
 
     res.status(204).send();
+  }),
+);
+
+// ── Helper: derive is_subflow from trigger nodes ────────────────────────────
+
+function deriveIsSubflow(nodes: any[]): boolean {
+  return Array.isArray(nodes) && nodes.some(
+    (n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'subflow'
+  );
+}
+
+// ── POST /api/flows/validate — compile/validation endpoint ──────────────────
+
+router.post(
+  '/validate',
+  asyncHandler(async (req, res) => {
+    const { nodes = [], edges = [], subflowAncestry = [] } = req.body;
+    const errors: string[] = [];
+
+    // Topological sort & cycle detection
+    const { sorted, cycles } = topologicalSort(nodes, edges);
+
+    // Check ancestry for recursion cycles
+    if (subflowAncestry.length > 0) {
+      for (const node of nodes) {
+        if (node.data?.type === 'subflow') {
+          const targetId = node.data?.config?.subflowId;
+          if (targetId && subflowAncestry.includes(targetId)) {
+            errors.push(`Circular subflow reference detected at node "${node.data?.label || node.id}": ${[...subflowAncestry, targetId].join(' -> ')}`);
+          }
+        }
+      }
+
+      // Recursion depth check
+      if (subflowAncestry.length >= 10) {
+        errors.push(`Subflow recursion depth limit exceeded (max 10, current ${subflowAncestry.length})`);
+      }
+    }
+
+    // Run engine compile validation
+    if (cycles.length === 0) {
+      try {
+        const executor = new FlowExecutor();
+        const compileErrors = executor.compileFlow(sorted, edges, {});
+        errors.push(...compileErrors);
+      } catch (err) {
+        errors.push(`Compilation error: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // Validate subflow nodes have input mappings
+    for (const node of nodes) {
+      if (node.data?.type === 'subflow') {
+        const config = node.data?.config || {};
+        if (!config.subflowId) {
+          errors.push(`Subflow node "${node.data?.label || node.id}": missing subflowId`);
+        }
+      }
+    }
+
+    res.json({ valid: errors.length === 0, errors });
   }),
 );
 

@@ -130,7 +130,7 @@ router.post(
       // Debug runs: don't persist to DB, just generate a temp ID for SSE
       execId = `debug_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     } else {
-      [exec] = await db
+      const inserted = await db
         .insert(executions)
         .values({
           flow_id: flowId,
@@ -140,6 +140,7 @@ router.post(
           started_at: new Date(),
         })
         .returning();
+      exec = inserted[0];
       execId = exec.id;
     }
 
@@ -153,6 +154,7 @@ router.post(
 
     // Build execution context: resolve LLM endpoints from DB ------
     const executionContext: import('../../../worker/src/executor/engine.js').ExecutionContext = {
+      currentExecutionId: execId,
       getEndpoint: async (endpointId: string) => {
         const [endpoint] = await db
           .select()
@@ -185,6 +187,45 @@ router.post(
         const [vs] = await db.select().from(vectorStores).where(eq(vectorStores.id, storeId));
         if (!vs) return null;
         return { name: vs.name, url: vs.url, apiKey: vs.api_key };
+      },
+      getFlow: async (flowId: string, ancestry?: string[]) => {
+        const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
+        if (!flow) return null;
+        if (ancestry?.includes(flowId)) {
+          throw new Error(`Circular subflow reference detected: ${ancestry.join(' -> ')} -> ${flow.name}`);
+        }
+        return {
+          id: flow.id,
+          name: flow.name,
+          description: flow.description || '',
+          nodes: flow.nodes as any,
+          edges: flow.edges as any,
+          version: flow.version,
+          createdAt: flow.created_at?.toISOString() || '',
+          updatedAt: flow.updated_at?.toISOString() || '',
+        };
+      },
+      onSubExecution: async (data) => {
+        if (isDebug) return `debug_sub_${Date.now()}`;
+        const [subExec] = await db.insert(executions).values({
+          flow_id: data.subflowId,
+          parent_execution_id: data.parentExecutionId,
+          subflow_node_id: data.subflowNodeId,
+          subflow_depth: data.depth,
+          status: 'running',
+          input: data.input,
+          started_at: new Date(),
+        }).returning();
+        return subExec.id;
+      },
+      completeSubExecution: async (subExecutionId, output, status, error) => {
+        if (isDebug) return;
+        await db.update(executions).set({
+          status,
+          output: output as any,
+          error: error || null,
+          completed_at: new Date(),
+        }).where(eq(executions.id, subExecutionId));
       },
     };
 
@@ -232,24 +273,31 @@ router.post(
           // Persist step lifecycle to the database
           if (!isDebug) {
             const data = event.data;
+            const hierarchy = event.hierarchy || (data.hierarchy as { path: string; depth: number } | undefined);
+            // For subflow steps, prefix node ID with parent hierarchy for unique identification
+            const prefix = hierarchy ? hierarchy.path.replace(/->/g, ':') + ':' : '';
             const resolvedNodeId = (data.nodeId as string) || nodeId;
+            const hierarchicalNodeId = prefix ? `${prefix}${resolvedNodeId}` : resolvedNodeId;
             const resolvedNodeType = (data.nodeType as string) || '';
             const iter = (data as any).iteration ?? 0;
 
             if (event.type === 'step.started') {
               await db.insert(executionSteps).values({
-                execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+                execution_id: exec.id, node_id: hierarchicalNodeId, node_type: resolvedNodeType,
                 node_label: data.nodeLabel as string | null, iteration: iter,
                 status: 'running', input: data.input as any, started_at: new Date(),
+                hierarchy: hierarchy as any || null,
               });
             } else if (event.type === 'step.completed') {
               await db.update(executionSteps).set({
                 status: 'completed', output: data.output as any, completed_at: new Date(),
-              }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
+                hierarchy: hierarchy as any || null,
+              }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, hierarchicalNodeId)));
             } else if (event.type === 'step.failed') {
               await db.update(executionSteps).set({
                 status: 'failed', error: data.error as string, completed_at: new Date(),
-              }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId)));
+                hierarchy: hierarchy as any || null,
+              }).where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, hierarchicalNodeId)));
             }
           }
 
@@ -512,6 +560,7 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
   }
 
   const executionContext = {
+    currentExecutionId: exec.id,
     getEndpoint: async (endpointId: string) => {
       const [ep] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, endpointId));
       if (!ep) return null;
@@ -543,44 +592,51 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
   try {
     const persistStep = async (_nodeId: string, event: SSEEvent) => {
       const data = event.data;
+      const hierarchy = event.hierarchy || (data.hierarchy as { path: string; depth: number } | undefined);
+      const prefix = hierarchy ? hierarchy.path.replace(/->/g, ':') + ':' : '';
       const resolvedNodeId = (data.nodeId as string) || _nodeId;
+      const hierarchicalNodeId = prefix ? `${prefix}${resolvedNodeId}` : resolvedNodeId;
       const resolvedNodeType = (data.nodeType as string) || '';
       const iter = (data as any).iteration ?? 0;
       try {
         if (event.type === 'step.started') {
           // Complete any existing running rows for this node (e.g., from a prior HITL pause)
           await db.update(executionSteps).set({ status: 'completed', completed_at: new Date() })
-            .where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId), eq(executionSteps.status, 'running')));
+            .where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, hierarchicalNodeId), eq(executionSteps.status, 'running')));
           // Upsert: update existing row for this (exec, node, iteration) or insert new
           const [existing] = await db.select({ id: executionSteps.id })
             .from(executionSteps)
-            .where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, resolvedNodeId), eq(executionSteps.iteration, iter)))
+            .where(and(eq(executionSteps.execution_id, exec.id), eq(executionSteps.node_id, hierarchicalNodeId), eq(executionSteps.iteration, iter)))
             .limit(1);
           if (existing) {
             await db.update(executionSteps).set({
               status: 'running', input: data.input as any, started_at: new Date(),
+              hierarchy: hierarchy as any || null,
             }).where(eq(executionSteps.id, existing.id));
           } else {
             await db.insert(executionSteps).values({
-              execution_id: exec.id, node_id: resolvedNodeId, node_type: resolvedNodeType,
+              execution_id: exec.id, node_id: hierarchicalNodeId, node_type: resolvedNodeType,
               node_label: data.nodeLabel as string | null, iteration: iter,
               status: 'running', input: data.input as any, started_at: new Date(),
+              hierarchy: hierarchy as any || null,
             });
           }
         } else if (event.type === 'step.completed') {
           await db.update(executionSteps).set({
             status: 'completed', output: data.output as any, completed_at: new Date(),
+            hierarchy: hierarchy as any || null,
           }).where(and(
             eq(executionSteps.execution_id, exec.id),
-            eq(executionSteps.node_id, resolvedNodeId),
+            eq(executionSteps.node_id, hierarchicalNodeId),
             eq(executionSteps.iteration, iter),
           ));
         } else if (event.type === 'step.failed') {
           await db.update(executionSteps).set({
             status: 'failed', error: data.error as string, completed_at: new Date(),
+            hierarchy: hierarchy as any || null,
           }).where(and(
             eq(executionSteps.execution_id, exec.id),
-            eq(executionSteps.node_id, resolvedNodeId),
+            eq(executionSteps.node_id, hierarchicalNodeId),
             eq(executionSteps.iteration, iter),
           ));
         }

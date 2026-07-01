@@ -16,6 +16,7 @@ interface StepEvent {
   nodeId?: string;
   data: Record<string, any>;
   timestamp: string;
+  hierarchy?: { path: string; depth: number };
 }
 
 interface StepInfo {
@@ -31,6 +32,7 @@ interface StepInfo {
   tokens: string[];
   iteration?: number;
   children?: Array<{ nodeId: string; type: string; output?: any; error?: string; status: string }>;
+  hierarchy?: { path: string; depth: number };
 }
 
 interface HistoryEntry {
@@ -387,6 +389,30 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
               }
               return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
             });
+          } else if (event.type === 'subflow.started') {
+            setSteps(prev => [...prev, {
+              nodeId,
+              nodeType: 'subflow',
+              nodeLabel: d.subflowLabel || 'Subflow',
+              status: 'running' as const,
+              input: d.input,
+              output: null,
+              error: null,
+              startedAt: event.timestamp,
+              completedAt: null,
+              tokens: [],
+              iteration: d.iteration ?? 0,
+              children: [],
+              hierarchy: event.hierarchy,
+            }]);
+          } else if (event.type === 'subflow.completed') {
+            setSteps(prev => prev.map(s =>
+              s.nodeId === nodeId ? { ...s, status: 'completed', output: d.output, completedAt: event.timestamp } : s
+            ));
+          } else if (event.type === 'subflow.failed') {
+            setSteps(prev => prev.map(s =>
+              s.nodeId === nodeId ? { ...s, status: 'failed', error: (d.error as string) || null, completedAt: event.timestamp } : s
+            ));
           } else if (event.type === 'execution.paused') {
             setHitlPause({
               executionId: event.executionId || '',

@@ -62,11 +62,17 @@ export interface ExecutionContext {
   searchSimilar?: (collectionName: string, queryEmbedding: number[], topK: number, minScore: number) => Promise<Array<{ documentId: string; chunkText: string; chunkIndex: number; similarity: number }>>;
   flowNodes?: Array<{ id: string; type: string; data: any }>;
   flowEdges?: Array<{ id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }>;
+  getFlow?: (flowId: string, ancestry?: string[]) => Promise<FlowDefinition | null>;
+  onSubExecution?: (data: { parentExecutionId: string; subflowNodeId: string; subflowId: string; input: Record<string, unknown>; depth: number; path: string }) => Promise<string>;
+  completeSubExecution?: (subExecutionId: string, output: Record<string, unknown>, status: 'completed' | 'failed', error?: string) => Promise<void>;
+  currentExecutionId?: string;
+  currentDepth?: number;
 }
 
 export class FlowExecutor {
   private abortController: AbortController;
   private currentRunId = '';
+  private currentOptions?: { replayFrom?: string; replayOutputs?: Record<string, unknown>; inputOverride?: Record<string, unknown>; initialIteration?: number };
 
   constructor() {
     this.abortController = new AbortController();
@@ -85,6 +91,7 @@ export class FlowExecutor {
   ): Promise<{ output: Record<string, unknown>; steps: ExecutionStep[] }> {
     const runId = randomUUID();
     this.currentRunId = runId;
+    this.currentOptions = options;
     const { sorted, cycles } = topologicalSort(flow.nodes, flow.edges);
 
     if (cycles.length > 0) {
@@ -454,7 +461,7 @@ export class FlowExecutor {
     return { output: uniqueOutput, steps };
   }
 
-  private compileFlow(sorted: FlowNode[], edges: FlowEdge[], flowInput?: Record<string, unknown>): string[] {
+  compileFlow(sorted: FlowNode[], edges: FlowEdge[], flowInput?: Record<string, unknown>): string[] {
     const errors: string[] = [];
     const computeSlug = (n: FlowNode) => slugify(n.data?.label || n.id);
 
@@ -498,6 +505,36 @@ export class FlowExecutor {
           const isFlowInputKey = flowInput ? label in flowInput : false;
           if (!isUpstreamNode && !isFlowInputKey && slugLabel !== '__input__') {
             errors.push(`Node "${node.data?.label || node.id}": template "{{input.${path}}}" references "${label}" which is not an upstream node nor a flow input key. Available upstream: ${Array.from(upstreamSlugs).join(', ') || '(none)'}`);
+          }
+        }
+      }
+
+      // Validate subflow nodes
+      if (node.data.type === 'subflow') {
+        const subflowConfig = (node.data as any).config || {};
+        const subflowId = subflowConfig.subflowId;
+
+        if (!subflowId) {
+          errors.push(`Node "${node.data?.label || node.id}": no subflow selected`);
+          continue;
+        }
+
+        // Check input mapping references real upstream nodes
+        const inputMapping = subflowConfig.inputMapping || {};
+        for (const [paramName, template] of Object.entries(inputMapping)) {
+          if (typeof template === 'string' && template.includes('{{')) {
+            const regex = /\{\{input\.([^}]+)\}\}/g;
+            let match;
+            while ((match = regex.exec(template)) !== null) {
+              const path = match[1].trim();
+              const label = path.split('.')[0];
+              const slugLabel = slugify(label);
+              const isUpstreamNode = upstreamSlugs.has(slugLabel);
+              const isFlowInputKey = flowInput ? label in flowInput : false;
+              if (!isUpstreamNode && !isFlowInputKey && slugLabel !== '__input__') {
+                errors.push(`Node "${node.data?.label || node.id}": subflow input mapping "${paramName}" references "${label}" which is not an upstream node nor a flow input key. Available upstream: ${Array.from(upstreamSlugs).join(', ') || '(none)'}`);
+              }
+            }
           }
         }
       }
@@ -955,6 +992,66 @@ export class FlowExecutor {
         return merged;
       }
 
+      case 'subflow': {
+        const config = (nodeData as any).config || {};
+        if (!config.subflowId) {
+          throw new Error('Subflow node: no subflow selected');
+        }
+        if (!context.getFlow) {
+          throw new Error('Subflow node: getFlow not available in execution context');
+        }
+
+        const subflowDef = await context.getFlow(config.subflowId, []);
+        if (!subflowDef) {
+          throw new Error(`Subflow node: subflow "${config.subflowId}" not found`);
+        }
+
+        const inputMapping = (config.inputMapping || {}) as Record<string, string>;
+        const subflowInput: Record<string, unknown> = {};
+        for (const [paramName, template] of Object.entries(inputMapping)) {
+          if (template && template.trim()) {
+            subflowInput[paramName] = resolveTemplate(template, input);
+          }
+        }
+
+        const subflowNodeLabel = slugify(node.data.label || node.id);
+
+        const replayFrom = this.currentOptions?.replayFrom;
+        let subflowReplayFrom: string | undefined;
+        let subflowReplayOutputs: Record<string, unknown> | undefined;
+
+        if (replayFrom && replayFrom.includes(':')) {
+          const [subflowPrefix, hitlNodeId] = replayFrom.split(':');
+          if (subflowPrefix === subflowNodeLabel || subflowPrefix === node.id) {
+            subflowReplayFrom = hitlNodeId;
+            const rawOutputs = this.currentOptions?.replayOutputs || {};
+            const filtered: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(rawOutputs)) {
+              if (k.startsWith(subflowPrefix + ':')) {
+                filtered[k.slice(subflowPrefix.length + 1)] = v;
+              }
+            }
+            subflowReplayOutputs = filtered;
+          }
+        }
+
+        const subflowDepth = (context.currentDepth ?? 0) + 1;
+        const subExecutor = new SubFlowExecutor(
+          this.abortController,
+          subflowDepth,
+          subflowNodeLabel,
+          [],
+        );
+
+        const subOptions: { replayFrom?: string; replayOutputs?: Record<string, unknown> } = {};
+        if (subflowReplayFrom) subOptions.replayFrom = subflowReplayFrom;
+        if (subflowReplayOutputs) subOptions.replayOutputs = subflowReplayOutputs;
+
+        const result = await subExecutor.execute(subflowDef, subflowInput, onEvent, context, Object.keys(subOptions).length > 0 ? subOptions : undefined);
+
+        return result.output;
+      }
+
       case 'hitl': {
         const inp = input as Record<string, unknown> | undefined;
         if (inp?._approved) {
@@ -1023,6 +1120,127 @@ export class FlowExecutor {
 
       default:
         throw new Error(`Unknown node type: ${(nodeData as any).type}`);
+    }
+  }
+}
+
+export class SubFlowExecutor {
+  private abortController: AbortController;
+  private depth: number;
+  private parentPath: string;
+  private ancestorFlowIds: string[];
+
+  constructor(
+    abortController: AbortController,
+    depth: number,
+    parentPath: string,
+    ancestorFlowIds: string[],
+  ) {
+    this.abortController = abortController;
+    this.depth = depth;
+    this.parentPath = parentPath;
+    this.ancestorFlowIds = ancestorFlowIds;
+  }
+
+  async execute(
+    flow: FlowDefinition,
+    input: Record<string, unknown>,
+    onEvent: EventCallback,
+    context: ExecutionContext,
+    options?: { replayFrom?: string; replayOutputs?: Record<string, unknown>; inputOverride?: Record<string, unknown>; initialIteration?: number },
+  ): Promise<{ output: Record<string, unknown>; steps: ExecutionStep[] }> {
+    const MAX_DEPTH = 10;
+    if (this.depth > MAX_DEPTH) throw new Error('Max subflow recursion depth (10) exceeded');
+
+    let subExecutionId = '';
+    if (context.onSubExecution) {
+      subExecutionId = await context.onSubExecution({
+        parentExecutionId: context.currentExecutionId || '',
+        subflowNodeId: this.parentPath,
+        subflowId: flow.id,
+        input,
+        depth: this.depth,
+        path: this.parentPath,
+      });
+    }
+
+    await onEvent(this.parentPath, {
+      type: 'subflow.started',
+      executionId: subExecutionId || '',
+      nodeId: this.parentPath,
+      data: { subflowNodeId: this.parentPath, subflowLabel: flow.name, input, depth: this.depth, subExecutionId },
+      timestamp: new Date().toISOString(),
+      hierarchy: { path: this.parentPath, depth: this.depth },
+    });
+
+    const subFlowExecutor = new FlowExecutor();
+
+    const wrappedOnEvent: EventCallback = async (nodeId, event) => {
+      const fullNodeId = this.parentPath ? `${this.parentPath}:${nodeId}` : nodeId;
+      const enrichedEvent: SSEEvent = {
+        ...event,
+        executionId: subExecutionId || event.executionId,
+        nodeId: fullNodeId,
+        hierarchy: { path: fullNodeId, depth: this.depth },
+      };
+      return onEvent(fullNodeId, enrichedEvent);
+    };
+
+    const subContext: ExecutionContext = {
+      ...context,
+      currentExecutionId: subExecutionId || context.currentExecutionId,
+      currentDepth: this.depth,
+      getFlow: context.getFlow
+        ? (flowId: string, ancestry?: string[]) => context.getFlow!(flowId, [...this.ancestorFlowIds, flow.id])
+        : undefined,
+    };
+
+    try {
+      const result = await subFlowExecutor.execute(
+        flow,
+        input,
+        wrappedOnEvent,
+        subContext,
+        options,
+      );
+
+      if (context.completeSubExecution && subExecutionId) {
+        await context.completeSubExecution(subExecutionId, result.output as Record<string, unknown>, 'completed');
+      }
+
+      await onEvent(this.parentPath, {
+        type: 'subflow.completed',
+        executionId: subExecutionId || '',
+        nodeId: this.parentPath,
+        data: { subflowNodeId: this.parentPath, subflowLabel: flow.name, output: result.output, depth: this.depth },
+        timestamp: new Date().toISOString(),
+        hierarchy: { path: this.parentPath, depth: this.depth },
+      });
+
+      return result;
+    } catch (err) {
+      if (err instanceof HitlPauseError || err instanceof FlowStopError) {
+        if (context.completeSubExecution && subExecutionId) {
+          await context.completeSubExecution(subExecutionId, {}, 'failed', 'Interrupted by HITL/stop');
+        }
+        throw err;
+      }
+
+      if (context.completeSubExecution && subExecutionId) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        await context.completeSubExecution(subExecutionId, {}, 'failed', errorMsg);
+      }
+
+      await onEvent(this.parentPath, {
+        type: 'subflow.failed',
+        executionId: subExecutionId || '',
+        nodeId: this.parentPath,
+        data: { subflowNodeId: this.parentPath, subflowLabel: flow.name, error: err instanceof Error ? err.message : String(err), depth: this.depth },
+        timestamp: new Date().toISOString(),
+        hierarchy: { path: this.parentPath, depth: this.depth },
+      });
+
+      throw err;
     }
   }
 }

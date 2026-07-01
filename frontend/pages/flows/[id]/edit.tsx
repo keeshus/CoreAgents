@@ -174,15 +174,16 @@ export default function FlowEditPage() {
     if (!id) return;
     if (typeof id !== 'string') return;
     if (id === 'new') {
+      const triggerTypeFromQuery = (router.query.triggerType as string) || 'manual';
       const triggerNode = {
         id: `node_${Date.now()}_trigger`,
         type: 'trigger',
         position: { x: 100, y: 200 },
-        data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual', inputSchema: '' } },
+        data: { label: 'Trigger', type: 'trigger', config: { triggerType: triggerTypeFromQuery, inputSchema: '' } },
       };
       setFlow({
         id: 'new',
-        name: 'New Flow',
+        name: triggerTypeFromQuery === 'subflow' ? 'New Subflow' : 'New Flow',
         description: '',
         nodes: [triggerNode],
         edges: [],
@@ -224,14 +225,16 @@ export default function FlowEditPage() {
   const persistFlow = useCallback(async (updates: Record<string, any>) => {
     if (!flow) return;
     if (flow.id === 'new') {
-      const created = await api.flows.create({ ...flow, ...updates });
+      const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger');
+      const isSubflow = triggerNode?.data?.config?.triggerType === 'subflow';
+      const created = await api.flows.create({ ...flow, ...updates, is_subflow: isSubflow });
       setFlow(created);
       router.replace(`/flows/${created.id}/edit`);
     } else {
       const updated = await api.flows.update(flow.id, { ...flow, ...updates });
       setFlow(updated);
     }
-  }, [flow, router]);
+  }, [flow, router, nodes]);
 
   const handleSave = useCallback(async () => {
     if (!flow || hasErrors) return;

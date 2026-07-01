@@ -13,6 +13,7 @@ const NODE_ICONS: Record<string, string> = {
   parallel: 'view_column',
   hitl: 'schedule',
   output: 'check_circle',
+  subflow: 'account_tree',
 };
 
 interface NodeCatalogProps {

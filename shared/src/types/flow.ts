@@ -12,6 +12,8 @@ export const NODE_TYPES = [
   'output',
   'parallel',
   'hitl',
+  'subflow',
+  'stop',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -32,7 +34,7 @@ export interface BaseNodeData {
 export interface TriggerNodeData extends BaseNodeData {
   type: 'trigger';
   config: {
-    triggerType: 'manual' | 'chat' | 'webhook' | 'schedule';
+    triggerType: 'manual' | 'chat' | 'webhook' | 'schedule' | 'subflow';
     webhookSecret?: string;
     cronExpression?: string;
     inputSchema?: string;
@@ -120,6 +122,14 @@ export interface HitlNodeData extends BaseNodeData {
   };
 }
 
+export interface SubflowNodeData extends BaseNodeData {
+  type: 'subflow';
+  config: {
+    subflowId: string;
+    inputMapping: Record<string, string>;
+  };
+}
+
 export type NodeData =
   | TriggerNodeData
   | LLMAgentNodeData
@@ -129,7 +139,8 @@ export type NodeData =
   | CodeNodeData
   | OutputNodeData
   | ParallelNodeData
-  | HitlNodeData;
+  | HitlNodeData
+  | SubflowNodeData;
 
 // ── Edge ─────────────────────────────────────────────────────
 
@@ -189,6 +200,9 @@ export interface Execution {
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
+  parentExecutionId?: string | null;
+  subflowNodeId?: string | null;
+  subflowDepth?: number;
 }
 
 export interface ExecutionStep {
@@ -202,6 +216,7 @@ export interface ExecutionStep {
   error: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  hierarchy?: { path: string; depth: number };
 }
 
 // ── SSE events ───────────────────────────────────────────────
@@ -212,6 +227,9 @@ export type SSEEventType =
   | 'step.completed'
   | 'step.failed'
   | 'step.skipped'
+  | 'subflow.started'
+  | 'subflow.completed'
+  | 'subflow.failed'
   | 'stream.token'
   | 'execution.completed'
   | 'execution.failed'
@@ -225,6 +243,7 @@ export interface SSEEvent {
   nodeId?: string;
   data: Record<string, unknown>;
   timestamp: string;
+  hierarchy?: { path: string; depth: number };
 }
 
 // ── Node catalog ─────────────────────────────────────────────

@@ -69,6 +69,15 @@ const catalog: NodeCatalogEntry[] = [
     outputs: 1,
   },
   {
+    type: 'subflow',
+    label: 'Subflow',
+    category: 'processing',
+    description: 'Execute another flow as a sub-routine. Pass input parameters and receive structured output.',
+    defaultConfig: { subflowId: '', inputMapping: {} },
+    inputs: 1,
+    outputs: 1,
+  },
+  {
     type: 'hitl',
     label: 'Human in the Loop',
     category: 'processing',
@@ -76,6 +85,15 @@ const catalog: NodeCatalogEntry[] = [
     defaultConfig: { prompt: 'Please review the following before continuing:', buttons: [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }], allowFeedback: true },
     inputs: 1,
     outputs: 1,
+  },
+  {
+    type: 'stop',
+    label: 'Stop',
+    category: 'processing',
+    description: 'Terminate execution with a status. Can be used to end a flow branch early.',
+    defaultConfig: { status: 'completed', message: '' },
+    inputs: 1,
+    outputs: 0,
   },
   {
     type: 'output',

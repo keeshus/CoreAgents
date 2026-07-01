@@ -1,5 +1,6 @@
 import {
   boolean,
+  foreignKey,
   integer,
   jsonb,
   pgEnum,
@@ -79,6 +80,7 @@ export const flows = pgTable('flows', {
   version: integer('version').notNull().default(1),
   created_by: uuid('created_by').references(() => users.id),
   group_id: uuid('group_id').references(() => groups.id),
+  is_subflow: boolean('is_subflow').notNull().default(false),
   created_at: timestamp('created_at').notNull().defaultNow(),
   updated_at: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -107,8 +109,16 @@ export const executions = pgTable('executions', {
   pending_hitls: jsonb('pending_hitls').default('[]'),
   started_at: timestamp('started_at'),
   completed_at: timestamp('completed_at'),
+  parent_execution_id: uuid('parent_execution_id'),
+  subflow_node_id: text('subflow_node_id'),
+  subflow_depth: integer('subflow_depth').notNull().default(0),
   created_at: timestamp('created_at').notNull().defaultNow(),
-});
+}, (table) => ({
+  parentExecutionRef: foreignKey({
+    columns: [table.parent_execution_id],
+    foreignColumns: [table.id],
+  }),
+}));
 
 export const executionSteps = pgTable('execution_steps', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -123,6 +133,7 @@ export const executionSteps = pgTable('execution_steps', {
   input: jsonb('input'),
   output: jsonb('output'),
   error: text('error'),
+  hierarchy: jsonb('hierarchy'),
   started_at: timestamp('started_at'),
   completed_at: timestamp('completed_at'),
 });
