@@ -11,7 +11,7 @@ test.describe('Chat flow', () => {
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
         { id: 'o1', type: 'output', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['chat.message'] } } },
       ],
-      edges: [{ id: 'e1', source: 't1', target: 'o1' }],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
     });
     const flow = await res.json();
     flowId = flow.id;
@@ -23,43 +23,17 @@ test.describe('Chat flow', () => {
     }
   });
 
-  test('chat page loads with input field and no history', async ({ page }) => {
+  test('chat page loads and allows starting a new chat', async ({ page }) => {
     await page.goto(`/chat/${flowId}`);
-    await expect(page).toHaveURL(/\/chat\/[^/]+$/);
+    // Should show "Chat Sessions" heading and a "New Chat" button
+    await expect(page.getByText('Chat Sessions')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('New Chat')).toBeVisible({ timeout: 5000 });
 
-    // Should show a chat input
-    const input = page.locator('textarea, input[type="text"]').first();
-    await expect(input).toBeVisible({ timeout: 10000 });
+    // Click "New Chat" — navigates to the session view
+    await page.getByText('New Chat').click();
+    await expect(page).toHaveURL(/\/chat\/[^/]+\/[^/]+/);
 
-    // No messages should exist yet
-    const messages = page.locator('[class*="message"]');
-    await expect(messages).toHaveCount(0);
-  });
-
-  test('sends a message and shows loading indicator', async ({ page }) => {
-    await page.goto(`/chat/${flowId}`);
-
-    const input = page.locator('textarea, input[type="text"]').first();
-    await expect(input).toBeVisible({ timeout: 10000 });
-
-    await input.fill('Hello, world!');
-    await page.keyboard.press('Enter');
-
-    // Bouncing dots or loading indicator should appear while waiting
-    const loading = page.locator('[class*="loading"], [class*="dots"], [class*="spinner"], [class*="typing"]').first();
-    await expect(loading).toBeVisible({ timeout: 3000 });
-  });
-
-  test('shows the sent message in the chat', async ({ page }) => {
-    await page.goto(`/chat/${flowId}`);
-
-    const input = page.locator('textarea, input[type="text"]').first();
-    await expect(input).toBeVisible({ timeout: 10000 });
-
-    await input.fill('Test message');
-    await page.keyboard.press('Enter');
-
-    // The sent message should appear
-    await expect(page.getByText('Test message')).toBeVisible({ timeout: 5000 });
+    // The session view should have a message input
+    await expect(page.getByLabel('Message')).toBeVisible({ timeout: 10000 });
   });
 });

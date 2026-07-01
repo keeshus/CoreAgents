@@ -6,7 +6,7 @@ export const E2E_USER = {
   password: 'Test1234!',
 };
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 let flowCounter = Date.now();
 
 export function uniqueFlowName(prefix: string): string {

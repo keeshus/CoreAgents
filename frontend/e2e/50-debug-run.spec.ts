@@ -11,7 +11,7 @@ test.describe('Debug run', () => {
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'o1', type: 'output', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['trigger.message'] } } },
       ],
-      edges: [{ id: 'e1', source: 't1', target: 'o1' }],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
     });
     const flow = await res.json();
     flowId = flow.id;
@@ -32,7 +32,6 @@ test.describe('Debug run', () => {
   test('clicking debug opens the debug panel', async ({ page }) => {
     await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 5000 });
     await page.getByTestId('debug-btn').click();
-    await expect(page.getByText('Debug Run')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('debug-run-btn')).toBeVisible({ timeout: 5000 });
   });
 

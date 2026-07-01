@@ -11,9 +11,14 @@ COPY shared/package*.json ./shared/
 COPY shared/tsconfig.json ./shared/
 COPY shared/src ./shared/src/
 
+# Worker source (needed by backend for runtime imports)
+COPY worker/package*.json ./worker/
+COPY worker/tsconfig.json ./worker/
+COPY worker/src ./worker/src/
+
 # Backend deps
 COPY backend/package*.json ./backend/
-RUN npm install -w shared -w backend --omit=dev && npm cache clean --force
+RUN npm install -w shared -w worker -w backend && npm cache clean --force
 
 # Backend source + build
 COPY backend/tsconfig.build.json ./backend/tsconfig.json

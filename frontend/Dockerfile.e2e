@@ -1,0 +1,23 @@
+# ── Core Agents Frontend (E2E dev mode) ───────────────────────────
+FROM node:25-alpine
+
+WORKDIR /app/monorepo
+
+COPY package*.json ./
+COPY shared/package*.json ./shared/
+COPY shared/tsconfig.json ./shared/
+COPY shared/src ./shared/src/
+COPY frontend/package*.json ./frontend/
+
+RUN npm install -w shared -w frontend && npm cache clean --force
+
+COPY frontend/tsconfig.json ./frontend/
+COPY frontend/next.config.js ./frontend/
+COPY frontend/postcss.config.mjs ./frontend/
+COPY frontend/src ./frontend/src/
+COPY frontend/pages ./frontend/pages/
+COPY frontend/public ./frontend/public/
+
+WORKDIR /app/monorepo/frontend
+EXPOSE 3000
+CMD ["npx", "next", "dev", "-p", "3000", "-H", "0.0.0.0"]

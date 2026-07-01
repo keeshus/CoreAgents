@@ -1,27 +1,10 @@
-# ── Core Agents E2E Test Infrastructure ────────────────────────────
-# Start:   docker compose -f docker-compose.e2e.yml up -d --wait
-# Stop:    docker compose -f docker-compose.e2e.yml down -v --timeout 10
-#
-# All services use tmpfs (in-memory) volumes so `down -v` fully
-# destroys all state without touching dev volumes.
-# Container names are prefixed with `core-agents-e2e-` to avoid
-# conflicting with the dev stack.
-#
-# Database schema is synced separately via `drizzle-kit push`:
-#   cd backend && DATABASE_URL=postgres://coreagents:coreagents@localhost:5432/coreagents npx drizzle-kit push
+# ── Core Agents E2E Test (app + infra in Docker, Playwright on host) ─
+# Start:  docker compose -f docker-compose.e2e.yml up -d --wait
+# Stop:   docker compose -f docker-compose.e2e.yml down -v --timeout 10
+# Run:    npx playwright test --config frontend/playwright.config.ts
+# Debug:  npx playwright test --config frontend/playwright.config.ts --headed
 
 services:
-  nginx-e2e:
-    image: nginx:alpine
-    container_name: core-agents-e2e-nginx
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./nginx.e2e.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - postgres-e2e
-    restart: unless-stopped
-
   postgres-e2e:
     image: postgres:17-alpine
     container_name: core-agents-e2e-db
@@ -55,3 +38,51 @@ services:
     command: valkey-server --requirepass dev-valkey
     tmpfs: /data
     restart: unless-stopped
+
+  db-migrate-e2e:
+    image: node:25-alpine
+    container_name: core-agents-e2e-migrate
+    working_dir: /repo
+    volumes:
+      - .:/repo
+    entrypoint:
+      - sh
+      - -c
+      - cd backend && DATABASE_URL=postgres://coreagents:coreagents@postgres-e2e:5432/coreagents npx drizzle-kit push --config drizzle.config.ts
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+
+  backend-e2e:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.e2e
+    container_name: core-agents-e2e-backend
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
+      JWT_SECRET: e2e-test-secret
+      FRONTEND_URL: http://localhost:3000
+      VALKEY_HOST: valkey-e2e
+      VALKEY_PASSWORD: dev-valkey
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      db-migrate-e2e:
+        condition: service_completed_successfully
+
+  frontend-e2e:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.e2e
+    container_name: core-agents-e2e-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_URL: http://backend-e2e:3001
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - backend-e2e

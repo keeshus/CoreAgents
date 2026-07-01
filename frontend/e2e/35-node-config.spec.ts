@@ -11,7 +11,7 @@ test.describe('Node configuration modal', () => {
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: {} } },
         { id: 'o1', type: 'output', position: { x: 400, y: 0 }, data: { label: 'Output', type: 'output', config: {} } },
       ],
-      edges: [{ id: 'e1', source: 't1', target: 'o1' }],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
     });
     const flow = await res.json();
     flowId = flow.id;
