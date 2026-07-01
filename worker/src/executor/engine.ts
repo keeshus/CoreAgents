@@ -580,16 +580,15 @@ export class FlowExecutor {
               const server = await context.getMCPServer!(mcpConfig.serverId);
               if (server) {
                 const serverTools = server.tools || [];
-                if (mcpConfig.toolName === '*') {
-                  for (const tool of serverTools) {
-                    toolDefs.push({
-                      name: tool.name,
-                      description: tool.description || '',
-                      input_schema: tool.inputSchema || {},
-                    });
-                  }
-                } else if (mcpConfig.toolName) {
-                  const tool = serverTools.find((t: any) => t.name === mcpConfig.toolName);
+                const selected: string[] = mcpConfig.toolNames?.length
+                  ? mcpConfig.toolNames
+                  : mcpConfig.toolName
+                    ? mcpConfig.toolName === '*' ? serverTools.map((t: any) => t.name) : [mcpConfig.toolName]
+                    : [];
+                // Empty selection = all tools pass through
+                const toolList = selected.length > 0 ? selected : serverTools.map((t: any) => t.name);
+                for (const toolName of toolList) {
+                  const tool = serverTools.find((t: any) => t.name === toolName);
                   if (tool) {
                     toolDefs.push({
                       name: tool.name,
@@ -710,7 +709,13 @@ export class FlowExecutor {
                 const mcpNode = context.flowNodes?.find((n: any) => n.id === edge.source);
                 if (!mcpNode) continue;
                 const mcpConfig = (mcpNode.data as any).config || {};
-                const toolMatch = mcpConfig.toolName === '*' || mcpConfig.toolName === tc.name;
+                const mcpToolNames: string[] = mcpConfig.toolNames?.length
+                  ? mcpConfig.toolNames
+                  : mcpConfig.toolName
+                    ? mcpConfig.toolName === '*' ? [] : [mcpConfig.toolName]
+                    : [];
+                // Empty selection = all tools on this node match
+                const toolMatch = mcpToolNames.length === 0 || mcpToolNames.includes(tc.name);
                 if (toolMatch && mcpConfig.serverId) {
                   const { mcpHub } = await import('../tools/hub.js');
                   const server = await context.getMCPServer!(mcpConfig.serverId);

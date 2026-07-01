@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api-client';
 import { SelectField } from '@/components/ui/SelectField';
 
@@ -6,6 +6,7 @@ interface MCPToolConfigProps {
   config: {
     serverId: string;
     toolName: string;
+    toolNames: string[];
     parameters: Record<string, any>;
   };
   onChange: (config: any) => void;
@@ -24,6 +25,31 @@ export function MCPToolConfig({ config, onChange }: MCPToolConfigProps) {
     setSelectedServer(srv || null);
   }, [config.serverId, servers]);
 
+  const toolNames: string[] = config.toolNames || [];
+  const tools = selectedServer?.tools || [];
+  const allSelected = tools.length > 0 && toolNames.length === tools.length;
+  const noneSelected = toolNames.length === 0;
+
+  const setToolNames = useCallback((names: string[]) => {
+    onChange({ ...config, toolName: '', toolNames: names });
+  }, [config, onChange]);
+
+  const toggleTool = useCallback((name: string) => {
+    if (toolNames.includes(name)) {
+      setToolNames(toolNames.filter(n => n !== name));
+    } else {
+      setToolNames([...toolNames, name]);
+    }
+  }, [toolNames, setToolNames]);
+
+  const selectAll = useCallback(() => {
+    setToolNames(tools.map((t: any) => t.name));
+  }, [tools, setToolNames]);
+
+  const selectNone = useCallback(() => {
+    setToolNames([]);
+  }, [setToolNames]);
+
   return (
     <div className="space-y-3">
       <SelectField
@@ -31,7 +57,7 @@ export function MCPToolConfig({ config, onChange }: MCPToolConfigProps) {
         value={config.serverId}
         onChange={(v) => {
           const srv = servers.find((s: any) => s.id === v);
-          onChange({ ...config, serverId: v, serverName: srv?.name || '', toolName: '' });
+          onChange({ ...config, serverId: v, serverName: srv?.name || '', toolName: '', toolNames: [] });
         }}
         options={[
           { value: '', label: 'Select server...' },
@@ -39,33 +65,54 @@ export function MCPToolConfig({ config, onChange }: MCPToolConfigProps) {
         ]}
       />
 
-      {selectedServer && selectedServer.tools?.length > 0 && (
+      {selectedServer && tools.length > 0 && (
         <div>
-          <SelectField
-            label="Tool"
-            value={config.toolName}
-            onChange={(v) => onChange({ ...config, toolName: v })}
-            options={[
-              { value: '', label: 'Select tool...' },
-              { value: '*', label: 'All tools' },
-              ...selectedServer.tools.map((t: any) => ({ value: t.name, label: t.name })),
-            ]}
-          />
-          {config.toolName === '*' && (
-            <p className="mt-1 text-[10px] text-on-surface-variant">
-              All {selectedServer.tools.length} tools from this server will be available to the LLM Agent.
-            </p>
-          )}
-          {config.toolName && config.toolName !== '*' && (
-            <p className="mt-1 text-[10px] text-on-surface-variant">
-              {selectedServer.tools.find((t: any) => t.name === config.toolName)
-                ?.description || ''}
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider">
+              Tools
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={selectAll}
+                disabled={allSelected}
+                className="text-[10px] text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
+              >Select all</button>
+              <button
+                type="button"
+                onClick={selectNone}
+                disabled={noneSelected}
+                className="text-[10px] text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
+              >Select none</button>
+            </div>
+          </div>
+          <div className="bg-surface border border-outline-variant rounded p-2 space-y-0.5 max-h-48 overflow-y-auto">
+            {tools.map((t: any) => (
+              <label key={t.name} className="flex items-center gap-2 cursor-pointer hover:bg-surface-container rounded px-1 py-0.5">
+                <input
+                  type="checkbox"
+                  checked={toolNames.includes(t.name)}
+                  onChange={() => toggleTool(t.name)}
+                  className="w-3 h-3 accent-primary"
+                />
+                <span className="text-xs font-mono text-on-surface">{t.name}</span>
+                {t.description && (
+                  <span className="text-[9px] text-on-surface-variant truncate ml-auto max-w-[200px]">
+                    {t.description}
+                  </span>
+                )}
+              </label>
+            ))}
+          </div>
+          {noneSelected && (
+            <p className="text-[10px] text-on-surface-variant italic pt-1 border-t border-surface-container-high mt-1">
+              None selected = all tools pass through
             </p>
           )}
         </div>
       )}
 
-      {config.toolName && (
+      {selectedServer && (
         <div>
           <span className="text-xs font-medium text-on-surface-variant">Parameters</span>
           <p className="text-[10px] text-on-surface-variant mt-1">
