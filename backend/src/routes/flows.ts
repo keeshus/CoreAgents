@@ -62,6 +62,12 @@ router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
+    // Validate UUID format — PostgreSQL rejects non-UUID comparisons
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      res.status(404).json({ error: 'Flow not found' });
+      return;
+    }
     const result = await db.select({
       id: flows.id,
       name: flows.name,
