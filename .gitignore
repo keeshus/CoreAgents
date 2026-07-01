@@ -20,6 +20,7 @@ yarn-error.log*
 .idea
 .vscode
 example-transaction-files/
+frontend/e2e/.auth/
 error
 ponto-key
 gemini-key.claude/

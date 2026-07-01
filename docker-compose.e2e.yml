@@ -1,0 +1,59 @@
+# ── Core Agents E2E Test Infrastructure ────────────────────────────
+# Start:   docker compose -f docker-compose.e2e.yml up -d --wait
+# Stop:    docker compose -f docker-compose.e2e.yml down -v --timeout 10
+#
+# All services use tmpfs (in-memory) volumes so `down -v` fully
+# destroys all state without touching dev volumes or named volumes.
+# Container names are prefixed with `core-agents-e2e-` to avoid
+# conflicting with the dev stack.
+
+services:
+  postgres-e2e:
+    image: postgres:17-alpine
+    container_name: core-agents-e2e-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: coreagents
+      POSTGRES_PASSWORD: coreagents
+      POSTGRES_DB: coreagents
+    tmpfs: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coreagents"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  qdrant-e2e:
+    image: qdrant/qdrant:v1.18.0
+    container_name: core-agents-e2e-qdrant
+    ports:
+      - "6333:6333"
+    tmpfs: /qdrant/storage
+    restart: unless-stopped
+
+  valkey-e2e:
+    image: valkey/valkey:7-alpine
+    container_name: core-agents-e2e-valkey
+    ports:
+      - "6379:6379"
+    command: valkey-server --requirepass e2e-valkey
+    tmpfs: /data
+    restart: unless-stopped
+
+  db-migrate:
+    image: node:25-alpine
+    container_name: core-agents-e2e-migrate
+    working_dir: /repo
+    entrypoint:
+      - npx
+      - tsx
+      - backend/src/db/migrate.ts
+    volumes:
+      - .:/repo
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents

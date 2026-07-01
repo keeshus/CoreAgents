@@ -22,7 +22,11 @@
     "shared:typecheck": "npm run typecheck -w shared",
     "db:generate": "npm run db:generate -w backend",
     "db:migrate": "npm run db:migrate -w backend",
-    "db:push": "cd backend && drizzle-kit push"
+    "db:push": "cd backend && drizzle-kit push",
+    "test:e2e:up": "docker compose -f docker-compose.e2e.yml up -d --wait",
+    "test:e2e:down": "docker compose -f docker-compose.e2e.yml down -v --timeout 10",
+    "test:e2e:run": "playwright test --config frontend/playwright.config.ts",
+    "test:e2e": "npm run test:e2e:up && npm run test:e2e:run && npm run test:e2e:down"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",
