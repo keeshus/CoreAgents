@@ -105,19 +105,19 @@ describe('FlowExecutor', () => {
     expect(result.steps.every(s => s.nodeId !== 'llm2')).toBe(true);
   });
 
-  it('filters input to only specified inputFields', async () => {
-    // Code node with inputFields: ['message'] — only 'message' should be passed
+  it('output node filters input to only specified inputFields', async () => {
+    // Output node with inputFields: ['message'] — when paired with a dot-path field,
+    // only that field value should be returned
     const flow = makeFlow(
       [
         makeNode('trigger', 'trigger'),
-        makeNode('code', 'code', {
+        makeNode('output', 'output', {
           config: {
-            inputFields: ['message'],
-            code: 'return Object.keys(input);',
+            inputFields: ['trigger.message'],
           },
         }),
       ],
-      [makeEdge('e1', 'trigger', 'code')],
+      [makeEdge('e1', 'trigger', 'output')],
     );
 
     const result = await executor.execute(
@@ -127,8 +127,8 @@ describe('FlowExecutor', () => {
       context,
     );
 
-    const keysReceived = result.output.code;
-    expect(keysReceived).toEqual(['message']);
+    // Output node extracts 'trigger.message' from upstream data
+    expect(result.output?.output).toBe('hello');
   });
 
   it('throws HitlPauseError when executing a HITL node on first run', async () => {

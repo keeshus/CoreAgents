@@ -150,67 +150,104 @@ export function NodeConfigModal({
 
         {/* ── Scrollable body ── */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* ── Input Field Selection ── */}
+          {/* ── Available Variables / Output Field Selection ── */}
           {upstreamLabels.length > 0 && (
             <div className="mb-4">
-              <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
-                {node.data.type === 'output' ? 'Select Output Fields' : 'Select Input Nodes'}
-              </h4>
-              <div className="flex items-center justify-end mb-1">
-                <button
-                  type="button"
-                  onClick={() => onConfigChange({ inputFields: [] })}
-                  disabled={configInputFields.length === 0}
-                  className="text-[10px] text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
-                >Select none</button>
-              </div>
-              <div className="bg-surface border border-outline-variant rounded p-2 space-y-1">
-                  {upstreamLabels.map((label) => {
-                    const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
-                    const allFields = upNode ? getNodeFields(upNode) : [];
-                    const fields = upNode ? getNodeFields(upNode) : [];
-                  const labelSelected = configInputFields.includes(label);
-                  return (
-                    <div key={label}>
-                      <label className="flex items-center gap-2 cursor-pointer hover:bg-surface-container rounded px-1 py-0.5">
-                        <input
-                          type="checkbox"
-                          checked={labelSelected}
-                          onChange={() => toggleField(label)}
-                          className="w-3 h-3 accent-primary"
-                        />
-                        <span className="text-xs font-semibold text-on-surface">{label}</span>
-                        <span className="text-[10px] text-on-surface-variant">({fields.length} fields)</span>
-                      </label>
-                      {fields.length > 0 && (
-                        <div className="ml-5 pl-3 border-l border-outline-variant space-y-0.5 mb-1">
-                          {fields.map((f) => {
-                            const fp = `${label}.${f.name}`;
-                            const checked = labelSelected || configInputFields.includes(fp);
-                            return (
-                              <label key={fp} className="flex items-center gap-2 cursor-pointer hover:bg-surface-container rounded px-1 py-0.5">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => toggleField(fp)}
-                                  className="w-2.5 h-2.5 accent-primary"
-                                />
-                                <span className="text-[10px] font-mono text-on-surface-variant">{f.name}</span>
-                                <span className="text-[9px] text-outline-variant">: {f.type}</span>
-                              </label>
-                            );
-                          })}
+              {node.data.type === 'output' ? (
+                <>
+                  <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+                    Select Output Fields
+                  </h4>
+                  <div className="flex items-center justify-end mb-1">
+                    <button
+                      type="button"
+                      onClick={() => onConfigChange({ inputFields: [] })}
+                      disabled={configInputFields.length === 0}
+                      className="text-[10px] text-primary hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
+                    >Select none</button>
+                  </div>
+                  <div className="bg-surface border border-outline-variant rounded p-2 space-y-1">
+                    {upstreamLabels.map((label) => {
+                      const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
+                      const fields = upNode ? getNodeFields(upNode) : [];
+                      const labelSelected = configInputFields.includes(label);
+                      return (
+                        <div key={label}>
+                          <label className="flex items-center gap-2 cursor-pointer hover:bg-surface-container rounded px-1 py-0.5">
+                            <input
+                              type="checkbox"
+                              checked={labelSelected}
+                              onChange={() => toggleField(label)}
+                              className="w-3 h-3 accent-primary"
+                            />
+                            <span className="text-xs font-semibold text-on-surface">{label}</span>
+                            <span className="text-[10px] text-on-surface-variant">({fields.length} fields)</span>
+                          </label>
+                          {fields.length > 0 && (
+                            <div className="ml-5 pl-3 border-l border-outline-variant space-y-0.5 mb-1">
+                              {fields.map((f) => {
+                                const fp = `${label}.${f.name}`;
+                                const checked = labelSelected || configInputFields.includes(fp);
+                                return (
+                                  <label key={fp} className="flex items-center gap-2 cursor-pointer hover:bg-surface-container rounded px-1 py-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleField(fp)}
+                                      className="w-2.5 h-2.5 accent-primary"
+                                    />
+                                    <span className="text-[10px] font-mono text-on-surface-variant">{f.name}</span>
+                                    <span className="text-[9px] text-outline-variant">: {f.type}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {configInputFields.length === 0 && upstreamLabels.length > 0 && (
-                  <p className="text-[10px] text-on-surface-variant italic pt-1 border-t border-surface-container-high mt-1">
-                    None selected = all data passes through
+                      );
+                    })}
+                    {configInputFields.length === 0 && (
+                      <p className="text-[10px] text-on-surface-variant italic pt-1 border-t border-surface-container-high mt-1">
+                        None selected = all data passes through
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
+                    Available Variables
+                  </h4>
+                  <p className="text-[10px] text-on-surface-variant mb-2">
+                    Use these as <code className="font-mono bg-surface-container px-1 rounded">{'{{input.Label.field}}'}</code> in templates below.
                   </p>
-                )}
-              </div>
+                  <div className="bg-surface border border-outline-variant rounded p-2 space-y-1">
+                    {upstreamLabels.map((label) => {
+                      const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
+                      const fields = upNode ? getNodeFields(upNode) : [];
+                      return (
+                        <div key={label}>
+                          <div className="flex items-center gap-2 px-1 py-0.5">
+                            <Icon name="input" className="text-sm text-on-surface-variant shrink-0" />
+                            <span className="text-xs font-semibold text-on-surface">{label}</span>
+                            <span className="text-[10px] text-on-surface-variant">({fields.length} fields)</span>
+                          </div>
+                          {fields.length > 0 && (
+                            <div className="ml-6 pl-3 border-l border-outline-variant space-y-0.5 mb-1">
+                              {fields.map((f) => (
+                                <div key={f.name} className="flex items-center gap-2 px-1 py-0.5">
+                                  <span className="text-[10px] font-mono text-on-surface-variant">{f.name}</span>
+                                  <span className="text-[9px] text-outline-variant">: {f.type}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

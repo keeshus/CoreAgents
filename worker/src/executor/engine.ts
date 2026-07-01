@@ -248,11 +248,11 @@ export class FlowExecutor {
 
       const stepInput = this.prepareInput(node, flow.edges, nodeOutputs);
 
-      // If node has inputFields set, filter stepInput to only those fields
-      // Supports dot-notation paths like "Label.fieldname" for nested access
+      // If node is output type and has inputFields set, filter stepInput to only those fields
+      // Non-output nodes always receive all data — templates give full control over what's used
       const nodeConfig = (node.data as any)?.config || {};
       const inputFields = nodeConfig.inputFields as string[] | undefined;
-      const filteredInput = inputFields && inputFields.length > 0 && stepInput && typeof stepInput === 'object'
+      const filteredInput = (node.data.type === 'output') && inputFields && inputFields.length > 0 && stepInput && typeof stepInput === 'object'
         ? (() => {
             const result: Record<string, unknown> = {};
             const input = stepInput as Record<string, unknown>;
@@ -463,7 +463,8 @@ export class FlowExecutor {
       }
 
       // Validate inputFields: check that path references an upstream slug OR a flow input key
-      const inputFields: string[] = config.inputFields || [];
+      // Only relevant for output nodes — other nodes pass all data through
+      const inputFields: string[] = node.data.type === 'output' ? (config.inputFields || []) : [];
       for (const field of inputFields) {
         const dot = field.indexOf('.');
         const rawLabel = dot === -1 ? field : field.slice(0, dot);
