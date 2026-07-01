@@ -64,7 +64,6 @@
 
 ## E2E Tests
 - **ALWAYS run E2E tests before committing and pushing any changes** — they catch regressions in both frontend and backend.
-- **ALWAYS run and update unit tests before committing and pushing** — run `npm test` across all workspaces (shared, worker, backend, frontend) and update any tests that break due to your changes.
 - Workflow:
   ```bash
   # Start Docker stack (infra + backend + frontend + worker + mock-llm)
@@ -87,6 +86,7 @@
 
 ## Checking for compliance
 - Run `npm run build` to catch TypeScript errors.
+- **ALWAYS run and update unit tests before committing and pushing** — run `npm test` across all workspaces (shared, worker, backend, frontend) and update any tests that break due to your changes.
 - Run E2E tests before every commit.
 - Visually confirm all icons render correctly in both light and dark modes.
 - If the flow editor returns 404 after a git pull/restart, delete `frontend/.next/dev/types/routes.d.ts` and restart Next.js — it's a generated file that can get corrupted.
