@@ -7,7 +7,8 @@ test.describe('Flows overview', () => {
   });
 
   test('shows flows list heading', async ({ page }) => {
-    await expect(page.getByText('Flows')).toBeVisible();
+    await page.goto('/');
+    await expect(page.getByText('Flows').first()).toBeVisible();
   });
 
   test('shows new flow button', async ({ page }) => {

@@ -21,6 +21,8 @@ async function main() {
       inputMessage: string | undefined;
       nodes: any[];
       edges: any[];
+      flowContext: string;
+      groupId: string | undefined;
     }> = [];
 
     for (const flow of allFlows) {

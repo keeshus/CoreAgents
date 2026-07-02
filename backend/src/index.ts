@@ -23,6 +23,7 @@ import adminRouter from './routes/admin.js';
 import agentContextsRouter from './routes/agent-contexts.js';
 import groupsRouter from './routes/groups.js';
 import ssoConfigRouter from './routes/sso-config.js';
+import settingsRouter from './routes/settings.js';
 import { authenticate } from './middleware/auth.js';
 import { asyncHandler } from './utils/async-handler.js';
 
@@ -87,6 +88,7 @@ app.use('/api', authenticate, adminRouter); // Handles /api/users/* and /api/rol
 app.use('/api/agent-contexts', authenticate, agentContextsRouter);
 app.use('/api/groups', authenticate, groupsRouter);
 app.use('/api/admin/sso-config', authenticate, ssoConfigRouter);
+app.use('/api/settings', authenticate, settingsRouter);
 
 // Global error handler (Express 5)
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

@@ -52,11 +52,11 @@ router.get('/:id', requirePermission('group:read'), asyncHandler(async (req, res
 
 // POST /api/groups — create a local group (requires group:write)
 router.post('/', requirePermission('group:write'), asyncHandler(async (req, res) => {
-  const { name, description = '' } = req.body || {};
+  const { name, description = '', context = '' } = req.body || {};
   if (!name || !name.trim()) { res.status(400).json({ error: 'Group name is required' }); return; }
   const [existing] = await db.select().from(groups).where(eq(groups.name, name.trim()));
   if (existing) { res.status(409).json({ error: 'A group with this name already exists' }); return; }
-  const [group] = await db.insert(groups).values({ name: name.trim(), description, provider: 'local' }).returning();
+  const [group] = await db.insert(groups).values({ name: name.trim(), description, context, provider: 'local' }).returning();
   res.status(201).json(group);
 }));
 
