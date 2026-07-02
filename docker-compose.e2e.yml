@@ -64,6 +64,7 @@ services:
       PORT: "3001"
       DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
       JWT_SECRET: e2e-test-secret
+      NODE_ENV: e2e
       FRONTEND_URL: http://localhost:3000
       VALKEY_HOST: valkey-e2e
       VALKEY_PASSWORD: dev-valkey

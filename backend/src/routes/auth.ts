@@ -14,10 +14,6 @@ const router = Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// In-memory store for OIDC refresh tokens (per-user)
-// Keyed by userId, value is { refreshToken, expiresAt (unix ts) }
-const oidcTokenStore = new Map<string, { refreshToken: string; expiresAt: number }>();
-
 // Helper to read SSO config from DB
 async function getSSOConfig() {
   const [config] = await db.select().from(ssoConfig).where(eq(ssoConfig.id, 1));
@@ -32,9 +28,12 @@ function resolveRoleFromGroups(groupNames: string[], adminMapping: string[], edi
 }
 
 async function getOidcClient(issuer: string, clientId: string, clientSecret: string) {
-  const oidcConfig = await oidc.discovery(new URL(issuer), clientId, undefined, oidc.ClientSecretBasic(clientSecret), {
-    execute: [oidc.allowInsecureRequests],
-  });
+  const options: any = {};
+  // Allow HTTP for local/e2e — production always uses HTTPS
+  if (process.env.NODE_ENV !== 'production') {
+    options.execute = [oidc.allowInsecureRequests];
+  }
+  const oidcConfig = await oidc.discovery(new URL(issuer), clientId, undefined, oidc.ClientSecretBasic(clientSecret), options);
   return oidcConfig;
 }
 
@@ -80,7 +79,17 @@ router.get('/sso/login', asyncHandler(async (_req, res) => {
     });
     res.cookie('sso_state', state, { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
     res.cookie('sso_nonce', nonce, { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
-    res.redirect(String(authUrl).replace('dex-e2e', 'localhost').replace('mock-oidc-e2e', 'localhost'));
+
+    let authUrlStr = String(authUrl);
+    // In E2E tests the issuer container hostname is not reachable from the
+    // browser — substitute it with localhost so the redirect works.
+    if (process.env.NODE_ENV === 'e2e') {
+      const issuerHost = new URL(config.issuer).hostname;
+      if (issuerHost !== 'localhost') {
+        authUrlStr = authUrlStr.replace(issuerHost, 'localhost');
+      }
+    }
+    res.redirect(authUrlStr);
   } catch (err) {
     console.error('SSO login error:', err);
     res.status(500).json({ error: 'Failed to initiate SSO login' });
@@ -227,10 +236,10 @@ router.get('/sso/callback', asyncHandler(async (req, res) => {
     const tokenSetAny = tokenSet as any;
     if (tokenSetAny.refresh_token) {
       const expiresIn = (tokenSetAny.expires_in as number) || 3600;
-      oidcTokenStore.set(user.id, {
-        refreshToken: tokenSetAny.refresh_token,
-        expiresAt: Math.floor(Date.now() / 1000) + expiresIn,
-      });
+      await db.update(users).set({
+        oidc_refresh_token: tokenSetAny.refresh_token,
+        oidc_token_expires_at: new Date(Date.now() + expiresIn * 1000),
+      }).where(eq(users.id, user.id));
     }
 
     res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -404,14 +413,18 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
 
   // ── OIDC token refresh with group sync ─────────────────────────
-  const tokenEntry = oidcTokenStore.get(userId);
-  if (tokenEntry && tokenEntry.expiresAt < Math.floor(Date.now() / 1000) - 60) {
+  const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+  const refreshToken = currentUser?.oidc_refresh_token;
+  const tokenExpiresAt = currentUser?.oidc_token_expires_at ? new Date(currentUser.oidc_token_expires_at).getTime() : 0;
+  const needsRefresh = refreshToken && tokenExpiresAt < Date.now() - 60000;
+
+  if (needsRefresh) {
     try {
       const ssoCfg = await getSSOConfig();
       if (ssoCfg && ssoCfg.enabled) {
         const oidcClient = await getOidcClient(ssoCfg.issuer, ssoCfg.client_id, ssoCfg.client_secret);
         const refreshed = await oidc.refreshTokenGrant(
-          oidcClient, tokenEntry.refreshToken,
+          oidcClient, refreshToken,
         ) as any;
 
         // Decode updated id_token for group claims
@@ -434,12 +447,15 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
           newGroupNames.push(...(newClaims[groupClaim] as string[]));
         }
 
-        // Update token store
+        // Persist updated tokens to DB (cluster-safe)
         const newExpiresIn = (refreshed.expires_in as number) || 3600;
-        tokenEntry.expiresAt = Math.floor(Date.now() / 1000) + newExpiresIn;
+        const dbUpdates: Record<string, unknown> = {
+          oidc_token_expires_at: new Date(Date.now() + newExpiresIn * 1000),
+        };
         if (refreshed.refresh_token) {
-          tokenEntry.refreshToken = refreshed.refresh_token;
+          dbUpdates.oidc_refresh_token = refreshed.refresh_token;
         }
+        await db.update(users).set(dbUpdates).where(eq(users.id, userId));
 
         // Get current groups for this user
         const currentMemberships = await db.select({
@@ -495,11 +511,11 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
     .where(eq(groupMembers.user_id, userId));
 
   // Re-read user's current role/permissions (may have changed via refresh)
-  const [currentUser] = await db.select().from(users).where(eq(users.id, userId));
+  const [updatedUser] = await db.select().from(users).where(eq(users.id, userId));
   let roleName = req.user?.role || 'reader';
   let permissions: string[] = req.user?.permissions || [];
-  if (currentUser?.role_id) {
-    const [role] = await db.select().from(roles).where(eq(roles.id, currentUser.role_id));
+  if (updatedUser?.role_id) {
+    const [role] = await db.select().from(roles).where(eq(roles.id, updatedUser.role_id));
     if (role) {
       roleName = role.name;
       permissions = role.permissions || [];

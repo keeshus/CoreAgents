@@ -238,6 +238,8 @@ export const users = pgTable('users', {
   is_active: boolean('is_active').notNull().default(true),
   provider: text('provider').notNull().default('local'),
   provider_id: text('provider_id'),
+  oidc_refresh_token: text('oidc_refresh_token'),
+  oidc_token_expires_at: timestamp('oidc_token_expires_at'),
   last_login_at: timestamp('last_login_at'),
   created_at: timestamp('created_at').notNull().defaultNow(),
   updated_at: timestamp('updated_at').notNull().defaultNow(),
