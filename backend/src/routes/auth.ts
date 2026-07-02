@@ -299,6 +299,9 @@ router.post('/register', asyncHandler(async (req, res) => {
           'document:write', 'knowledge:write',
           'chat:create', 'execution:approve',
           'group:read', 'group:write',
+          'secrets:read', 'secrets:write', 'secrets:read_app', 'secrets:write_app',
+          'secrets:read_group', 'secrets:write_group', 'secrets:audit', 'secrets:rotate',
+          'vaults:read', 'vaults:write',
         ],
       },
       {

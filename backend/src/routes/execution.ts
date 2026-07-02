@@ -8,6 +8,7 @@ import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
 
+const secretStore = new Map<string, string>();
 const router = Router();
 
 // In-memory registry of active executors for cancellation
@@ -244,6 +245,41 @@ router.post(
         if (!contextIds?.length) return [];
         const rows = await db.select().from(agentContexts).where(inArray(agentContexts.id, contextIds));
         return rows.map(r => ({ title: r.title, content: r.content }));
+      },
+      getSecret: async (secretName: string, options?: { scope?: 'app' | 'group' | 'flow' }) => {
+        const { secrets: secretsTable } = await import('../db/schema.js');
+        const { and, eq } = await import('drizzle-orm');
+        const scope = options?.scope || 'app';
+        const [secret] = await db.select().from(secretsTable).where(
+          and(eq(secretsTable.name, secretName), eq(secretsTable.scope, scope))
+        ).limit(1);
+        if (!secret) return null;
+        const { decrypt } = await import('../utils/encryption.js');
+        return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
+      },
+      getCyberArkSecret: async (secretPath: string) => {
+        const { getSecret: cyberArkGetSecret } = await import('../services/cyberark.js');
+        const { secretVaults: vaultsTable, groupVaultConfig: gvcTable } = await import('../db/schema.js');
+        const { eq } = await import('drizzle-orm');
+
+        // Resolve vault from flow's group binding
+        let vaultId: string | undefined;
+        if (flowGroupId) {
+          const [gvc] = await db.select({ vaultId: gvcTable.vault_id }).from(gvcTable).where(eq(gvcTable.group_id, flowGroupId)).limit(1);
+          if (gvc) vaultId = gvc.vaultId;
+        }
+        const vaultCondition = vaultId ? eq(vaultsTable.id, vaultId) : eq(vaultsTable.is_connected, true);
+        const [vault] = await db.select().from(vaultsTable).where(vaultCondition).limit(1);
+        if (!vault) return null;
+        const cidParts = vault.client_id.split(':');
+        const secParts = vault.client_secret.split(':');
+        const { decrypt } = await import('../utils/encryption.js');
+        const clientId = await decrypt(cidParts[0], cidParts[1], cidParts[2], parseInt(cidParts[3]));
+        const clientSecret = await decrypt(secParts[0], secParts[1], secParts[2], parseInt(secParts[3]));
+        return cyberArkGetSecret({ baseUrl: vault.base_url, clientId, clientSecret, caCert: vault.ca_cert || undefined }, secretPath);
+      },
+      setSecret: (name: string, value: string) => {
+        secretStore.set(name, value);
       },
     };
 
@@ -658,6 +694,39 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       if (!contextIds?.length) return [];
       const rows = await db.select().from(agentContexts).where(inArray(agentContexts.id, contextIds));
       return rows.map(r => ({ title: r.title, content: r.content }));
+    },
+    getSecret: async (secretName: string, options?: { scope?: 'app' | 'group' | 'flow' }) => {
+      const { secrets: secretsTable } = await import('../db/schema.js');
+      const { and, eq } = await import('drizzle-orm');
+      const scope = options?.scope || 'app';
+      const [secret] = await db.select().from(secretsTable).where(
+        and(eq(secretsTable.name, secretName), eq(secretsTable.scope, scope))
+      ).limit(1);
+      if (!secret) return null;
+      const { decrypt } = await import('../utils/encryption.js');
+      return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
+    },
+    getCyberArkSecret: async (secretPath: string) => {
+      const { getSecret: cyberArkGetSecret } = await import('../services/cyberark.js');
+      const { secretVaults: vaultsTable, groupVaultConfig: gvcTable } = await import('../db/schema.js');
+      const { eq } = await import('drizzle-orm');
+      let vaultId: string | undefined;
+      if (flowDef?.groupId) {
+        const [gvc] = await db.select({ vaultId: gvcTable.vault_id }).from(gvcTable).where(eq(gvcTable.group_id, flowDef.groupId)).limit(1);
+        if (gvc) vaultId = gvc.vaultId;
+      }
+      const vaultCondition = vaultId ? eq(vaultsTable.id, vaultId) : eq(vaultsTable.is_connected, true);
+      const [vault] = await db.select().from(vaultsTable).where(vaultCondition).limit(1);
+      if (!vault) return null;
+      const cidParts = vault.client_id.split(':');
+      const secParts = vault.client_secret.split(':');
+      const { decrypt } = await import('../utils/encryption.js');
+      const clientId = await decrypt(cidParts[0], cidParts[1], cidParts[2], parseInt(cidParts[3]));
+      const clientSecret = await decrypt(secParts[0], secParts[1], secParts[2], parseInt(secParts[3]));
+      return cyberArkGetSecret({ baseUrl: vault.base_url, clientId, clientSecret, caCert: vault.ca_cert || undefined }, secretPath);
+    },
+    setSecret: (name: string, value: string) => {
+      secretStore.set(name, value);
     },
     flowNodes: flowDef.nodes as any,
     flowEdges: flowDef.edges as any,

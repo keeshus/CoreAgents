@@ -34,10 +34,10 @@ async function logAccess(action: string, secretId: string | undefined, userId: s
 }
 
 async function checkScopeAccess(scope: string, scopeId: string | undefined, user: { userId: string; permissions: string[] }): Promise<boolean> {
+  if (user.permissions.includes('admin')) return true;
   if (scope === 'app') return user.permissions.includes('secrets:read_app') || user.permissions.includes('secrets:write_app');
   if (scope === 'group') {
     if (!scopeId || !isValidUUID(scopeId)) return false;
-    if (user.permissions.includes('admin')) return true;
     const [membership] = await db.select().from(groupMembers).where(
       and(eq(groupMembers.group_id, scopeId), eq(groupMembers.user_id, user.userId))
     );
@@ -46,7 +46,6 @@ async function checkScopeAccess(scope: string, scopeId: string | undefined, user
   }
   if (scope === 'flow') {
     if (!scopeId || !isValidUUID(scopeId)) return false;
-    if (user.permissions.includes('admin')) return true;
     const [flow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id }).from(flows).where(eq(flows.id, scopeId));
     if (!flow) return false;
     if (flow.created_by === user.userId) return true;
@@ -62,10 +61,10 @@ async function checkScopeAccess(scope: string, scopeId: string | undefined, user
 }
 
 async function checkWriteScope(scope: string, scopeId: string | undefined, user: { userId: string; permissions: string[] }): Promise<boolean> {
+  if (user.permissions.includes('admin')) return true;
   if (scope === 'app') return user.permissions.includes('secrets:write_app');
   if (scope === 'group') {
     if (!scopeId || !isValidUUID(scopeId)) return false;
-    if (user.permissions.includes('admin')) return true;
     const [membership] = await db.select().from(groupMembers).where(
       and(eq(groupMembers.group_id, scopeId), eq(groupMembers.user_id, user.userId))
     );

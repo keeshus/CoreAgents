@@ -66,7 +66,8 @@ export function requirePermission(...actions: string[]) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
-    const hasPermission = actions.some(a => req.user!.permissions.includes(a));
+    const perms = req.user!.permissions;
+    const hasPermission = perms.includes('admin') || actions.some(a => perms.includes(a));
     if (!hasPermission) {
       res.status(403).json({ error: 'Insufficient permissions' });
       return;

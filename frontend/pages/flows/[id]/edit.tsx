@@ -346,6 +346,9 @@ export default function FlowEditPage() {
   // ── Flow Settings modal ──
   const [showFlowSettings, setShowFlowSettings] = useState(false);
   const [flowSettingsDraft, setFlowSettingsDraft] = useState<Record<string, any>>({});
+  const [flowSecrets, setFlowSecrets] = useState<any[]>([]);
+  const [newSecretName, setNewSecretName] = useState('');
+  const [newSecretValue, setNewSecretValue] = useState('');
 
   const openFlowSettings = useCallback(() => {
     setFlowSettingsDraft({
@@ -354,6 +357,14 @@ export default function FlowEditPage() {
       flow_context: flow?.flow_context || '',
       group_id: flow?.group_id || '',
     });
+    if (flow?.id && flow.id !== 'new') {
+      fetch(`/api/secrets?scope=flow&scopeId=${flow.id}`, { credentials: 'include' })
+        .then(r => r.ok ? r.json() : [])
+        .then(setFlowSecrets)
+        .catch(() => setFlowSecrets([]));
+    } else {
+      setFlowSecrets([]);
+    }
     setShowFlowSettings(true);
   }, [flow]);
 
@@ -382,7 +393,7 @@ export default function FlowEditPage() {
           <TextField label="Flow name" value={flow.name} onChange={(v) => setFlow((prev: any) => ({ ...prev, name: v }))} className="min-w-[80px] max-w-[160px]" />
           <TextField label="Description" value={flow.description || ''} onChange={(v) => setFlow((prev: any) => ({ ...prev, description: v }))} className="min-w-[100px] max-w-[200px] focus:max-w-[400px] transition-all" />
           <Tooltip content="Flow settings">
-            <button onClick={openFlowSettings} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors">
+            <button data-testid="flow-settings-btn" onClick={openFlowSettings} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors">
               <Icon name="settings" className="text-base" />
             </button>
           </Tooltip>
@@ -538,6 +549,75 @@ export default function FlowEditPage() {
                     ...groups.map(g => ({ value: g.id, label: g.name })),
                   ]}
                 />
+              )}
+
+              {/* ── Flow-level Secrets ── */}
+              {flow?.id && flow.id !== 'new' && (
+                <div className="border-t border-outline-variant pt-4">
+                  <span className="text-xs font-medium text-on-surface-variant block mb-2">Flow Secrets</span>
+                  {flowSecrets.length > 0 && (
+                    <div className="space-y-1 mb-3">
+                      {flowSecrets.map(s => (
+                        <div key={s.id} className="flex items-center justify-between bg-surface-container rounded px-2 py-1.5">
+                          <span className="text-xs font-mono text-on-surface">{s.name}</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={async () => {
+                                const res = await fetch(`/api/secrets/${s.id}/reveal`, { method: 'POST', credentials: 'include' });
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  alert(`Secret "${s.name}": ${data.value}`);
+                                }
+                              }}
+                              className="p-1 text-on-surface-variant hover:text-primary rounded text-xs"
+                            ><Icon name="visibility" className="text-sm" /></button>
+                            <button
+                              onClick={async () => {
+                                await fetch(`/api/secrets/${s.id}`, { method: 'DELETE', credentials: 'include' });
+                                setFlowSecrets(prev => prev.filter(x => x.id !== s.id));
+                              }}
+                              className="p-1 text-on-surface-variant hover:text-error rounded text-xs"
+                            ><Icon name="delete" className="text-sm" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 items-start">
+                    <input
+                      placeholder="Secret name"
+                      value={newSecretName}
+                      onChange={e => setNewSecretName(e.target.value)}
+                      className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                    />
+                    <input
+                      placeholder="Value"
+                      value={newSecretValue}
+                      onChange={e => setNewSecretValue(e.target.value)}
+                      type="password"
+                      className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!newSecretName || !newSecretValue) return;
+                        const res = await fetch(`/api/secrets`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ name: newSecretName, value: newSecretValue, scope: 'flow', scopeId: flow.id }),
+                        });
+                        if (res.ok) {
+                          const created = await res.json();
+                          setFlowSecrets(prev => [...prev, created]);
+                          setNewSecretName('');
+                          setNewSecretValue('');
+                        }
+                      }}
+                      className="m3-button text-xs shrink-0"
+                    ><Icon name="add" className="text-xs" /></button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-on-surface-variant">Secrets are encrypted at rest. Use {'{{secrets.core.flow:NAME}}'} in templates.</p>
+                </div>
               )}
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0">
