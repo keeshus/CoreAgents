@@ -99,6 +99,13 @@
       "when": 1786000000000,
       "tag": "0013_agent_contexts",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0014_secrets_management",
+      "breakpoints": true
     }
   ]
 }
