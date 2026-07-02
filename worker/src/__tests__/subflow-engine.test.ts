@@ -454,3 +454,69 @@ describe('compileFlow — subflow id must exist in flow list', () => {
       .rejects.toThrow(/not found/);
   });
 });
+
+describe('SubFlowExecutor — event emissions', () => {
+  let executor: FlowExecutor;
+  let onEvent: any;
+  let context: ExecutionContext;
+
+  beforeEach(() => {
+    executor = new FlowExecutor();
+    onEvent = vi.fn();
+    context = {
+      getEndpoint: vi.fn().mockResolvedValue({ providerType: 'anthropic' as const, apiKey: 'test-key', baseUrl: null }),
+      getFlow: vi.fn().mockResolvedValue(makeSubflowDef('sf-1')),
+      onSubExecution: vi.fn().mockResolvedValue('sub-exec-1'),
+      completeSubExecution: vi.fn(),
+      currentExecutionId: 'parent-1',
+    };
+  });
+
+  it('emits subflow.started and subflow.completed events', async () => {
+    const flow = makeFlow(
+      [makeNode('trigger', 'trigger'), makeNode('sub', 'subflow', { config: { subflowId: 'sf-1', inputMapping: {} } })],
+      [makeEdge('e1', 'trigger', 'sub')],
+    );
+    await executor.execute(flow, { message: 'hello' }, onEvent, context);
+    const startedEvents = onEvent.mock.calls.filter((c: any) => c[1]?.type === 'subflow.started');
+    const completedEvents = onEvent.mock.calls.filter((c: any) => c[1]?.type === 'subflow.completed');
+    expect(startedEvents).toHaveLength(1);
+    expect(completedEvents).toHaveLength(1);
+    expect(startedEvents[0][1].nodeId).toBe(completedEvents[0][1].nodeId);
+  });
+
+  it('emits subflow.failed on non-HITL error inside subflow', async () => {
+    const brokenSubflow: FlowDefinition = {
+      id: 'broken-sf', name: 'Broken', description: '',
+      nodes: [
+        makeNode('sf-trigger', 'trigger', { config: { triggerType: 'subflow' } }),
+        makeNode('sf-error', 'code', { config: { code: 'throw new Error("boom");' } }),
+        makeNode('sf-output', 'output', { config: { inputFields: [] } }),
+      ],
+      edges: [makeEdge('e1', 'sf-trigger', 'sf-error'), makeEdge('e2', 'sf-error', 'sf-output')],
+      version: 1, createdAt: '', updatedAt: '',
+    };
+    context.getFlow = vi.fn().mockResolvedValue(brokenSubflow);
+    const flow = makeFlow(
+      [makeNode('trigger', 'trigger'), makeNode('sub', 'subflow', { config: { subflowId: 'broken-sf', inputMapping: {} } })],
+      [makeEdge('e1', 'trigger', 'sub')],
+    );
+    await expect(executor.execute(flow, { message: 'hello' }, onEvent, context)).rejects.toThrow(/boom/);
+    const failedEvents = onEvent.mock.calls.filter((c: any) => c[1]?.type === 'subflow.failed');
+    expect(failedEvents).toHaveLength(1);
+    expect(failedEvents[0][1].data.error).toContain('boom');
+    expect(context.completeSubExecution).toHaveBeenCalledWith('sub-exec-1', {}, 'failed', expect.stringContaining('boom'));
+  });
+
+  it('subflow events carry hierarchy metadata', async () => {
+    const flow = makeFlow(
+      [makeNode('trigger', 'trigger'), makeNode('sub', 'subflow', { config: { subflowId: 'sf-1', inputMapping: {} } })],
+      [makeEdge('e1', 'trigger', 'sub')],
+    );
+    await executor.execute(flow, { message: 'test' }, onEvent, context);
+    const startedEvents = onEvent.mock.calls.filter((c: any) => c[1]?.type === 'subflow.started');
+    expect(startedEvents[0][1].hierarchy).toBeDefined();
+    expect(startedEvents[0][1].hierarchy.depth).toBe(1);
+    expect(startedEvents[0][1].hierarchy.path).toBe('sub');
+  });
+});
