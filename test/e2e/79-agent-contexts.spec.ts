@@ -224,26 +224,30 @@ const cleanupFlowIds: string[] = [];
   test('context layering injects global + group + flow + agent contexts into LLM prompt', async ({ page, request }) => {
     test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
 
-    // 1. Set global context
+    // Set up global context
     const globalRes = await request.put(`${API_URL}/settings/global-context`, {
-      data: { value: 'You work for Acme Corp. Always be professional.' },
+      data: { value: 'You work for Acme Corp.' },
     });
     expect(globalRes.ok()).toBe(true);
 
-    // 2. Create a group with context
+    // Create a group with context
+    const groupName = `Layer-Group-${Date.now()}`;
     const groupRes = await request.post(`${API_URL}/groups`, {
-      data: { name: 'Support Group', context: 'You are answering customer support questions.' },
+      data: { name: groupName, context: 'Answer customer support questions.' },
     });
+    expect(groupRes.status()).toBe(201);
     const group = await groupRes.json();
+    cleanupGroupIds.push(group.id);
 
-    // 3. Create an agent context
+    // Create an agent context
     const ctxRes = await request.post(`${API_URL}/agent-contexts`, {
-      data: { title: 'Product Info', content: 'Our main product is Widget Pro v2.' },
+      data: { title: 'Product Info', content: 'Widget Pro v2 is our main product.' },
     });
+    expect(ctxRes.status()).toBe(201);
     const agentCtx = await ctxRes.json();
     cleanupContextIds.push(agentCtx.id);
 
-    // 4. Create a flow with flow_context + group + LLM with selected context
+    // Create the flow with all context layers
     const flowRes = await request.post(`${API_URL}/flows`, {
       data: {
         name: uniqueFlowName('Layer-Test'),
@@ -257,10 +261,9 @@ const cleanupFlowIds: string[] = [];
               label: 'Assistant',
               type: 'llm-agent',
               config: {
-                endpointId: mockEndpointId,
-                model: 'mock-gpt-4',
-                systemPrompt: 'MOCK_RESPONSE: "Context layering works!"',
-                temperature: 0.7, maxTokens: 256, responseFormat: 'text',
+                endpointId: mockEndpointId, model: 'mock-gpt-4',
+                systemPrompt: 'ECHO_SYSTEM_PROMPT\nRespond to {{input.Trigger.message}}',
+                temperature: 0.7, maxTokens: 1024, responseFormat: 'text',
                 contextIds: [agentCtx.id],
               },
             },
@@ -277,31 +280,23 @@ const cleanupFlowIds: string[] = [];
     const flow = await flowRes.json();
     cleanupFlowIds.push(flow.id);
 
-    // Execute in debug mode
+    // Execute in debug mode — the mock LLM will echo back the full system prompt
     const { debugExecute } = await import('./helpers/stream');
-
-    let events: any[] = [];
-    try {
-      events = await debugExecute(flow.id, { message: 'test' }, cookie);
-    } catch (e: any) {
-      // If LLM mock returns an error, the execution might fail
-      // But the context layering should still have been applied
-      console.log('Debug execute error:', e.message);
-    }
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
-    const failed = events.find(e => e.type === 'execution.failed');
+    expect(completed).toBeDefined();
 
-    if (completed) {
-      const output = completed.data?.output || {};
-      const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
-      expect(outputStr).toContain('Context layering works!');
-    }
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
 
-    // Check that the step for the LLM node ran (context was built)
-    const llmStep = events.find(e => e.data?.nodeId === 'l1');
-    if (llmStep) {
-      expect(llmStep.type).toMatch(/step\.(started|completed)/);
-    }
+    // The mock LLM echoed the full system prompt — verify all 5 layers are present
+    expect(outputStr).toContain('You work for Acme Corp.');          // Layer 1: Global context
+    expect(outputStr).toContain('Answer customer support questions.'); // Layer 2: Group context
+    expect(outputStr).toContain('This is the billing flow.');          // Layer 3: Flow context
+    expect(outputStr).toContain('Product Info');                        // Layer 4: Agent context title
+    expect(outputStr).toContain('Widget Pro v2 is our main product.'); // Layer 4: Agent context content
+    expect(outputStr).toContain('Respond to');                         // Layer 5: Node system prompt
+    expect(outputStr).toContain('---');                                // Separators between layers
   });
 });

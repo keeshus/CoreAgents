@@ -17,10 +17,17 @@ function jsonResponse(res: http.ServerResponse, status: number, data: unknown) {
 }
 
 function extractResponse(messages: any[]): string {
-  // If system prompt contains MOCK_RESPONSE: <json>, use that
+  // Collect all system messages
+  let fullPrompt = '';
   for (const msg of messages) {
     if (msg.role === 'system' && typeof msg.content === 'string') {
-      const match = msg.content.match(/MOCK_RESPONSE:\s*(.+)/s);
+      fullPrompt = msg.content;
+      // ECHO_SYSTEM_PROMPT directive: return the full system prompt for verification
+      if (fullPrompt.includes('ECHO_SYSTEM_PROMPT')) {
+        return fullPrompt;
+      }
+      // MOCK_RESPONSE directive: return the specified value
+      const match = fullPrompt.match(/MOCK_RESPONSE:\s*(.+)/s);
       if (match) return match[1].trim().replace(/^["']|["']$/g, '');
     }
   }

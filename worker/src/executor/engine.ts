@@ -307,6 +307,7 @@ export class FlowExecutor {
         if (cfg.model) enrichedInput.model = cfg.model;
         if (cfg.temperature !== undefined) enrichedInput.temperature = cfg.temperature;
       }
+
       if (node.data.type === 'branch') {
         const cfg = (node.data as any).config || {};
         if (cfg.condition) enrichedInput.condition = cfg.condition;
