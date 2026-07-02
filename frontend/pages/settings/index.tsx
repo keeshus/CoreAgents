@@ -40,6 +40,12 @@ export default function SettingsIndex() {
       description: 'Manage user groups for flow visibility and HITL assignment',
     },
     ...(can('admin') ? [{
+      href: '/settings/global-context',
+      icon: 'language',
+      title: 'Global Context',
+      description: 'Set the global system context for all LLM agents across all flows',
+    }] : []),
+    ...(can('admin') ? [{
       href: '/settings/sso',
       icon: 'key',
       title: 'SSO / OIDC',

@@ -73,6 +73,8 @@ router.post(
       nodes: flow.nodes as any[], edges: flow.edges as any[],
       version: flow.version,
       createdAt: flow.created_at?.toISOString() || '', updatedAt: flow.updated_at?.toISOString() || '',
+      flowContext: flow.flow_context || '',
+      groupId: flow.group_id || undefined,
     };
 
     await enqueueExecution(flowDef, { ...input, __executionId: exec.id });

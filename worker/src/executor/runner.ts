@@ -15,7 +15,11 @@ interface RunnerOptions {
   executionStepsTable: any;
   eq: any;
   and: any;
+  inArray?: any;
   onEvent?: (nodeId: string, event: SSEEvent) => void;
+  agentContextsTable?: any;
+  agentStoreTable?: any;
+  groupsTable?: any;
 }
 
 /**
@@ -29,10 +33,30 @@ interface RunnerOptions {
 export async function executeFlowWithPersistence(options: RunnerOptions): Promise<{ status: string; output?: any }> {
   const { flow, input, executionId, db: database, executionsTable, executionStepsTable, eq: eqFn, and: andFn, onEvent } = options;
 
-  // Build execution context (minimal — extend as needed for MCP, RAG, etc.)
+  // Build execution context with context resolver support
   const executionContext: ExecutionContext = {
     flowNodes: flow.nodes,
     flowEdges: flow.edges,
+    getGlobalContext: async () => {
+      if (!options.agentStoreTable) return '';
+      const [row] = await database.select().from(options.agentStoreTable).where(eqFn(options.agentStoreTable.key, 'global_context')).limit(1);
+      return row?.value || '';
+    },
+    getGroupContext: async (groupId: string) => {
+      if (!groupId || !options.groupsTable) return '';
+      const [row] = await database.select({ context: options.groupsTable.context }).from(options.groupsTable).where(eqFn(options.groupsTable.id, groupId)).limit(1);
+      return row?.context || '';
+    },
+    getAgentContexts: async (contextIds: string[]) => {
+      if (!contextIds?.length || !options.agentContextsTable) return [];
+      const inArrayFn = options.inArray;
+      if (inArrayFn && contextIds.length > 1) {
+        const rows = await database.select().from(options.agentContextsTable).where(inArrayFn(options.agentContextsTable.id, contextIds));
+        return rows.map((r: any) => ({ title: r.title, content: r.content }));
+      }
+      const rows = await database.select().from(options.agentContextsTable).where(eqFn(options.agentContextsTable.id, contextIds[0]));
+      return rows.map((r: any) => ({ title: r.title, content: r.content }));
+    },
   };
 
   const executor = new FlowExecutor();

@@ -21,6 +21,7 @@ router.get('/', requirePermission('group:read'), asyncHandler(async (_req, res) 
       id: groups.id,
       name: groups.name,
       description: groups.description,
+      context: groups.context,
       provider: groups.provider,
       memberCount: sql<number>`(SELECT COUNT(*) FROM ${groupMembers} WHERE ${groupMembers.group_id} = ${groups.id})`,
       created_at: groups.created_at,
@@ -63,13 +64,14 @@ router.post('/', requirePermission('group:write'), asyncHandler(async (req, res)
 router.put('/:id', requirePermission('group:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
-  const { name, description } = req.body || {};
+  const { name, description, context } = req.body || {};
   const [group] = await db.select().from(groups).where(eq(groups.id, id));
   if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
   if (group.provider !== 'local') { res.status(403).json({ error: 'Cannot edit SSO-provisioned groups' }); return; }
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
   if (description !== undefined) updates.description = description;
+  if (context !== undefined) updates.context = context;
   const [updated] = await db.update(groups).set(updates).where(eq(groups.id, id)).returning();
   res.json(updated);
 }));

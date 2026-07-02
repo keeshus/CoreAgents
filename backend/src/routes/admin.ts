@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { users, roles, groups, groupMembers } from '../db/schema.js';
+import { users, roles, groups, groupMembers, agentStore } from '../db/schema.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
@@ -157,6 +157,24 @@ router.put('/users/:id/groups', requirePermission('admin'), asyncHandler(async (
   }
 
   res.json({ status: 'updated' });
+}));
+
+// ── Global Context ────────────────────────────────────────────────────────────────
+
+// GET /api/settings/global-context — read global context (admin only)
+router.get('/settings/global-context', requirePermission('admin'), asyncHandler(async (_req, res) => {
+  const [row] = await db.select().from(agentStore).where(eq(agentStore.key, 'global_context')).limit(1);
+  res.json({ value: row?.value || '' });
+}));
+
+// PUT /api/settings/global-context — update global context (admin only)
+router.put('/settings/global-context', requirePermission('admin'), asyncHandler(async (req, res) => {
+  const { value = '' } = req.body || {};
+  await db
+    .insert(agentStore)
+    .values({ key: 'global_context', value })
+    .onConflictDoUpdate({ target: agentStore.key, set: { value, updated_at: new Date() } });
+  res.json({ value });
 }));
 
 export default router;

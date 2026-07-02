@@ -2,6 +2,7 @@ export interface Group {
   id: string;
   name: string;
   description: string;
+  context: string;
   provider: string; // 'local' or SSO provider name
   memberCount?: number;
   createdAt: string;

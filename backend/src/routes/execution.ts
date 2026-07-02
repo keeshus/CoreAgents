@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eq, and, desc, sql, inArray, isNull, or } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, groupMembers, users } from '../db/schema.js';
+import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, groupMembers, users, agentContexts, agentStore } from '../db/schema.js';
 import { FlowExecutor, HitlPauseError, FlowStopError } from '../../../worker/src/executor/engine.js';
 import { getStore, listStores } from '../vector-stores/index.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -101,6 +101,8 @@ router.post(
     let flowNodes = canvasNodes;
     let flowEdges = canvasEdges;
     let flowName = '';
+    let flowContext = '';
+    let flowGroupId: string | undefined;
 
     if (!flowNodes || !flowEdges) {
       const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
@@ -117,6 +119,8 @@ router.post(
       flowNodes = flow.nodes;
       flowEdges = flow.edges;
       flowName = flow.name;
+      flowContext = flow.flow_context || '';
+      flowGroupId = flow.group_id || undefined;
     }
 
     // Create execution record ------------------------------------
@@ -227,6 +231,20 @@ router.post(
           completed_at: new Date(),
         }).where(eq(executions.id, subExecutionId));
       },
+      getGlobalContext: async () => {
+        const [row] = await db.select().from(agentStore).where(eq(agentStore.key, 'global_context')).limit(1);
+        return (row?.value as string) || '';
+      },
+      getGroupContext: async (groupId: string) => {
+        if (!groupId) return '';
+        const [row] = await db.select({ context: groups.context }).from(groups).where(eq(groups.id, groupId)).limit(1);
+        return row?.context || '';
+      },
+      getAgentContexts: async (contextIds: string[]) => {
+        if (!contextIds?.length) return [];
+        const rows = await db.select().from(agentContexts).where(inArray(agentContexts.id, contextIds));
+        return rows.map(r => ({ title: r.title, content: r.content }));
+      },
     };
 
     // Map Drizzle row (snake_case) to FlowDefinition (camelCase) BEFORE building context
@@ -239,6 +257,8 @@ router.post(
       version: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      flowContext: flowContext,
+      groupId: flowGroupId,
     };
 
     // Add flowNodes/flowEdges to context now that flowDef exists
@@ -556,6 +576,8 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       id: flow.id, name: flow.name, description: flow.description || '',
       nodes: flow.nodes as any, edges: flow.edges as any, version: flow.version,
       createdAt: flow.created_at?.toISOString() || '', updatedAt: flow.updated_at?.toISOString() || '',
+      flowContext: flow.flow_context || '',
+      groupId: flow.group_id || undefined,
     };
   }
 
@@ -622,6 +644,20 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       const store = getStore('qdrant') || getStore('pgvector') || listStores().length > 0 ? getStore(listStores()[0]) : undefined;
       if (!store) return [];
       return store.search(collectionName, queryEmbedding, topK, minScore);
+    },
+    getGlobalContext: async () => {
+      const [row] = await db.select().from(agentStore).where(eq(agentStore.key, 'global_context')).limit(1);
+      return (row?.value as string) || '';
+    },
+    getGroupContext: async (groupId: string) => {
+      if (!groupId) return '';
+      const [row] = await db.select({ context: groups.context }).from(groups).where(eq(groups.id, groupId)).limit(1);
+      return row?.context || '';
+    },
+    getAgentContexts: async (contextIds: string[]) => {
+      if (!contextIds?.length) return [];
+      const rows = await db.select().from(agentContexts).where(inArray(agentContexts.id, contextIds));
+      return rows.map(r => ({ title: r.title, content: r.content }));
     },
     flowNodes: flowDef.nodes as any,
     flowEdges: flowDef.edges as any,

@@ -11,6 +11,8 @@ interface ScheduledFlow {
   inputMessage?: string;
   nodes: any[];
   edges: any[];
+  flowContext?: string;
+  groupId?: string;
 }
 
 interface ScheduleEntry {
@@ -155,6 +157,8 @@ export class Scheduler {
         version: 1,
         createdAt: '',
         updatedAt: '',
+        flowContext: flow.flowContext || '',
+        groupId: flow.groupId || undefined,
       };
 
       // Build input payload

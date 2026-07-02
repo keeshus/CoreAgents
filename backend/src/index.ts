@@ -20,6 +20,7 @@ import authRouter from './routes/auth.js';
 import llmChatRouter from './routes/llm.js';
 import assignmentsRouter from './routes/assignments.js';
 import adminRouter from './routes/admin.js';
+import agentContextsRouter from './routes/agent-contexts.js';
 import groupsRouter from './routes/groups.js';
 import ssoConfigRouter from './routes/sso-config.js';
 import { authenticate } from './middleware/auth.js';
@@ -83,6 +84,7 @@ app.use('/api', authenticate, embeddingProvidersRouter); // Handles /api/embeddi
 app.use('/api', authenticate, vectorStoresRouter); // Handles /api/vector-stores/*
 app.use('/api', authenticate, assignmentsRouter); // Handles /api/assignments/*
 app.use('/api', authenticate, adminRouter); // Handles /api/users/* and /api/roles/*
+app.use('/api/agent-contexts', authenticate, agentContextsRouter);
 app.use('/api/groups', authenticate, groupsRouter);
 app.use('/api/admin/sso-config', authenticate, ssoConfigRouter);
 

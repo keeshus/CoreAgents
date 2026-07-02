@@ -19,6 +19,7 @@ interface LLMAgentConfigProps {
     maxTokens: number;
     responseFormat: 'text' | 'json_object';
     outputSchema?: string;
+    contextIds?: string[];
   };
   onChange: (config: any) => void;
   suggestions?: { upstreamLabels: string[]; nodes: any[]; edges: any[]; nodeId: string };
@@ -27,9 +28,17 @@ interface LLMAgentConfigProps {
 export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfigProps) {
   const [endpoints, setEndpoints] = useState<any[]>([]);
   const [selectedEndpoint, setSelectedEndpoint] = useState<any>(null);
+  const [agentContexts, setAgentContexts] = useState<any[]>([]);
 
   useEffect(() => {
     api.llmEndpoints.list().then(setEndpoints).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/agent-contexts', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(setAgentContexts)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -40,6 +49,15 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
   const handleEndpointChange = (endpointId: string) => {
     const ep = endpoints.find((e: any) => e.id === endpointId);
     onChange({ ...config, endpointId, endpointName: ep?.name || '', model: ep?.default_model || '' });
+  };
+
+  const toggleContextId = (id: string) => {
+    const current = config.contextIds || [];
+    if (current.includes(id)) {
+      onChange({ ...config, contextIds: current.filter(c => c !== id) });
+    } else {
+      onChange({ ...config, contextIds: [...current, id] });
+    }
   };
 
   return (
@@ -81,6 +99,35 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
               placeholder="e.g. claude-sonnet-4-20250514"
             />
           )}
+        </div>
+      )}
+
+      {/* ── Agent Contexts selector (above System Prompt) ── */}
+      {agentContexts.length > 0 && (
+        <div>
+          <span className="text-xs font-medium text-on-surface-variant block mb-1">Agent Contexts</span>
+          <div className="bg-surface border border-outline-variant rounded-lg p-2 space-y-1 max-h-40 overflow-y-auto">
+            {agentContexts.map(ctx => {
+              const checked = (config.contextIds || []).includes(ctx.id);
+              return (
+                <label key={ctx.id} className="flex items-start gap-2 cursor-pointer hover:bg-surface-container rounded px-1 py-0.5">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleContextId(ctx.id)}
+                    className="mt-0.5 w-3 h-3 accent-primary shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium text-on-surface block leading-tight">{ctx.title}</span>
+                    {ctx.description && (
+                      <span className="text-[10px] text-on-surface-variant block truncate">{ctx.description}</span>
+                    )}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-[10px] text-on-surface-variant">Contexts are layered: global → group → flow → selected contexts → system prompt.</p>
         </div>
       )}
 

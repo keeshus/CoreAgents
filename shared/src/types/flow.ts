@@ -52,6 +52,7 @@ export interface LLMAgentNodeData extends BaseNodeData {
     responseFormat: 'text' | 'json_object';
     outputSchema?: string;
     inputFields?: string[];
+    contextIds?: string[];
   };
 }
 
@@ -177,6 +178,8 @@ export interface FlowDefinition {
   version: number;
   createdAt: string;
   updatedAt: string;
+  groupId?: string;
+  flowContext?: string;
 }
 
 // ── Execution ────────────────────────────────────────────────

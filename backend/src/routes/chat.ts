@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/connection.js';
-import { chatSessions, chatMessages, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores } from '../db/schema.js';
-import { eq, desc } from 'drizzle-orm';
+import { chatSessions, chatMessages, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, agentContexts, agentStore, groups } from '../db/schema.js';
+import { eq, desc, inArray } from 'drizzle-orm';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { getStore } from '../vector-stores/index.js';
@@ -153,6 +153,20 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
       if (!store) return [];
       return store.search(collectionName, queryEmbedding, topK, minScore);
     },
+    getGlobalContext: async () => {
+      const [row] = await db.select().from(agentStore).where(eq(agentStore.key, 'global_context')).limit(1);
+      return (row?.value as string) || '';
+    },
+    getGroupContext: async (groupId: string) => {
+      if (!groupId) return '';
+      const [row] = await db.select({ context: groups.context }).from(groups).where(eq(groups.id, groupId)).limit(1);
+      return row?.context || '';
+    },
+    getAgentContexts: async (contextIds: string[]) => {
+      if (!contextIds?.length) return [];
+      const rows = await db.select().from(agentContexts).where(inArray(agentContexts.id, contextIds));
+      return rows.map(r => ({ title: r.title, content: r.content }));
+    },
   };
 
   const { FlowExecutor } = await import('../../../worker/src/executor/engine.js');
@@ -171,6 +185,8 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
         version: flow.version,
         createdAt: flow.created_at?.toISOString() || '',
         updatedAt: flow.updated_at?.toISOString() || '',
+        flowContext: flow.flow_context || '',
+        groupId: flow.group_id || undefined,
       },
       { chat_input: { message, history: historyMessages }, message, history: historyMessages },
       async (nodeId, event) => {

@@ -343,6 +343,30 @@ export default function FlowEditPage() {
     abortRef.current?.abort();
   }, []);
 
+  // ── Flow Settings modal ──
+  const [showFlowSettings, setShowFlowSettings] = useState(false);
+  const [flowSettingsDraft, setFlowSettingsDraft] = useState<Record<string, any>>({});
+
+  const openFlowSettings = useCallback(() => {
+    setFlowSettingsDraft({
+      name: flow?.name || '',
+      description: flow?.description || '',
+      flow_context: flow?.flow_context || '',
+      group_id: flow?.group_id || '',
+    });
+    setShowFlowSettings(true);
+  }, [flow]);
+
+  const saveFlowSettings = useCallback(async () => {
+    if (!flow) return;
+    const { name, description, flow_context, group_id } = flowSettingsDraft;
+    setFlow((prev: any) => ({ ...prev, name, description, flow_context, group_id: group_id || null }));
+    if (flow.id !== 'new') {
+      await api.flows.update(flow.id, { name, description, flow_context, group_id: group_id || null });
+    }
+    setShowFlowSettings(false);
+  }, [flow, flowSettingsDraft]);
+
   const { theme, toggle: toggleTheme } = useTheme();
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
 
@@ -357,6 +381,11 @@ export default function FlowEditPage() {
           <Link href="/" className="flex items-center gap-1 leading-none text-on-surface-variant hover:text-on-surface-variant shrink-0"><Icon name="arrow_back" className="text-sm" /> <span>Back</span></Link>
           <TextField label="Flow name" value={flow.name} onChange={(v) => setFlow((prev: any) => ({ ...prev, name: v }))} className="min-w-[80px] max-w-[160px]" />
           <TextField label="Description" value={flow.description || ''} onChange={(v) => setFlow((prev: any) => ({ ...prev, description: v }))} className="min-w-[100px] max-w-[200px] focus:max-w-[400px] transition-all" />
+          <Tooltip content="Flow settings">
+            <button onClick={openFlowSettings} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors">
+              <Icon name="settings" className="text-base" />
+            </button>
+          </Tooltip>
           {groups.length > 0 && (
             <SelectField
               label="Group"
@@ -439,11 +468,6 @@ export default function FlowEditPage() {
             </button>
           </Tooltip>
           <Separator.Root orientation="vertical" className="w-px h-4 bg-outline-variant mx-0.5" />
-          <Tooltip content="Manage LLM endpoints & MCP servers">
-            <Link href="/settings" className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors rounded hover:bg-surface-container-high">
-              <Icon name="settings" className="text-sm" /> Settings
-            </Link>
-          </Tooltip>
           <Tooltip content="Run history">
             <Link href={`/flows/${flow?.id}/executions`} className="flex items-center gap-1 px-1.5 py-1 text-xs text-on-surface-variant hover:text-on-surface-variant transition-colors rounded hover:bg-surface-container-high">
               <Icon name="history" className="text-sm" /> Runs
@@ -478,6 +502,52 @@ export default function FlowEditPage() {
       {/* Debug overlay */}
       {showDebug && flow && (
         <DebugOverlay flowId={flow.id} nodes={nodes} edges={edges} onClose={() => setShowDebug(false)} />
+      )}
+
+      {/* Flow Settings modal */}
+      {showFlowSettings && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-12" onClick={() => setShowFlowSettings(false)}>
+          <div className="bg-surface rounded-xl shadow-m3-4 w-full max-w-lg mx-4 max-h-[70vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+              <h2 className="text-lg font-semibold text-on-surface">Flow Settings</h2>
+              <button onClick={() => setShowFlowSettings(false)} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors cursor-pointer">
+                <Icon name="close" className="text-base" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <TextField label="Flow name" value={flowSettingsDraft.name || ''} onChange={(v) => setFlowSettingsDraft(p => ({ ...p, name: v }))} />
+              <TextField label="Description" value={flowSettingsDraft.description || ''} onChange={(v) => setFlowSettingsDraft(p => ({ ...p, description: v }))} multiline rows={2} />
+              <div>
+                <label className="text-xs font-medium text-on-surface-variant block mb-1">Flow Context</label>
+                <textarea
+                  value={flowSettingsDraft.flow_context || ''}
+                  onChange={e => setFlowSettingsDraft(p => ({ ...p, flow_context: e.target.value }))}
+                  placeholder="Context for this specific flow..."
+                  rows={6}
+                  className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
+                />
+                <p className="mt-1 text-[10px] text-on-surface-variant">This context is injected between the group context and the agent contexts.</p>
+              </div>
+              {groups.length > 0 && (
+                <SelectField
+                  label="Group"
+                  value={flowSettingsDraft.group_id || ''}
+                  onChange={(v) => setFlowSettingsDraft(p => ({ ...p, group_id: v || null }))}
+                  options={[
+                    { value: '', label: 'No group' },
+                    ...groups.map(g => ({ value: g.id, label: g.name })),
+                  ]}
+                />
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0">
+              <button onClick={() => setShowFlowSettings(false)} className="m3-button-outlined text-sm">Cancel</button>
+              <button onClick={saveFlowSettings} className="m3-button gap-2">
+                <Icon name="save" className="text-sm" /> Save
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

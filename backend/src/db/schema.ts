@@ -46,6 +46,7 @@ export const groups = pgTable('groups', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull().unique(),
   description: text('description').notNull().default(''),
+  context: text('context').notNull().default(''),
   provider: text('provider').notNull().default('local'),
   created_at: timestamp('created_at').notNull().defaultNow(),
 });
@@ -55,6 +56,16 @@ export const groupMembers = pgTable('group_members', {
   group_id: uuid('group_id').notNull().references(() => groups.id),
   user_id: uuid('user_id').notNull().references(() => users.id),
   created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const agentContexts = pgTable('agent_contexts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  content: text('content').notNull().default(''),
+  created_by: uuid('created_by').references(() => users.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
 });
 
 export const ssoConfig = pgTable('sso_config', {
@@ -81,6 +92,7 @@ export const flows = pgTable('flows', {
   created_by: uuid('created_by').references(() => users.id),
   group_id: uuid('group_id').references(() => groups.id),
   is_subflow: boolean('is_subflow').notNull().default(false),
+  flow_context: text('flow_context').notNull().default(''),
   created_at: timestamp('created_at').notNull().defaultNow(),
   updated_at: timestamp('updated_at').notNull().defaultNow(),
 });

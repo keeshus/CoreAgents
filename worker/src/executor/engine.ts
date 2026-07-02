@@ -60,6 +60,9 @@ export interface ExecutionContext {
   getEmbeddingProvider?: (providerId: string) => Promise<{ providerType: string; apiKey: string; baseUrl: string | null; model: string } | null>;
   getVectorStore?: (storeId: string) => Promise<{ name: string; url: string; apiKey: string | null } | null>;
   searchSimilar?: (collectionName: string, queryEmbedding: number[], topK: number, minScore: number) => Promise<Array<{ documentId: string; chunkText: string; chunkIndex: number; similarity: number }>>;
+  getGlobalContext?: () => Promise<string>;
+  getGroupContext?: (groupId: string) => Promise<string>;
+  getAgentContexts?: (contextIds: string[]) => Promise<Array<{ title: string; content: string }>>;
   flowNodes?: Array<{ id: string; type: string; data: any }>;
   flowEdges?: Array<{ id: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }>;
   getFlow?: (flowId: string, ancestry?: string[]) => Promise<FlowDefinition | null>;
@@ -336,7 +339,7 @@ export class FlowExecutor {
           // Store displayed for UI, pass forwarded to next node
           nodeInput = { ...(filteredInput as any), _reviewedContent: forwarded };
         }
-        const output = await this.executeNode(node, nodeInput, context, onEvent);
+        const output = await this.executeNode(node, nodeInput, context, onEvent, flow);
         // Strip internal metadata from downstream output — only actual content flows between nodes
         const cleanOutput = output && typeof output === 'object' && !Array.isArray(output)
           ? Object.fromEntries(
@@ -571,6 +574,7 @@ export class FlowExecutor {
     input: unknown,
     context: ExecutionContext,
     onEvent: EventCallback,
+    flow?: FlowDefinition,
   ): Promise<unknown> {
     const nodeData = node.data as NodeData;
     const nodeType = (nodeData as any).type as string;
@@ -684,8 +688,40 @@ export class FlowExecutor {
         const conversation = [...messages];
         let finalContent = '';
 
-        // Resolve {{input.path.to.field}} template variables in system prompt
-        let resolvedPrompt = resolveTemplate(config.systemPrompt || '', input);
+        // Build layered system prompt: global → group → flow → agent contexts → node system prompt
+        const contextLayers: string[] = [];
+
+        // 1. Global context
+        if (context.getGlobalContext) {
+          const globalCtx = await context.getGlobalContext();
+          if (globalCtx) contextLayers.push(globalCtx);
+        }
+
+        // 2. Group context (from flow's group_id)
+        if (context.getGroupContext && flow?.groupId) {
+          const groupCtx = await context.getGroupContext(flow.groupId);
+          if (groupCtx) contextLayers.push(groupCtx);
+        }
+
+        // 3. Flow context
+        if (flow?.flowContext) {
+          contextLayers.push(flow.flowContext);
+        }
+
+        // 4. Selected agent contexts
+        const contextIds = config?.contextIds as string[] | undefined;
+        if (context.getAgentContexts && contextIds?.length) {
+          const agentCtxs = await context.getAgentContexts(contextIds);
+          for (const ac of agentCtxs) {
+            if (ac.content) contextLayers.push(`${ac.title}:\n${ac.content}`);
+          }
+        }
+
+        // 5. Node system prompt (with template resolution)
+        const resolvedNodePrompt = resolveTemplate(config.systemPrompt || '', input);
+        if (resolvedNodePrompt) contextLayers.push(resolvedNodePrompt);
+
+        let resolvedPrompt = contextLayers.join('\n\n---\n\n');
 
         // Inject structured output tool when JSON output is selected
         const allTools = [...(toolDefs || [])];

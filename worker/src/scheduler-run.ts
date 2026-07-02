@@ -37,6 +37,8 @@ async function main() {
           inputMessage: config.inputMessage || undefined,
           nodes: flow.nodes as any[],
           edges: flow.edges as any[],
+          flowContext: flow.flow_context || '',
+          groupId: flow.group_id || undefined,
         });
       }
     }

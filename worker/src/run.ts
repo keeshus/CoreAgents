@@ -9,8 +9,8 @@ async function main() {
   console.log('Worker started, waiting for jobs...');
 
   const { db } = await import('../../backend/src/db/connection.js');
-  const { executions, executionSteps } = await import('../../backend/src/db/schema.js');
-  const { eq, and } = await import('drizzle-orm');
+  const { executions, executionSteps, agentContexts, agentStore, groups } = await import('../../backend/src/db/schema.js');
+  const { eq, and, inArray } = await import('drizzle-orm');
 
   const worker = createExecutionWorker(async (job) => {
     const { flow, input } = job;
@@ -37,6 +37,10 @@ async function main() {
       executionStepsTable: executionSteps,
       eq,
       and,
+      inArray,
+      agentContextsTable: agentContexts,
+      agentStoreTable: agentStore,
+      groupsTable: groups,
     });
 
     console.log(`Flow ${flow.id}: ${result.status} (exec ${execId})`);

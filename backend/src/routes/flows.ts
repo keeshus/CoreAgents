@@ -108,6 +108,7 @@ router.get(
       created_by: flows.created_by,
       created_by_name: users.name,
       group_id: flows.group_id,
+      flow_context: flows.flow_context,
       created_at: flows.created_at,
       updated_at: flows.updated_at,
     }).from(flows).leftJoin(users, eq(flows.created_by, users.id)).where(eq(flows.id, id)).limit(1);
@@ -126,7 +127,7 @@ router.post(
   '/',
   requirePermission('flow:create'),
   asyncHandler(async (req, res) => {
-    const { name, description = '', nodes = [], edges = [], group_id } = req.body;
+    const { name, description = '', nodes = [], edges = [], group_id, flow_context } = req.body;
 
     if (!name || !name.trim()) {
       res.status(400).json({ error: 'Flow name is required' });
@@ -153,6 +154,7 @@ router.post(
         is_subflow: isSubflow,
         created_by: req.user?.userId,
         group_id,
+        flow_context: flow_context || '',
       })
       .returning();
 
@@ -166,7 +168,7 @@ router.put(
   requirePermission('flow:edit'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
-    const { name, description, nodes, edges, group_id } = req.body;
+    const { name, description, nodes, edges, group_id, flow_context } = req.body;
 
     const updateData: Record<string, unknown> = {
       updated_at: new Date(),
@@ -180,6 +182,7 @@ router.put(
     }
     if (edges !== undefined) updateData.edges = edges;
     if (group_id !== undefined) updateData.group_id = group_id;
+    if (flow_context !== undefined) updateData.flow_context = flow_context;
 
     // Check for duplicate name if name changed
     if (name !== undefined && name.trim()) {
