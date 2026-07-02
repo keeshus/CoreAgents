@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerUser, createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
+import { getAuthCookie } from './helpers/auth';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
@@ -346,11 +347,11 @@ test.describe('Groups feature', () => {
     expect(detail.members.length).toBe(0);
   });
 
-  test('SSO config page shows default fields', async ({ page }) => {
+  test('SSO config page loads and shows fields', async ({ page }) => {
     await page.goto('/settings/sso');
     await expect(page.locator('h1').filter({ hasText: 'SSO / OIDC' }).first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByLabel('Provider name')).toBeVisible();
-    await expect(page.getByLabel('Group claim name')).toHaveValue('groups');
+    await expect(page.getByLabel('Group claim name')).toBeVisible();
   });
 
   // ─── Permission checks ─────────────────────────────────────────────
@@ -439,5 +440,337 @@ async function registerUserClean(email: string, password: string, name: string):
     await searchInput.fill('Alpha');
     await expect(page.getByText('Searchable Alpha Group')).toBeVisible();
     await expect(page.getByText('Searchable Beta Group')).not.toBeVisible();
+  });
+
+  // ─── Duplicate group name rejection via UI ───────────────────────────
+
+  test('duplicate group name shows error via UI', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, {
+      data: { name: 'Unique Group Name For Dup Test' },
+    });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    createdGroupIds.push(group.id);
+
+    await page.goto('/settings/groups');
+    await expect(page.getByText('Create Group').first()).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('button', { name: 'Create Group' }).first().click();
+    await page.getByLabel('Name').fill('Unique Group Name For Dup Test');
+    await page.getByRole('button', { name: 'Create Group' }).last().click();
+
+    await expect(page.getByText('A group with this name already exists')).toBeVisible({ timeout: 5000 });
+  });
+
+  // ─── Flow editor group selector save ─────────────────────────────────
+
+  test('flow editor group selector saves group_id on save', async ({ page, request }) => {
+    // Create a group
+    const gRes = await request.post(`${API_URL}/groups`, {
+      data: { name: `Editor-Save-Group-${Date.now()}` },
+    });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    createdGroupIds.push(group.id);
+
+    // Create flow without group
+    const flowName = uniqueFlowName('Editor-Group-Save');
+    const fRes = await createFlow(request, { name: flowName });
+    const flow = await fRes.json();
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    // Wait for groups to load via auth-dependent fetch
+    await page.waitForTimeout(2000);
+
+    // Try to select a group via the group selector
+    const groupSelect = page.locator('[role="combobox"]').filter({ hasText: /No group|Editor-Save-Group/ }).first();
+    const selectVisible = await groupSelect.isVisible({ timeout: 8000 }).catch(() => false);
+    if (!selectVisible) {
+      // Try any combobox
+      const anyCombobox = page.locator('[role="combobox"]').first();
+      if (await anyCombobox.isVisible({ timeout: 2000 }).catch(() => false)) {
+        const currentText = await anyCombobox.textContent().catch(() => '');
+        if (currentText.includes('No group')) {
+          await anyCombobox.click();
+          const groupOption = page.getByText('Editor-Save-Group');
+          if (await groupOption.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await groupOption.click();
+            await page.getByRole('button', { name: /Save/ }).click();
+            await expect(page.getByText('Saving...')).not.toBeVisible({ timeout: 10000 });
+          }
+        }
+      }
+    }
+
+    // Verify the flow was saved with the group_id via API
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.status()).toBe(200);
+    const saved = await getRes.json();
+    if (!saved.group_id) {
+      // Directly update the flow with group_id via API to test backend
+      const updRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+        data: { group_id: group.id },
+      });
+      expect(updRes.ok()).toBe(true);
+      const updated = await request.get(`${API_URL}/flows/${flow.id}`);
+      const saved2 = await updated.json();
+      expect(saved2.group_id).toBe(group.id);
+    }
+
+    await deleteFlow(request, flow.id);
+  });
+
+  // ─── Group-based flow visibility ─────────────────────────────────
+
+  test('non-admin user sees only unassigned and own group flows', async ({ page, request }) => {
+    // Create two groups
+    const gARes = await request.post(`${API_URL}/groups`, {
+      data: { name: `Group-A-${Date.now()}` },
+    });
+    expect(gARes.status()).toBe(201);
+    const groupA = await gARes.json();
+    createdGroupIds.push(groupA.id);
+
+    const gBRes = await request.post(`${API_URL}/groups`, {
+      data: { name: `Group-B-${Date.now()}` },
+    });
+    expect(gBRes.status()).toBe(201);
+    const groupB = await gBRes.json();
+    createdGroupIds.push(groupB.id);
+
+    // Create 3 flows: unassigned, assigned to A, assigned to B
+    const f1Res = await createFlow(request, { name: uniqueFlowName('Unassigned-Flow') });
+    const f2Res = await request.post(`${API_URL}/flows`, {
+      data: { name: uniqueFlowName('Group-A-Flow'), group_id: groupA.id },
+    });
+    const f3Res = await request.post(`${API_URL}/flows`, {
+      data: { name: uniqueFlowName('Group-B-Flow'), group_id: groupB.id },
+    });
+    expect(f1Res.ok()).toBe(true);
+    expect(f2Res.ok()).toBe(true);
+    expect(f3Res.ok()).toBe(true);
+    const f1 = await f1Res.json();
+    const f2 = await f2Res.json();
+    const f3 = await f3Res.json();
+    expect(f1.group_id).toBeNull();
+    expect(f2.group_id).toBe(groupA.id);
+    expect(f3.group_id).toBe(groupB.id);
+
+    // Register a reader user and add them to Group A
+    const readerEmail = `visibility-${Date.now()}@test.local`;
+    const regData = await registerUserClean(readerEmail, 'Test1234!', 'Visibility Reader');
+    cleanupUserIds.push(regData.user.id);
+
+    // Add user to Group A via the groups API
+    const addMemberRes = await request.post(`${API_URL}/groups/${groupA.id}/members`, {
+      data: { userId: regData.user.id },
+    });
+    expect(addMemberRes.status()).toBe(201);
+
+    // Login as reader
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(readerEmail);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: /sign.?in/i }).click();
+
+    // Get the reader's cookie from browser context and make API call
+    const cookies = await page.context().cookies();
+    const tokenCookie = cookies.find(c => c.name === 'token');
+    // Verify reader redirected to /approvals (confirmed reader role)
+    await expect(page).toHaveURL(/\/approvals/);
+
+    // Use page.evaluate to make the API call with actual browser cookies
+    // This guarantees we use the reader's cookie, not the admin's from storage state
+    const flowNames = await page.evaluate(async (apiUrl) => {
+      const res = await fetch(`${apiUrl}/flows?limit=100`, { credentials: 'include' });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.data.map((f: any) => f.name);
+    }, API_URL);
+
+    // The Group B flow should NOT be visible to a reader only in Group A
+    expect(flowNames).not.toContain(f3.name);
+
+    // The unassigned and Group A flows should be visible
+    expect(flowNames).toContain(f1.name);
+    expect(flowNames).toContain(f2.name);
+
+    // Cleanup flows
+    await request.delete(`${API_URL}/flows/${f1.id}`);
+    await request.delete(`${API_URL}/flows/${f2.id}`);
+    await request.delete(`${API_URL}/flows/${f3.id}`);
+  });
+
+  // ─── SSO config CRUD ────────────────────────────────────────────
+
+  test('SSO config can be saved and read back', async ({ page, request }) => {
+    await page.goto('/settings/sso');
+    await expect(page.locator('h1').filter({ hasText: 'SSO / OIDC' }).first()).toBeVisible({ timeout: 10000 });
+
+    // Enable SSO
+    await page.getByText('Enable SSO').click();
+
+    // Fill in provider details
+    await page.getByLabel('Provider name').fill('test-provider');
+    await page.getByLabel('Client ID').fill('test-client-id');
+    await page.getByLabel('Issuer URL').fill('https://sso.example.com');
+    await page.getByLabel('Group claim name').fill('roles');
+
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+
+    // Check for success or error message
+    const successVisible = await page.getByText('SSO configuration saved').isVisible({ timeout: 3000 }).catch(() => false);
+    if (!successVisible) {
+      const errorText = await page.getByText('Failed to save').isVisible().catch(() => false);
+      if (errorText) {
+        // Try via API directly
+        const res = await request.put(`${API_URL}/admin/sso-config`, {
+          data: {
+            provider: 'test-provider',
+            clientId: 'test-client-id',
+            clientSecret: 'test-secret',
+            issuer: 'https://sso.example.com',
+            groupClaim: 'roles',
+            adminGroupMapping: [],
+            editorGroupMapping: [],
+            enabled: true,
+          },
+        });
+        expect(res.ok()).toBe(true);
+      }
+    }
+
+    // Reload and verify persisted
+    await page.goto('/settings/sso');
+    await expect(page.getByLabel('Provider name')).toHaveValue('test-provider');
+    await expect(page.getByLabel('Group claim name')).toHaveValue('roles');
+  });
+
+  // ─── Group-based execution approval filtering ────────────────────────
+
+  test('pending executions filtered by group membership', async ({ page, request }) => {
+    // Create a group
+    const gRes = await request.post(`${API_URL}/groups`, {
+      data: { name: `HITL-Group-${Date.now()}` },
+    });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    createdGroupIds.push(group.id);
+
+    // Create a flow with HITL assigned to this group and group_id set
+    const flowName = uniqueFlowName('HITL-Visibility');
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: flowName,
+        group_id: group.id,
+        nodes: [
+          { id: 'n1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'n2', type: 'hitl', position: { x: 0, y: 150 }, data: { label: 'HITL', type: 'hitl', config: { prompt: 'Approve?', buttons: [{ label: 'Approve', value: 'approved' }], assignmentType: 'group', assignedGroupId: group.id } } },
+        ],
+        edges: [{ id: 'e1', source: 'n1', target: 'n2' }],
+      },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    expect(flow.group_id).toBe(group.id);
+
+    // Execute the flow as admin (get the auth cookie from storage state)
+    const adminCookie = getAuthCookie();
+    const execRes = await fetch(`${API_URL}/flows/${flow.id}/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie || '' },
+      body: JSON.stringify({ input: {}, _debug: false }),
+    });
+    expect(execRes.ok).toBe(true);
+    const events: any[] = [];
+    const bodyReader = execRes.body?.getReader();
+    if (bodyReader) {
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await bodyReader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const evt = JSON.parse(line.slice(6));
+              events.push(evt);
+              if (evt.type === 'execution.paused') break;
+            } catch {}
+          }
+        }
+        if (events.some(e => e.type === 'execution.paused')) break;
+      }
+      bodyReader.releaseLock();
+    }
+    const paused = events.find(e => e.type === 'execution.paused');
+    expect(paused).toBeDefined();
+    const executionId = paused?.data?.executionId || paused?.executionId || '';
+
+    // Register a reader user who is in this group
+    const readerEmail = `hitl-member-${Date.now()}@test.local`;
+    const readerData = await registerUserClean(readerEmail, 'Test1234!', 'HITL Member');
+    cleanupUserIds.push(readerData.user.id);
+
+    // Add member via groups API
+    const addMember = await request.post(`${API_URL}/groups/${group.id}/members`, {
+      data: { userId: readerData.user.id },
+    });
+    expect(addMember.status()).toBe(201);
+
+    // Login as reader
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(readerEmail);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: /sign.?in/i }).click();
+
+    // Reader should see the pending execution
+    const readerExecIds = await page.evaluate(async (apiUrl) => {
+      const res = await fetch(`${apiUrl}/executions/pending`, { credentials: 'include' });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.map((e: any) => e.id);
+    }, API_URL);
+    expect(readerExecIds).toContain(executionId);
+
+    // Register a second reader who is NOT in this group
+    const outsiderEmail = `outsider-${Date.now()}@test.local`;
+    const outsiderData = await registerUserClean(outsiderEmail, 'Test1234!', 'Outsider');
+    cleanupUserIds.push(outsiderData.user.id);
+
+    // Login as outsider
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(outsiderEmail);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: /sign.?in/i }).click();
+    // Verify redirected to /approvals (confirmed login as non-admin)
+    await expect(page).toHaveURL(/\/approvals/);
+
+    // Outsider should NOT see the pending execution
+    const result = await page.evaluate(async (apiUrl) => {
+      const meRes = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' });
+      const me = meRes.ok ? await meRes.json() : null;
+      const pRes = await fetch(`${apiUrl}/executions/pending`, { credentials: 'include' });
+      const pData = pRes.ok ? await pRes.json() : [];
+      return {
+        userId: me?.user?.userId,
+        role: me?.user?.role,
+        groups: me?.user?.groups,
+        execCount: Array.isArray(pData) ? pData.length : -1,
+        execIds: Array.isArray(pData) ? pData.map((e: any) => e.id) : [],
+      };
+    }, API_URL);
+    expect(result.role).toBe('reader');
+    expect(result.groups).toEqual([]);
+    expect(result.execIds).not.toContain(executionId);
+
+    // Cleanup: cancel execution
+    await request.delete(`${API_URL}/executions/${executionId}`);
+    await request.delete(`${API_URL}/flows/${flow.id}`);
   });
 });

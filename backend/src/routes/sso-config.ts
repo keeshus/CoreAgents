@@ -14,6 +14,22 @@ function maskSecret(val: string): string {
   return val.slice(0, 4) + '••••' + val.slice(-4);
 }
 
+function toCamelCase(row: any) {
+  return {
+    id: row.id,
+    provider: row.provider || '',
+    clientId: row.client_id || '',
+    clientSecret: maskSecret(row.client_secret || ''),
+    issuer: row.issuer || '',
+    redirectUri: row.redirect_uri || 'http://localhost:3001/api/auth/sso/callback',
+    groupClaim: row.group_claim || 'groups',
+    adminGroupMapping: row.admin_group_mapping || [],
+    editorGroupMapping: row.editor_group_mapping || [],
+    enabled: row.enabled || false,
+    updatedAt: row.updated_at || null,
+  };
+}
+
 // GET /api/admin/sso-config — get current config (secret masked)
 router.get('/', requirePermission('admin'), asyncHandler(async (_req, res) => {
   let [config] = await db.select().from(ssoConfig).where(eq(ssoConfig.id, 1));
@@ -26,10 +42,7 @@ router.get('/', requirePermission('admin'), asyncHandler(async (_req, res) => {
     });
     return;
   }
-  res.json({
-    ...config,
-    clientSecret: maskSecret(config.client_secret),
-  });
+  res.json(toCamelCase(config));
 }));
 
 // PUT /api/admin/sso-config — update config
@@ -53,7 +66,7 @@ router.put('/', requirePermission('admin'), asyncHandler(async (req, res) => {
     .onConflictDoUpdate({ target: ssoConfig.id, set: updates as any });
 
   const [config] = await db.select().from(ssoConfig).where(eq(ssoConfig.id, 1));
-  res.json({ ...config, clientSecret: maskSecret(config.client_secret) });
+  res.json(toCamelCase(config));
 }));
 
 export default router;
