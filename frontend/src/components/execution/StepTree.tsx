@@ -85,8 +85,9 @@ function StepCardInner({ step, expanded, onToggle, compact, showInputs, showOutp
   const subExecutionId = subExecutionLinks?.[step.nodeId];
 
   return (
-    <div className="bg-surface rounded-lg border overflow-hidden">
+    <div data-testid={`step-card-${step.nodeId}`} className="bg-surface rounded-lg border overflow-hidden">
       <button
+        data-testid={`step-toggle-${step.nodeId}`}
         onClick={onToggle}
         className="w-full p-3 flex items-center gap-3 text-left hover:bg-surface-container transition-colors cursor-pointer"
       >
@@ -104,7 +105,7 @@ function StepCardInner({ step, expanded, onToggle, compact, showInputs, showOutp
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm font-medium text-on-surface shrink-0">{stepLabel}</span>
             {isSubflow && (
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-secondary-container text-secondary uppercase tracking-wider shrink-0">Subflow</span>
+              <span data-testid="subflow-badge" className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-secondary-container text-secondary uppercase tracking-wider shrink-0">Subflow</span>
             )}
             {isLLM && step.input?.model && <span className="text-[10px] text-on-surface-variant font-mono truncate">{step.input.model}</span>}
             {step.output?.toolCalls?.length > 0 && (

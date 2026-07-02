@@ -22,13 +22,13 @@ export function SubflowNode(props: NodeProps) {
       <div className="flex items-center gap-2 mb-1">
         <Icon name="account_tree" className="text-sm text-secondary" />
         {subflowId ? (
-          <span className="text-xs text-secondary truncate font-medium">{subflowName}</span>
+          <span data-testid="subflow-name" className="text-xs text-secondary truncate font-medium">{subflowName}</span>
         ) : (
-          <span className="text-xs italic text-on-surface-variant">Not configured</span>
+          <span data-testid="subflow-not-configured" className="text-xs italic text-on-surface-variant">Not configured</span>
         )}
       </div>
       {subflowId && (
-        <p className="text-[10px] text-on-surface-variant">
+        <p data-testid="subflow-mapped-count" className="text-[10px] text-on-surface-variant">
           {mappedCount} mapped field{mappedCount !== 1 ? 's' : ''}
         </p>
       )}

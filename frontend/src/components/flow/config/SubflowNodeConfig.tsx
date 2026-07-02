@@ -60,19 +60,19 @@ export function SubflowNodeConfig({ config, onChange, nodeId, nodes, edges }: Su
   const propertyKeys = Object.keys(schemaInfo.properties);
 
   return (
-    <div className="space-y-4">
+    <div data-testid="subflow-config" className="space-y-4">
       <div>
         <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
           Select Subflow
         </h4>
         {loading ? (
-          <p className="text-xs text-on-surface-variant">Loading subflows...</p>
+          <p data-testid="subflows-loading" className="text-xs text-on-surface-variant">Loading subflows...</p>
         ) : subflows.length === 0 ? (
-          <div className="bg-surface-container rounded border p-3 text-xs text-on-surface-variant">
+          <div data-testid="subflows-empty" className="bg-surface-container rounded border p-3 text-xs text-on-surface-variant">
             <p>No subflows found. Create a flow and mark it as a subflow in its settings.</p>
           </div>
         ) : (
-          <div className="space-y-1 max-h-48 overflow-y-auto">
+          <div data-testid="subflows-list" className="space-y-1 max-h-48 overflow-y-auto">
             {subflows.map((sf) => {
               const isSelected = sf.id === config.subflowId;
               const inputSchema = getSubflowInputSchema(sf);
@@ -80,6 +80,7 @@ export function SubflowNodeConfig({ config, onChange, nodeId, nodes, edges }: Su
               return (
                 <button
                   key={sf.id}
+                  data-testid={`subflow-item-${sf.name.replace(/\s+/g, '-')}`}
                   type="button"
                   onClick={() => onChange({ subflowId: sf.id, subflowName: sf.name, inputMapping: {} })}
                   className={`w-full text-left p-2 rounded border text-xs transition-colors ${

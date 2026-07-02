@@ -529,7 +529,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
   const triggerIconName = TRIGGER_CONFIG[triggerType]?.icon || 'terminal';
 
   return (
-    <div className="fixed inset-0 z-50 bg-surface flex flex-col">
+    <div data-testid="debug-overlay" className="fixed inset-0 z-50 bg-surface flex flex-col">
       {/* Header — clean minimal bar */}
       <div className="h-11 border-b flex items-center justify-between px-4 shrink-0 bg-surface">
         <div className="flex items-center gap-3">
@@ -694,7 +694,7 @@ className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono r
                 </h3>
                 {error && <p className="text-sm text-error font-mono mt-2">{error}</p>}
                 {finalOutput && (
-                  <pre className="text-xs bg-surface-container p-3 rounded mt-4 text-left overflow-auto max-h-64">{typeof finalOutput === 'string' ? finalOutput : JSON.stringify(finalOutput, null, 2)}</pre>
+                  <pre data-testid="debug-output" className="text-xs bg-surface-container p-3 rounded mt-4 text-left overflow-auto max-h-64">{typeof finalOutput === 'string' ? finalOutput : JSON.stringify(finalOutput, null, 2)}</pre>
                 )}
                 {!error && !finalOutput && <p className="text-sm text-on-surface-variant">No output data was returned.</p>}
               </div>

@@ -177,7 +177,7 @@ test.describe('Co-Pilot CRUD tools', () => {
     await page.goto('/settings/mcp-servers');
     await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
     await page.goto('/approvals');
-    await expect(page.getByText('Pending Approvals')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('h1').filter({ hasText: 'Pending Approvals' })).toBeVisible({ timeout: 10000 });
     await page.goto('/settings/users');
     await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
     await page.goto('/profile');
