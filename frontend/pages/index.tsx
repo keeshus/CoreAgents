@@ -159,6 +159,30 @@ export default function FlowsListPage() {
     { key: 'contexts', label: 'Agent Contexts', icon: 'sms' },
   ];
 
+  if (!authLoading && !user) {
+    const hasSso = authConfig?.sso != null;
+    const ssoName = authConfig?.sso?.name || 'SSO';
+    return (
+      <div className="min-h-screen bg-surface-container flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center px-6">
+          <Icon name="account_tree" className="text-6xl text-primary mx-auto mb-6" />
+          <h1 className="text-3xl font-bold text-on-surface mb-3">Core Agents</h1>
+          <p className="text-on-surface-variant mb-8">Visual LLM agent builder. Build, test, and deploy AI workflows with a drag-and-drop editor.</p>
+          <div className="space-y-3">
+            {hasSso && (
+              <a href={`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/sso/login`} className="flex items-center justify-center gap-2 w-full border-2 border-outline text-on-surface rounded-xl p-3 text-sm font-medium hover:bg-surface-container-high transition-colors">
+                <Icon name="login" className="text-xl" />
+                Sign in with {ssoName}
+              </a>
+            )}
+            <Link href="/login" className="block w-full m3-button text-center">Sign In</Link>
+            <Link href="/register" className="block w-full text-sm text-primary hover:underline mt-2">Create an account</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
