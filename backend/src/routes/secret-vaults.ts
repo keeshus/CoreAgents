@@ -17,7 +17,7 @@ function isValidUUID(id: string): boolean {
 
 function sanitizeVault(vault: any) {
   const { api_key, ...safe } = vault;
-  return { ...safe, hasApiKey: !!api_key };
+  return { ...safe, hasApiKey: !!api_key, connected: vault.is_connected, groups: [] };
 }
 
 // GET /api/secret-vaults

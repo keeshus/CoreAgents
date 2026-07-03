@@ -339,10 +339,13 @@ test.describe('Secrets management', () => {
     await expect(page.locator('h1').filter({ hasText: 'Secrets' }).first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('secrets vault settings page loads', async ({ page, request }) => {
+  test('secrets vault settings page loads and shows vault list', async ({ page, request }) => {
     await page.goto('/settings/secret-vaults');
-    // Wait for either the vaults page or the access denied page to load
-    await expect(page.locator('h1').first().or(page.getByText('Access denied'))).toBeVisible({ timeout: 10000 });
+    // Wait for the actual page content to render (not just the shell)
+    await expect(page.getByText('Add Vault')).toBeVisible({ timeout: 10000 });
+    // Verify the React component rendered without crashing
+    const hasCrashed = await page.getByText('Secret Vaults').isVisible().catch(() => false);
+    expect(hasCrashed).toBe(true);
     // Verify API access works
     const listRes = await request.get(`${API_URL}/secret-vaults`);
     expect(listRes.status()).toBe(200);

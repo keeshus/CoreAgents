@@ -120,8 +120,8 @@ export default function SecretVaultsPage() {
     setTestResults((prev) => ({ ...prev, [id]: undefined as any }));
     try {
       const result = await api.secretVaults.test(id);
-      setTestResults((prev) => ({ ...prev, [id]: result.connected ?? true }));
-      if (result.connected === false) {
+      setTestResults((prev) => ({ ...prev, [id]: result.success ?? true }));
+      if (!result.success) {
         setError(result.error || 'Connection test failed');
       }
     } catch (err) {
