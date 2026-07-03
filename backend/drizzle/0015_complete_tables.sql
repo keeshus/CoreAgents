@@ -2,19 +2,6 @@
 -- from earlier migration SQL files. Uses IF NOT EXISTS so it's safe to
 -- run on any database regardless of which migrations have been applied.
 
-CREATE TABLE IF NOT EXISTS "executions" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "flow_id" uuid NOT NULL,
-  "status" text DEFAULT 'running' NOT NULL,
-  "input" jsonb DEFAULT '{}' NOT NULL,
-  "output" jsonb DEFAULT '{}',
-  "error" text,
-  "pending_hitls" jsonb DEFAULT '[]',
-  "started_at" timestamp DEFAULT now() NOT NULL,
-  "completed_at" timestamp,
-  "created_at" timestamp DEFAULT now() NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "execution_steps" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "execution_id" uuid NOT NULL,
