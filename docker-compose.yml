@@ -31,8 +31,8 @@ services:
   backend:
     container_name: core-agents-backend
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "3001:3001"
     depends_on:
@@ -55,8 +55,8 @@ services:
   worker:
     container_name: core-agents-worker
     build:
-      context: ./worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: worker/Dockerfile
     restart: always
     environment:
       - VALKEY_HOST=valkey
@@ -67,8 +67,8 @@ services:
   frontend:
     container_name: core-agents-frontend
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     ports:
       - "3000:3000"
     environment:

@@ -10,14 +10,20 @@ COPY shared/package*.json ./shared/
 COPY shared/tsconfig.json ./shared/
 COPY shared/src ./shared/src/
 
+# Backend deps (needed by worker for runtime imports)
+COPY backend/package*.json ./backend/
+COPY backend/drizzle ./backend/drizzle/
+
 # Worker deps
 COPY worker/package*.json ./worker/
-RUN npm install -w shared -w worker --omit=dev && npm cache clean --force
+RUN npm install -w shared -w worker -w backend --install-strategy=hoisted && npm cache clean --force
 
 # Worker source + build
 COPY worker/tsconfig.build.json ./worker/tsconfig.json
 COPY worker/src ./worker/src/
-RUN cd worker && npx tsc && cd .. && npm prune --omit=dev
+COPY backend/src ./backend/src/
+COPY backend/tsconfig.json ./backend/
+RUN cd worker && npx -p typescript tsc && cd .. && npm prune --omit=dev
 
 # ── Production image ───────────────────────────────────────
 FROM node:25-alpine

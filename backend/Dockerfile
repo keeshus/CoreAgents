@@ -24,7 +24,7 @@ RUN npm install -w shared -w worker -w backend && npm cache clean --force
 COPY backend/tsconfig.build.json ./backend/tsconfig.json
 COPY backend/src ./backend/src/
 COPY backend/drizzle ./backend/drizzle/
-RUN cd backend && npx tsc && cd .. && npm prune --omit=dev
+RUN cd backend && npx -p typescript tsc && cd .. && npm prune --omit=dev
 
 # ── Production image ───────────────────────────────────────
 FROM node:25-alpine
