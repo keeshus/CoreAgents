@@ -7,7 +7,7 @@ async function main() {
   // defined in schema.ts but not in any migration SQL file — they need to exist
   // before migration SQL that ALTERs them can run.
   console.log('Syncing schema...');
-  execSync('npx drizzle-kit push --config drizzle.config.ts', {
+  execSync('npx --yes drizzle-kit push --config drizzle.config.ts --force', {
     cwd: new URL('../..', import.meta.url).pathname,
     stdio: 'inherit',
   });
