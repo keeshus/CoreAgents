@@ -18,9 +18,11 @@ interface Vault {
   id: string;
   name: string;
   base_url: string;
-  client_id: string;
-  auth_type: string;
+  account: string;
+  login: string;
+  hasApiKey: boolean;
   ca_cert: string | null;
+  self_hosted: boolean;
   connected: boolean;
   groups: Group[];
 }
@@ -28,19 +30,21 @@ interface Vault {
 interface FormState {
   name: string;
   baseUrl: string;
-  clientId: string;
-  clientSecret: string;
-  authType: string;
+  account: string;
+  login: string;
+  apiKey: string;
   caCert: string;
+  selfHosted: boolean;
 }
 
 const EMPTY_FORM: FormState = {
   name: '',
   baseUrl: '',
-  clientId: '',
-  clientSecret: '',
-  authType: 'client_credentials',
+  account: 'conjur',
+  login: '',
+  apiKey: '',
   caCert: '',
+  selfHosted: false,
 };
 
 export default function SecretVaultsPage() {
@@ -87,10 +91,11 @@ export default function SecretVaultsPage() {
     setForm({
       name: v.name,
       baseUrl: v.base_url,
-      clientId: v.client_id,
-      clientSecret: '',
-      authType: v.auth_type,
+      account: v.account,
+      login: v.login,
+      apiKey: '',
       caCert: v.ca_cert || '',
+      selfHosted: v.self_hosted,
     });
     setEditingId(v.id);
     setShowForm(true);
@@ -135,11 +140,12 @@ export default function SecretVaultsPage() {
     const body: Record<string, unknown> = {
       name: form.name,
       baseUrl: form.baseUrl,
-      clientId: form.clientId,
-      authType: form.authType,
+      login: form.login,
+      apiKey: form.apiKey,
     };
-    if (form.clientSecret) body.clientSecret = form.clientSecret;
+    if (form.account) body.account = form.account;
     if (form.caCert) body.caCert = form.caCert;
+    if (form.selfHosted) body.selfHosted = true;
 
     try {
       if (editingId) {
@@ -221,36 +227,39 @@ export default function SecretVaultsPage() {
                 onChange={(v) => setForm((f) => ({ ...f, name: v }))}
               />
 
-              <SelectField
-                label="Auth Type"
-                value={form.authType}
-                onChange={(v) => setForm((f) => ({ ...f, authType: v }))}
-                options={[
-                  { value: 'client_credentials', label: 'Client Credentials' },
-                  { value: 'api_key', label: 'API Key' },
-                  { value: 'basic', label: 'Basic Auth' },
-                ]}
-              />
-
               <TextField
                 label="URL"
                 value={form.baseUrl}
                 onChange={(v) => setForm((f) => ({ ...f, baseUrl: v }))}
+                helpText="CyberArk Conjur base URL, e.g. https://conjur.example.com"
               />
 
               <TextField
-                label="Client ID"
-                value={form.clientId}
-                onChange={(v) => setForm((f) => ({ ...f, clientId: v }))}
+                label="Conjur Account"
+                value={form.account}
+                onChange={(v) => setForm((f) => ({ ...f, account: v }))}
+                helpText="Default: conjur (for Conjur Cloud: conjur)"
               />
 
               <TextField
-                label="Client Secret"
+                label="Login"
+                value={form.login}
+                onChange={(v) => setForm((f) => ({ ...f, login: v }))}
+                helpText="For host identities: host%2Fmyapp"
+              />
+
+              <TextField
+                label="API Key"
                 type="password"
-                value={form.clientSecret}
-                onChange={(v) => setForm((f) => ({ ...f, clientSecret: v }))}
+                value={form.apiKey}
+                onChange={(v) => setForm((f) => ({ ...f, apiKey: v }))}
                 helpText={editingId ? 'Leave blank to keep current' : undefined}
               />
+
+              <label className="flex items-center gap-2 text-sm cursor-pointer col-span-2">
+                <input type="checkbox" checked={form.selfHosted} onChange={(e) => setForm(f => ({ ...f, selfHosted: e.target.checked }))} className="rounded accent-primary" />
+                <span className="text-on-surface">Self-hosted Conjur (omit /api prefix)</span>
+              </label>
 
               <div className="col-span-2">
                 <label className="text-xs font-medium text-on-surface-variant block mb-1">CA Certificate</label>

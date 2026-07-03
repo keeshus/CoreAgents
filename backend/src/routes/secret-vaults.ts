@@ -16,8 +16,8 @@ function isValidUUID(id: string): boolean {
 }
 
 function sanitizeVault(vault: any) {
-  const { client_id, client_secret, ...safe } = vault;
-  return { ...safe, hasClientId: !!client_id, hasClientSecret: !!client_secret };
+  const { api_key, ...safe } = vault;
+  return { ...safe, hasApiKey: !!api_key };
 }
 
 // GET /api/secret-vaults
@@ -26,25 +26,25 @@ router.get('/', requirePermission('vaults:read'), asyncHandler(async (_req, res)
   res.json(rows.map(sanitizeVault));
 }));
 
-// POST /api/secret-vaults
+// POST /api/secret-vaults — CyberArk Conjur
 router.post('/', requirePermission('vaults:write'), asyncHandler(async (req, res) => {
-  const { name, vaultType = 'cyberark', baseUrl, authType = 'client_credentials', clientId, clientSecret, caCert } = req.body || {};
-  if (!name || !baseUrl || !clientId || !clientSecret) {
-    res.status(400).json({ error: 'name, baseUrl, clientId, and clientSecret are required' }); return;
+  const { name, vaultType = 'cyberark', baseUrl, account = 'conjur', login, apiKey, caCert, selfHosted = false } = req.body || {};
+  if (!name || !baseUrl || !login || !apiKey) {
+    res.status(400).json({ error: 'name, baseUrl, login, and apiKey are required' }); return;
   }
 
   await ensureInitialKeyVersion();
-  const encId = await encrypt(clientId);
-  const encSecret = await encrypt(clientSecret);
+  const encApiKey = await encrypt(apiKey);
 
   const [vault] = await db.insert(secretVaults).values({
     name,
     vault_type: vaultType,
     base_url: baseUrl,
-    auth_type: authType,
-    client_id: encId.encryptedValue + ':' + encId.iv + ':' + encId.tag + ':' + encId.keyVersion,
-    client_secret: encSecret.encryptedValue + ':' + encSecret.iv + ':' + encSecret.tag + ':' + encSecret.keyVersion,
+    account,
+    login,
+    api_key: encApiKey.encryptedValue + ':' + encApiKey.iv + ':' + encApiKey.tag + ':' + encApiKey.keyVersion,
     ca_cert: caCert || null,
+    self_hosted: selfHosted,
   }).returning();
 
   res.status(201).json(sanitizeVault(vault));
@@ -58,23 +58,20 @@ router.put('/:id', requirePermission('vaults:write'), asyncHandler(async (req, r
   const [vault] = await db.select().from(secretVaults).where(eq(secretVaults.id, id));
   if (!vault) { res.status(404).json({ error: 'Vault not found' }); return; }
 
-  const { name, baseUrl, authType, clientId, clientSecret, caCert } = req.body || {};
+  const { name, baseUrl, account, login, apiKey, caCert, selfHosted } = req.body || {};
   const updates: Record<string, unknown> = {};
 
   if (name !== undefined) updates.name = name;
   if (baseUrl !== undefined) updates.base_url = baseUrl;
-  if (authType !== undefined) updates.auth_type = authType;
+  if (account !== undefined) updates.account = account;
+  if (login !== undefined) updates.login = login;
   if (caCert !== undefined) updates.ca_cert = caCert || null;
+  if (selfHosted !== undefined) updates.self_hosted = selfHosted;
 
-  if (clientId) {
+  if (apiKey) {
     await ensureInitialKeyVersion();
-    const enc = await encrypt(clientId);
-    updates.client_id = enc.encryptedValue + ':' + enc.iv + ':' + enc.tag + ':' + enc.keyVersion;
-  }
-  if (clientSecret) {
-    await ensureInitialKeyVersion();
-    const enc = await encrypt(clientSecret);
-    updates.client_secret = enc.encryptedValue + ':' + enc.iv + ':' + enc.tag + ':' + enc.keyVersion;
+    const enc = await encrypt(apiKey);
+    updates.api_key = enc.encryptedValue + ':' + enc.iv + ':' + enc.tag + ':' + enc.keyVersion;
   }
 
   await db.update(secretVaults).set(updates).where(eq(secretVaults.id, id));
@@ -94,7 +91,7 @@ router.delete('/:id', requirePermission('vaults:write'), asyncHandler(async (req
   res.json({ status: 'deleted' });
 }));
 
-// POST /api/secret-vaults/:id/test — test connection
+// POST /api/secret-vaults/:id/test — test Conjur connectivity
 router.post('/:id/test', requirePermission('vaults:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   if (!isValidUUID(id)) { res.status(404).json({ error: 'Vault not found' }); return; }
@@ -102,17 +99,16 @@ router.post('/:id/test', requirePermission('vaults:write'), asyncHandler(async (
   const [vault] = await db.select().from(secretVaults).where(eq(secretVaults.id, id));
   if (!vault) { res.status(404).json({ error: 'Vault not found' }); return; }
 
-  const parts = vault.client_secret.split(':');
-  const clientSecret = await decrypt(parts[0], parts[1], parts[2], parseInt(parts[3]));
-
-  const cidParts = vault.client_id.split(':');
-  const clientId = await decrypt(cidParts[0], cidParts[1], cidParts[2], parseInt(cidParts[3]));
+  const keyParts = vault.api_key.split(':');
+  const apiKey = await decrypt(keyParts[0], keyParts[1], keyParts[2], parseInt(keyParts[3]));
 
   const result = await testConnection({
     baseUrl: vault.base_url,
-    clientId,
-    clientSecret,
+    account: vault.account,
+    login: vault.login,
+    apiKey,
     caCert: vault.ca_cert ?? undefined,
+    selfHosted: vault.self_hosted,
   });
 
   await db.update(secretVaults).set({ is_connected: result.success }).where(eq(secretVaults.id, id));

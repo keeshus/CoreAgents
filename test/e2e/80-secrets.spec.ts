@@ -158,42 +158,41 @@ test.describe('Secrets management', () => {
   // ─── CyberArk vault ──────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════
 
-  test('create a CyberArk vault config', async ({ request }) => {
+  test('create a Conjur vault config', async ({ request }) => {
     const res = await request.post(`${API_URL}/secret-vaults`, {
       data: {
-        name: 'Test CyberArk',
+        name: 'Test Conjur',
         vaultType: 'cyberark',
         baseUrl: 'http://mock-cyberark-e2e:3005',
-        clientId: 'core-agents',
-        clientSecret: 'e2e-test-secret',
+        account: 'conjur',
+        login: 'host/myapp',
+        apiKey: 'myapp-api-key-456',
       },
     });
     expect(res.status()).toBe(201);
     const vault = await res.json();
-    expect(vault.name).toBe('Test CyberArk');
-    expect(vault.hasClientId).toBe(true);
-    expect(vault.hasClientSecret).toBe(true);
-    // The actual values should NOT be in the response
-    expect(vault.client_id).toBeUndefined();
-    expect(vault.client_secret).toBeUndefined();
+    expect(vault.name).toBe('Test Conjur');
+    expect(vault.hasApiKey).toBe(true);
+    // The actual api_key should NOT be in the response
+    expect(vault.api_key).toBeUndefined();
     cleanupVaultIds.push(vault.id);
   });
 
-  test('test connection to CyberArk vault', async ({ request }) => {
+  test('test connection to Conjur vault', async ({ request }) => {
     const res = await request.post(`${API_URL}/secret-vaults`, {
       data: {
         name: 'Connectable Vault',
         vaultType: 'cyberark',
         baseUrl: 'http://mock-cyberark-e2e:3005',
-        clientId: 'core-agents',
-        clientSecret: 'e2e-test-secret',
+        account: 'conjur',
+        login: 'host/myapp',
+        apiKey: 'myapp-api-key-456',
       },
     });
     expect(res.status()).toBe(201);
     const vault = await res.json();
-    cleanupVaultIds.push(vault.id);
+    expect(vault.name).toBe('Connectable Vault');
 
-    // Test connection
     const testRes = await request.post(`${API_URL}/secret-vaults/${vault.id}/test`);
     expect(testRes.status()).toBe(200);
     const testResult = await testRes.json();
@@ -201,22 +200,18 @@ test.describe('Secrets management', () => {
   });
 
   test('bind a vault to a group via group-vault-config', async ({ request }) => {
-    // Create vault
     const vRes = await request.post(`${API_URL}/secret-vaults`, {
-      data: { name: 'Group Vault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', clientId: 'core-agents', clientSecret: 'e2e-test-secret' },
+      data: { name: 'Group Vault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456' },
     });
     const vault = await vRes.json();
     cleanupVaultIds.push(vault.id);
 
-    // Connect it
     await request.post(`${API_URL}/secret-vaults/${vault.id}/test`);
 
-    // Create group
     const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Group-${Date.now()}` } });
     const group = await gRes.json();
     cleanupGroupIds.push(group.id);
 
-    // Bind vault to group
     const bindRes = await request.put(`${API_URL}/group-vault-config/${group.id}`, {
       data: { vaultId: vault.id, enabled: true },
     });
@@ -224,7 +219,6 @@ test.describe('Secrets management', () => {
     const bindResult = await bindRes.json();
     expect(bindResult.status).toBe('updated');
 
-    // Verify binding
     const getBindRes = await request.get(`${API_URL}/group-vault-config/${group.id}`);
     expect(getBindRes.status()).toBe(200);
     const binding = await getBindRes.json();

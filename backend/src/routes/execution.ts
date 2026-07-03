@@ -257,12 +257,11 @@ router.post(
         const { decrypt } = await import('../utils/encryption.js');
         return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
       },
-      getCyberArkSecret: async (secretPath: string) => {
-        const { getSecret: cyberArkGetSecret } = await import('../services/cyberark.js');
+      getCyberArkSecret: async (variableId: string) => {
+        const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
         const { secretVaults: vaultsTable, groupVaultConfig: gvcTable } = await import('../db/schema.js');
         const { eq } = await import('drizzle-orm');
 
-        // Resolve vault from flow's group binding
         let vaultId: string | undefined;
         if (flowGroupId) {
           const [gvc] = await db.select({ vaultId: gvcTable.vault_id }).from(gvcTable).where(eq(gvcTable.group_id, flowGroupId)).limit(1);
@@ -271,12 +270,17 @@ router.post(
         const vaultCondition = vaultId ? eq(vaultsTable.id, vaultId) : eq(vaultsTable.is_connected, true);
         const [vault] = await db.select().from(vaultsTable).where(vaultCondition).limit(1);
         if (!vault) return null;
-        const cidParts = vault.client_id.split(':');
-        const secParts = vault.client_secret.split(':');
+        const keyParts = vault.api_key.split(':');
         const { decrypt } = await import('../utils/encryption.js');
-        const clientId = await decrypt(cidParts[0], cidParts[1], cidParts[2], parseInt(cidParts[3]));
-        const clientSecret = await decrypt(secParts[0], secParts[1], secParts[2], parseInt(secParts[3]));
-        return cyberArkGetSecret({ baseUrl: vault.base_url, clientId, clientSecret, caCert: vault.ca_cert || undefined }, secretPath);
+        const apiKey = await decrypt(keyParts[0], keyParts[1], keyParts[2], parseInt(keyParts[3]));
+        return conjurGetSecret({
+          baseUrl: vault.base_url,
+          account: vault.account,
+          login: vault.login,
+          apiKey,
+          caCert: vault.ca_cert || undefined,
+          selfHosted: vault.self_hosted,
+        }, variableId);
       },
       setSecret: (name: string, value: string) => {
         secretStore.set(name, value);
@@ -706,8 +710,8 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       const { decrypt } = await import('../utils/encryption.js');
       return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
     },
-    getCyberArkSecret: async (secretPath: string) => {
-      const { getSecret: cyberArkGetSecret } = await import('../services/cyberark.js');
+    getCyberArkSecret: async (variableId: string) => {
+      const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
       const { secretVaults: vaultsTable, groupVaultConfig: gvcTable } = await import('../db/schema.js');
       const { eq } = await import('drizzle-orm');
       let vaultId: string | undefined;
@@ -718,12 +722,17 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       const vaultCondition = vaultId ? eq(vaultsTable.id, vaultId) : eq(vaultsTable.is_connected, true);
       const [vault] = await db.select().from(vaultsTable).where(vaultCondition).limit(1);
       if (!vault) return null;
-      const cidParts = vault.client_id.split(':');
-      const secParts = vault.client_secret.split(':');
+      const keyParts = vault.api_key.split(':');
       const { decrypt } = await import('../utils/encryption.js');
-      const clientId = await decrypt(cidParts[0], cidParts[1], cidParts[2], parseInt(cidParts[3]));
-      const clientSecret = await decrypt(secParts[0], secParts[1], secParts[2], parseInt(secParts[3]));
-      return cyberArkGetSecret({ baseUrl: vault.base_url, clientId, clientSecret, caCert: vault.ca_cert || undefined }, secretPath);
+      const apiKey = await decrypt(keyParts[0], keyParts[1], keyParts[2], parseInt(keyParts[3]));
+      return conjurGetSecret({
+        baseUrl: vault.base_url,
+        account: vault.account,
+        login: vault.login,
+        apiKey,
+        caCert: vault.ca_cert || undefined,
+        selfHosted: vault.self_hosted,
+      }, variableId);
     },
     setSecret: (name: string, value: string) => {
       secretStore.set(name, value);

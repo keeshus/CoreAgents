@@ -1,10 +1,11 @@
 /**
- * Mock CyberArk API — implements the token and secret endpoints
- * that the real CyberArk Conjur/REST API would serve.
+ * Mock CyberArk Conjur API — implements the Conjur REST API spec.
  *
- * Simulates:
- *   POST /oauth2/token  — client credentials → access_token
- *   GET  /secrets/:path — fetch a stored secret
+ * Auth:   POST /api/authn/{account}/{login}/authenticate
+ *           Body: raw API key, Response: base64 token
+ * Secret: GET  /api/secrets/{account}/variable/{identifier}
+ *           Authorization: Token token="<token>"
+ *           Response: raw secret value (text/plain)
  */
 
 import http from 'http';
@@ -12,75 +13,174 @@ import crypto from 'crypto';
 
 const PORT = 3005;
 
-const STORE = new Map<string, string>();
-STORE.set('db-password', 'sup3r-s3cr3t-db-pass!');
-STORE.set('api-key-prod', 'sk-prod-abc123def456');
-STORE.set('api-key-staging', 'sk-staging-xyz789');
+// ── Pre-configured users (login → apiKey) ──────────────────────────
+const USERS: Record<string, { apiKey: string; hostId: string }> = {
+  'admin':          { apiKey: 'admin-api-key-123',       hostId: 'admin' },
+  'host%2Fmyapp':   { apiKey: 'myapp-api-key-456',       hostId: 'myapp' },
+  'host%2Fci-user': { apiKey: 'ci-api-key-789',          hostId: 'ci-user' },
+};
 
-const CLIENTS = new Map<string, string>();
-CLIENTS.set('core-agents', 'e2e-test-secret');
+// ── Pre-configured secrets (variable path → value) ─────────────────
+const SECRETS: Record<string, string> = {
+  'prod/db/password':       'sup3r-s3cr3t-db-pass!',
+  'prod/api/key':           'sk-prod-abc123def456',
+  'staging/api/key':        'sk-staging-xyz789',
+  'common/tls/cert':        '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----',
+};
 
+// ── Issued tokens (token → { account, login }) ─────────────────────
+const validTokens = new Map<string, { account: string; login: string }>();
 let tokenCounter = 0;
-function issueToken(): string {
-  return `mock-cyberark-token-${++tokenCounter}-${Date.now()}`;
+
+function issueToken(account: string, login: string): string {
+  const token = Buffer.from(
+    JSON.stringify({ iat: Date.now(), sub: `${account}:${login}`, tid: ++tokenCounter })
+  ).toString('base64');
+  validTokens.set(token, { account, login });
+  return token;
 }
 
-const validTokens = new Set<string>();
+// ── Helpers ────────────────────────────────────────────────────────
+function parsePath(url: string): { path: string; rest: string } {
+  const idx = url.indexOf('?');
+  return {
+    path: idx >= 0 ? url.slice(0, idx) : url,
+    rest: idx >= 0 ? url.slice(idx) : '',
+  };
+}
 
 const server = http.createServer(async (req, res) => {
-  const url = req.url || '/';
+  const fullUrl = req.url || '/';
   const method = req.method || 'GET';
-  const path = url.includes('?') ? url.slice(0, url.indexOf('?')) : url;
+  const { path } = parsePath(fullUrl);
 
   const json = (status: number, data: unknown) => {
     res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(data));
   };
 
-  // ── Token endpoint ───────────────────────────────────────────────
-  // POST /oauth2/token  (form-encoded body: grant_type, client_id, client_secret)
-  if (method === 'POST' && path === '/oauth2/token') {
-    let body = '';
-    for await (const chunk of req) body += chunk;
-    const form = Object.fromEntries(new URLSearchParams(body));
+  const text = (status: number, body: string) => {
+    res.writeHead(status, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+    res.end(body);
+  };
 
-    if (form.grant_type !== 'client_credentials') {
-      json(400, { error: 'unsupported_grant_type' });
+  // ── Auth endpoint ──────────────────────────────────────────────
+  // POST /api/authn/{account}/{login}/authenticate
+  //
+  // Path params: account, login (URL-encoded, e.g. host%2Fmyapp)
+  // Body: raw API key (text/plain)
+  // Response: base64 access token (text/plain)
+  const authMatch = path.match(/^\/api\/authn\/([^/]+)\/([^/]+)\/authenticate$/);
+  if (method === 'POST' && authMatch) {
+    const account = decodeURIComponent(authMatch[1]);
+    const login = authMatch[2]; // keep URL-encoded form
+    const decodedLogin = decodeURIComponent(login);
+
+    // Read raw body (the API key)
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const apiKey = Buffer.concat(chunks).toString('utf-8');
+
+    // Verify credentials — match by raw or URL-encoded login
+    const user = USERS[login] || USERS[decodedLogin];
+    if (!user || user.apiKey !== apiKey) {
+      text(401, 'Unauthorized');
       return;
     }
 
-    const expectedSecret = CLIENTS.get(form.client_id);
-    if (!expectedSecret || expectedSecret !== form.client_secret) {
-      json(401, { error: 'invalid_client' });
-      return;
-    }
-
-    const accessToken = issueToken();
-    validTokens.add(accessToken);
-    json(200, { access_token: accessToken, token_type: 'Bearer', expires_in: 3600 });
+    const token = issueToken(account, login);
+    text(200, token);
     return;
   }
 
-  // ── Secret retrieval ─────────────────────────────────────────────
-  // GET /secrets/:path  (Bearer token in Authorization header)
-  const secretMatch = path.match(/^\/secrets\/(.+)$/);
+  // ── Self-hosted auth (no /api prefix) ─────────────────────────
+  // POST /authn/{account}/{login}/authenticate
+  const shAuthMatch = path.match(/^\/authn\/([^/]+)\/([^/]+)\/authenticate$/);
+  if (method === 'POST' && shAuthMatch) {
+    const account = decodeURIComponent(shAuthMatch[1]);
+    const login = shAuthMatch[2];
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const apiKey = Buffer.concat(chunks).toString('utf-8');
+
+    const user = USERS[login];
+    if (!user || user.apiKey !== apiKey) {
+      text(401, 'Unauthorized');
+      return;
+    }
+
+    const token = issueToken(account, login);
+    text(200, token);
+    return;
+  }
+
+  // ── Secret retrieval ──────────────────────────────────────────
+  // GET /api/secrets/{account}/variable/{identifier}
+  //
+  // Authorization: Token token="<base64-token>"
+  // Response: raw secret value (text/plain)
+  const secretMatch = path.match(/^\/api\/secrets\/([^/]+)\/variable\/(.+)$/);
   if (method === 'GET' && secretMatch) {
+    const account = decodeURIComponent(secretMatch[1]);
+    const variableId = decodeURIComponent(secretMatch[2]);
+
+    // Validate token
     const auth = req.headers['authorization'] || '';
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!validTokens.has(token)) {
-      json(401, { error: 'unauthorized' });
+    const tokenMatch = auth.match(/^Token token="(.+)"$/);
+    if (!tokenMatch) {
+      text(401, 'Unauthorized');
+      return;
+    }
+    const token = tokenMatch[1];
+    const tokenData = validTokens.get(token);
+    if (!tokenData) {
+      text(401, 'Unauthorized');
       return;
     }
 
-    const secretPath = decodeURIComponent(secretMatch[1]);
-    const value = STORE.get(secretPath);
+    // Check token age (8 min TTL per spec)
+    let tokenAge = Infinity;
+    try {
+      const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+      tokenAge = Date.now() - (decoded.iat || 0);
+    } catch {}
+    if (tokenAge > 8 * 60 * 1000) {
+      validTokens.delete(token);
+      text(401, 'Token expired');
+      return;
+    }
+
+    const value = SECRETS[variableId];
     if (value === undefined) {
-      json(404, { error: `Secret '${secretPath}' not found` });
+      text(404, `Secret '${variableId}' not found`);
       return;
     }
 
-    // Touch the token to prevent expiry during test
-    json(200, { value });
+    text(200, value);
+    return;
+  }
+
+  // ── Self-hosted secret retrieval (no /api prefix) ─────────────
+  const shSecretMatch = path.match(/^\/secrets\/([^/]+)\/variable\/(.+)$/);
+  if (method === 'GET' && shSecretMatch) {
+    const account = decodeURIComponent(shSecretMatch[1]);
+    const variableId = decodeURIComponent(shSecretMatch[2]);
+
+    const auth = req.headers['authorization'] || '';
+    const tokenMatch = auth.match(/^Token token="(.+)"$/);
+    if (!tokenMatch) {
+      text(401, 'Unauthorized');
+      return;
+    }
+
+    const value = SECRETS[variableId];
+    if (value === undefined) {
+      text(404, `Secret '${variableId}' not found`);
+      return;
+    }
+
+    text(200, value);
     return;
   }
 
@@ -88,5 +188,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Mock CyberArk API listening on port ${PORT}`);
+  console.log(`Mock Conjur API listening on http://0.0.0.0:${PORT}`);
 });
