@@ -272,6 +272,64 @@ test.describe('Secrets management', () => {
     expect(outputStr).not.toContain('{{secrets.core.app:app-greeting}}');
   });
 
+  test('{{secrets.cyberark.PATH}} resolves from bound Conjur vault', async ({ page, request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    // Create a Conjur vault
+    const vRes = await request.post(`${API_URL}/secret-vaults`, {
+      data: { name: 'E2E Conjur', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456' },
+    });
+    expect(vRes.status()).toBe(201);
+    const vault = await vRes.json();
+    cleanupVaultIds.push(vault.id);
+
+    // Connect it
+    await request.post(`${API_URL}/secret-vaults/${vault.id}/test`);
+
+    // Create a group bound to this vault
+    const groupName = `Conjur-Group-${Date.now()}`;
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: groupName } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    await request.put(`${API_URL}/group-vault-config/${group.id}`, {
+      data: { vaultId: vault.id, enabled: true },
+    });
+
+    // Create a flow in this group with a system prompt referencing a Conjur secret
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Conjur-Resolve'),
+        group_id: group.id,
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 }, data: { label: 'Assistant', type: 'llm-agent', config: { endpointId: mockEndpointId, model: 'mock-gpt-4', systemPrompt: 'ECHO_SYSTEM_PROMPT\nThe DB password is: {{secrets.cyberark.prod/db/password}}', temperature: 0.7, maxTokens: 1024, responseFormat: 'text' } } },
+          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Assistant.content'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+          { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        ],
+      },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+    // The Conjur secret should be resolved in the prompt
+    expect(outputStr).toContain('sup3r-s3cr3t-db-pass!');
+    expect(outputStr).not.toContain('{{secrets.cyberark.prod/db/password}}');
+  });
+
   // ═══════════════════════════════════════════════════════════════
   // ─── Secrets settings page ──────────────────────────────────
   // ═══════════════════════════════════════════════════════════════

@@ -287,6 +287,10 @@ return {
     const events = await debugExecute(flow.id, { message: 'test' }, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+    // The mock MCP server's 'echo' tool returns the message back
+    expect(outputStr).toContain('hello mcp');
     await deleteFlow(request, flow.id);
   });
 
@@ -312,6 +316,10 @@ return {
     const events = await debugExecute(flow.id, { message: 'hello' }, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+    // Retriever should return a count of documents (even if 0)
+    expect(outputStr).toContain('count');
 
     await deleteFlow(request, flow.id);
   });
@@ -339,6 +347,11 @@ return {
     const events = await debugExecute(flow.id, { message: 'test', count: 0 }, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+    // The code node incremented the count
+    expect(outputStr).toContain('count');
+    expect(outputStr).toContain('1');
 
     await deleteFlow(request, flow.id);
   });
@@ -380,6 +393,10 @@ return {
     const events = await debugExecute(flow.id, { message: 'what time is it' }, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+    // Mock tool call should return result
+    expect(outputStr).toBeTruthy();
 
     await deleteFlow(request, flow.id);
   });
