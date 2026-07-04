@@ -13,7 +13,7 @@
       "idx": 1,
       "version": "7",
       "when": 1790000000000,
-      "tag": "0016_structured_logging",
+      "tag": "0001_structured_logging",
       "breakpoints": true
     }
   ]
