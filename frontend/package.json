@@ -11,12 +11,12 @@
     "test:e2e": "playwright test --config ../test/playwright.config.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^26.1.0",
-    "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2",
-    "tailwindcss": "^4.1.6",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   },
@@ -36,11 +36,11 @@
     "clsx": "^2.1.1",
     "core-agents-shared": "*",
     "next": "^16.2.10",
-    "react": "^19.2.5",
+    "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.2.0"
+    "tailwind-merge": "^3.6.0"
   }
 }
