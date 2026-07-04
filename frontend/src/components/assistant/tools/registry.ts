@@ -920,6 +920,67 @@ const setGroupVault: AssistantTool = {
   },
 };
 
+// ── Global Context tools ──────────────────────────────────
+
+const getGlobalContext: AssistantTool = {
+  name: 'get_global_context',
+  description: 'Read the current global context text that is prepended to all LLM Agent prompts across all flows.',
+  inputSchema: { type: 'object', properties: {}, required: [] },
+  async execute() {
+    const res = await fetch('/api/settings/global-context', { credentials: 'include' });
+    if (!res.ok) return 'Failed to fetch global context.';
+    const data = await res.json();
+    return `Current global context:\n${data.value || '(empty)'}`;
+  },
+};
+
+const updateGlobalContext: AssistantTool = {
+  name: 'update_global_context',
+  description: 'Update the global context text that is prepended to all LLM Agent prompts across all flows.',
+  inputSchema: {
+    type: 'object',
+    properties: { value: { type: 'string', description: 'The new global context content' } },
+    required: ['value'],
+  },
+  async execute({ value }) {
+    const res = await fetch('/api/settings/global-context', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }), credentials: 'include' });
+    if (!res.ok) return 'Failed to save global context.';
+    return 'Global context updated.';
+  },
+};
+
+// ── SSO Config tools ──────────────────────────────────────
+
+const getSSOConfig: AssistantTool = {
+  name: 'get_sso_config',
+  description: 'Read the current SSO / OIDC configuration.',
+  inputSchema: { type: 'object', properties: {}, required: [] },
+  async execute() {
+    const res = await fetch('/api/admin/sso-config', { credentials: 'include' });
+    if (!res.ok) return 'Failed to fetch SSO config.';
+    const data = await res.json();
+    return `SSO: ${data.enabled ? 'Enabled' : 'Disabled'}\nProvider: ${data.provider || '(none)'}\nIssuer: ${data.issuer || '(none)'}\nGroup claim: ${data.groupClaim || 'groups'}\nAdmin mapping: ${(data.adminGroupMapping || []).join(', ') || '(none)'}\nEditor mapping: ${(data.editorGroupMapping || []).join(', ') || '(none)'}`;
+  },
+};
+
+// ── Group Context tools ────────────────────────────────────
+
+const getGroupContext: AssistantTool = {
+  name: 'get_group_context',
+  description: 'Read the context text for a specific group.',
+  inputSchema: {
+    type: 'object',
+    properties: { groupId: { type: 'string', description: 'The group ID' } },
+    required: ['groupId'],
+  },
+  async execute({ groupId }) {
+    const res = await fetch(`/api/groups/${groupId}`, { credentials: 'include' });
+    if (!res.ok) return 'Failed to fetch group.';
+    const data = await res.json();
+    return `Group context for ${data.name}:\n${data.context || '(empty)'}`;
+  },
+};
+
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
 export const toolGroups: Record<string, AssistantTool[]> = {
@@ -937,6 +998,9 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'secret-crud': [listSecrets, createSecret, updateSecret, deleteSecret, rotateKey],
   'vault-crud': [listVaults, testVaultConnection],
   'group-vault-config': [listGroups, getGroupVault, setGroupVault],
+  'global-context-crud': [getGlobalContext, updateGlobalContext],
+  'sso-crud': [getSSOConfig],
+  'group-context-crud': [getGroupContext],
   'chat': [],
   'read-resources': [listEndpoints, listMcpServers, listEmbeddingProviders, listVectorStores],
 };
@@ -953,6 +1017,9 @@ export function getToolGroupNames(pageKey: string, nodeType?: string): string[] 
   else if (pageKey === 'settings:users') groups.push('user-crud');
   else if (pageKey === 'settings:secrets') groups.push('secret-crud', 'group-vault-config');
   else if (pageKey === 'settings:secret-vaults') groups.push('vault-crud');
+  else if (pageKey === 'settings:groups') groups.push('group-vault-config', 'group-context-crud');
+  else if (pageKey === 'settings:global-context') groups.push('global-context-crud');
+  else if (pageKey === 'settings:sso') groups.push('sso-crud');
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
   else if (pageKey === 'profile') groups.push('profile-crud');

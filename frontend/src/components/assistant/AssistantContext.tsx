@@ -85,6 +85,15 @@ function getPageCapabilities(pageKey: string): string {
   if (pageKey.startsWith('chat-sessions:')) {
     return 'This page lists all chat sessions for a flow. You can create a new chat or delete existing ones. Click a session to open the conversation.';
   }
+  if (pageKey === 'settings:groups') {
+    return 'This page lists all groups with their names, member counts, and provider type (local or SSO-provisioned). Group members are listed when expanded. You can create, rename, and delete groups, add/remove members, and set group-level context instructions that get injected into LLM Agent prompts for flows in this group.';
+  }
+  if (pageKey === 'settings:global-context') {
+    return 'This page shows the global context textarea. The global context is prepended to every LLM Agent call across all flows. You can read and update it using the available tools.';
+  }
+  if (pageKey === 'settings:sso') {
+    return 'This page shows the SSO / OIDC configuration form. You can view the current SSO provider settings (issuer URL, client ID, group claim, role mappings, enabled/disabled status) using the available tools.';
+  }
   if (pageKey.startsWith('settings:')) {
     return 'This is a settings sub-page with configuration options. Available features are visible in the page content.';
   }
@@ -115,6 +124,7 @@ function buildSystemPrompt(pageContext: PageContext | null, tools: AssistantTool
     '- If asked what you can do, describe your available tools — do not invent features not listed in the Page capabilities section above.',
     '- You cannot access external URLs or APIs beyond the provided tools.',
     '- Keep using tools until the entire task is fully complete. Never say "let me do X next" — just call the tool and do it immediately. Only respond with plain text when every single requested change has been executed.',
+    '- If the user asks about a page or feature that seems to be on a different page than the current one, ask if they want to navigate there using navigate_to. For example, if on the flow editor and they ask about user management, ask "Would you like me to navigate to the Users settings page?"',
   ].join('\n');
 }
 
