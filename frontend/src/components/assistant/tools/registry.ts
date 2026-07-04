@@ -792,7 +792,7 @@ const deleteExecution: AssistantTool = {
 
 const listSecrets: AssistantTool = {
   name: 'list_secrets',
-  description: 'List all secrets with optional filtering by scope, scopeId, or search term.',
+  description: 'List secrets metadata (name, scope, dates — NEVER values). Filter by scope (app, group, flow) or search term.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -983,6 +983,105 @@ const getGroupContext: AssistantTool = {
 
 // ── Tool groups ──────────────────────────────────────────────────────────────────
 
+// ── Groups CRUD (safe: metadata only, no secret values) ─────────────────────────
+
+const createGroup: AssistantTool = {
+  name: 'create_group',
+  description: 'Create a new user group with an optional description and context.',
+  inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Group name' }, description: { type: 'string', description: 'Optional description' }, context: { type: 'string', description: 'Optional context instructions injected into LLM prompts for flows in this group' } }, required: ['name'] },
+  async execute({ name, description, context }) { return apiFetch('/groups', { method: 'POST', body: JSON.stringify({ name, description, context }) }); },
+};
+
+const updateGroup: AssistantTool = {
+  name: 'update_group',
+  description: 'Update a group name, description, or context.',
+  inputSchema: { type: 'object', properties: { groupId: { type: 'string', description: 'Group ID' }, name: { type: 'string', description: 'New name' }, description: { type: 'string', description: 'New description' }, context: { type: 'string', description: 'New group context' } }, required: ['groupId'] },
+  async execute({ groupId, name, description, context }) { return apiFetch(`/groups/${groupId}`, { method: 'PUT', body: JSON.stringify({ name, description, context }) }); },
+};
+
+const deleteGroup: AssistantTool = {
+  name: 'delete_group',
+  description: 'Delete a group by ID.',
+  inputSchema: { type: 'object', properties: { groupId: { type: 'string', description: 'Group ID' } }, required: ['groupId'] },
+  async execute({ groupId }) { return apiFetch(`/groups/${groupId}`, { method: 'DELETE' }); },
+};
+
+const addGroupMember: AssistantTool = {
+  name: 'add_group_member',
+  description: 'Add a user to a group.',
+  inputSchema: { type: 'object', properties: { groupId: { type: 'string', description: 'Group ID' }, userId: { type: 'string', description: 'User ID to add' } }, required: ['groupId', 'userId'] },
+  async execute({ groupId, userId }) { return apiFetch(`/groups/${groupId}/members`, { method: 'POST', body: JSON.stringify({ userId }) }); },
+};
+
+const removeGroupMember: AssistantTool = {
+  name: 'remove_group_member',
+  description: 'Remove a user from a group.',
+  inputSchema: { type: 'object', properties: { groupId: { type: 'string', description: 'Group ID' }, userId: { type: 'string', description: 'User ID to remove' } }, required: ['groupId', 'userId'] },
+  async execute({ groupId, userId }) { return apiFetch(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }); },
+};
+
+// ── Agent Contexts CRUD ───────────────────────────────────────────────────────
+
+const listAgentContexts: AssistantTool = {
+  name: 'list_agent_contexts',
+  description: 'List all agent contexts (reusable prompt snippets) available to attach to LLM Agent nodes.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/agent-contexts'); },
+};
+
+const createAgentContext: AssistantTool = {
+  name: 'create_agent_context',
+  description: 'Create a new agent context — a reusable prompt snippet that can be attached to LLM Agent nodes.',
+  inputSchema: { type: 'object', properties: { title: { type: 'string', description: 'Context title' }, description: { type: 'string', description: 'Optional description' }, content: { type: 'string', description: 'The context content/instructions' } }, required: ['title', 'content'] },
+  async execute({ title, description, content }) { return apiFetch('/agent-contexts', { method: 'POST', body: JSON.stringify({ title, description, content }) }); },
+};
+
+const updateAgentContext: AssistantTool = {
+  name: 'update_agent_context',
+  description: 'Update an existing agent context title, description, or content.',
+  inputSchema: { type: 'object', properties: { contextId: { type: 'string', description: 'Agent context ID' }, title: { type: 'string', description: 'New title' }, description: { type: 'string', description: 'New description' }, content: { type: 'string', description: 'New content' } }, required: ['contextId'] },
+  async execute({ contextId, title, description, content }) { return apiFetch(`/agent-contexts/${contextId}`, { method: 'PUT', body: JSON.stringify({ title, description, content }) }); },
+};
+
+const deleteAgentContext: AssistantTool = {
+  name: 'delete_agent_context',
+  description: 'Delete an agent context by ID.',
+  inputSchema: { type: 'object', properties: { contextId: { type: 'string', description: 'Agent context ID' } }, required: ['contextId'] },
+  async execute({ contextId }) { return apiFetch(`/agent-contexts/${contextId}`, { method: 'DELETE' }); },
+};
+
+// ── Vaults CRUD ───────────────────────────────────────────────────────────────
+
+const createVault: AssistantTool = {
+  name: 'create_vault',
+  description: 'Create a new CyberArk Conjur vault configuration.',
+  inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Vault display name' }, baseUrl: { type: 'string', description: 'Conjur base URL' }, account: { type: 'string', description: 'Conjur account name (default: conjur)' }, login: { type: 'string', description: 'Conjur login, e.g. host/myapp' }, apiKey: { type: 'string', description: 'Conjur API key' }, caCert: { type: 'string', description: 'Optional CA certificate for self-hosted Conjur' } }, required: ['name', 'baseUrl', 'login', 'apiKey'] },
+  async execute({ name, baseUrl, account, login, apiKey, caCert }) { return apiFetch('/secret-vaults', { method: 'POST', body: JSON.stringify({ name, baseUrl, account, login, apiKey, caCert }) }); },
+};
+
+const updateVault: AssistantTool = {
+  name: 'update_vault',
+  description: 'Update a vault configuration. Leave apiKey empty to keep the current key.',
+  inputSchema: { type: 'object', properties: { vaultId: { type: 'string', description: 'Vault ID' }, name: { type: 'string' }, baseUrl: { type: 'string' }, login: { type: 'string' }, apiKey: { type: 'string', description: 'New API key (leave empty to keep current)' } }, required: ['vaultId'] },
+  async execute({ vaultId, name, baseUrl, login, apiKey }) { return apiFetch(`/secret-vaults/${vaultId}`, { method: 'PUT', body: JSON.stringify({ name, baseUrl, login, apiKey }) }); },
+};
+
+const deleteVault: AssistantTool = {
+  name: 'delete_vault',
+  description: 'Delete a vault configuration by ID.',
+  inputSchema: { type: 'object', properties: { vaultId: { type: 'string', description: 'Vault ID' } }, required: ['vaultId'] },
+  async execute({ vaultId }) { return apiFetch(`/secret-vaults/${vaultId}`, { method: 'DELETE' }); },
+};
+
+// ── SSO Config ────────────────────────────────────────────────────────────────
+
+const updateSSOConfig: AssistantTool = {
+  name: 'update_sso_config',
+  description: 'Update the SSO / OIDC configuration. Only provides fields that are set.',
+  inputSchema: { type: 'object', properties: { provider: { type: 'string', description: 'Provider name (e.g. keycloak)' }, clientId: { type: 'string' }, clientSecret: { type: 'string' }, issuer: { type: 'string', description: 'OIDC issuer URL' }, groupClaim: { type: 'string', description: 'JWT claim containing group list' }, adminGroupMapping: { type: 'string', description: 'Comma-separated group names for admin role' }, editorGroupMapping: { type: 'string', description: 'Comma-separated group names for editor role' }, enabled: { type: 'boolean', description: 'Enable or disable SSO' } } },
+  async execute({ provider, clientId, clientSecret, issuer, groupClaim, adminGroupMapping, editorGroupMapping, enabled }) { return apiFetch('/admin/sso-config', { method: 'PUT', body: JSON.stringify({ provider, clientId, clientSecret, issuer, groupClaim, adminGroupMapping: adminGroupMapping?.split(',').map((s: string) => s.trim()).filter(Boolean), editorGroupMapping: editorGroupMapping?.split(',').map((s: string) => s.trim()).filter(Boolean), enabled }) }); },
+};
+
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo],
   'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows],
@@ -999,9 +1098,11 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'vault-crud': [listVaults, testVaultConnection],
   'group-vault-config': [listGroups, getGroupVault, setGroupVault],
   'global-context-crud': [getGlobalContext, updateGlobalContext],
-  'sso-crud': [getSSOConfig],
+  'sso-crud': [getSSOConfig, updateSSOConfig],
   'group-context-crud': [getGroupContext],
-  'chat': [],
+  'groups-crud': [createGroup, updateGroup, deleteGroup, addGroupMember, removeGroupMember],
+  'agent-contexts-crud': [listAgentContexts, createAgentContext, updateAgentContext, deleteAgentContext],
+  'vault-crud': [listVaults, createVault, updateVault, deleteVault, testVaultConnection],
   'read-resources': [listEndpoints, listMcpServers, listEmbeddingProviders, listVectorStores],
 };
 
@@ -1010,20 +1111,20 @@ export const toolGroups: Record<string, AssistantTool[]> = {
 export function getToolGroupNames(pageKey: string, nodeType?: string): string[] {
   const groups: string[] = ['navigation'];
 
-  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'read-resources');
+  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'read-resources', 'agent-contexts-crud', 'groups-crud');
   else if (pageKey === 'settings:endpoints') groups.push('endpoint-crud');
   else if (pageKey === 'settings:mcp-servers') groups.push('mcp-crud');
   else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud');
   else if (pageKey === 'settings:users') groups.push('user-crud');
   else if (pageKey === 'settings:secrets') groups.push('secret-crud', 'group-vault-config');
   else if (pageKey === 'settings:secret-vaults') groups.push('vault-crud');
-  else if (pageKey === 'settings:groups') groups.push('group-vault-config', 'group-context-crud');
+  else if (pageKey === 'settings:groups') groups.push('group-vault-config', 'group-context-crud', 'groups-crud', 'agent-contexts-crud');
   else if (pageKey === 'settings:global-context') groups.push('global-context-crud');
   else if (pageKey === 'settings:sso') groups.push('sso-crud');
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
   else if (pageKey === 'profile') groups.push('profile-crud');
-  else if (pageKey === 'flows-list') groups.push('flows-list');
+  else if (pageKey === 'flows-list') groups.push('flows-list', 'groups-crud', 'agent-contexts-crud');
   else if (pageKey?.startsWith('chat:')) groups.push('chat');
   else if (pageKey?.startsWith('chat-sessions:')) groups.push('chat');
 
