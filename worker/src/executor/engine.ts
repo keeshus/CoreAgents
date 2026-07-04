@@ -73,6 +73,7 @@ export interface ExecutionContext {
   getSecret?: (secretName: string, options?: { scope?: 'app' | 'group' | 'flow' }) => Promise<string | null>;
   getCyberArkSecret?: (secretPath: string) => Promise<string | null>;
   setSecret?: (name: string, value: string) => void;
+  logSecretAccess?: (entry: { name: string; action: string; source: string }) => void;
 }
 
 export class FlowExecutor {
@@ -838,7 +839,11 @@ export class FlowExecutor {
                       if (value !== null && value !== undefined) {
                         context?.setSecret?.(name, value);
                         toolResult = JSON.stringify({ success: true, name });
-                      } else {
+                        // Audit log: log secret retrieval to the database
+                        if (context.logSecretAccess) {
+                          context.logSecretAccess({ name, action: 'tool_access', source: useCyberArk ? 'cyberark' : 'core' });
+                        }
+                        } else {
                         toolResult = JSON.stringify({ success: false, error: 'Secret not found' });
                       }
                     } catch (err) {

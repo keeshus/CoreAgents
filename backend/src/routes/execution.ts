@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eq, and, desc, sql, inArray, isNull, or } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, groupMembers, users, agentContexts, agentStore } from '../db/schema.js';
+import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, groupMembers, users, agentContexts, agentStore, secretAccessLog } from '../db/schema.js';
 import { FlowExecutor, HitlPauseError, FlowStopError } from '../../../worker/src/executor/engine.js';
 import { getStore, listStores } from '../vector-stores/index.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -284,6 +284,14 @@ router.post(
       },
       setSecret: (name: string, value: string) => {
         secretStore.set(name, value);
+      },
+      logSecretAccess: (entry: { name: string; action: string; source: string }) => {
+        // Fire-and-forget audit log
+        db.insert(secretAccessLog).values({
+          action: entry.action,
+          metadata: { secretName: entry.name, source: entry.source, executionId: flowId },
+          created_at: new Date(),
+        }).catch(() => {});
       },
     };
 
@@ -736,6 +744,13 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
     },
     setSecret: (name: string, value: string) => {
       secretStore.set(name, value);
+    },
+    logSecretAccess: (entry: { name: string; action: string; source: string }) => {
+      db.insert(secretAccessLog).values({
+        action: entry.action,
+        metadata: { secretName: entry.name, source: entry.source, executionId: flowDef?.id },
+        created_at: new Date(),
+      }).catch(() => {});
     },
     flowNodes: flowDef.nodes as any,
     flowEdges: flowDef.edges as any,
