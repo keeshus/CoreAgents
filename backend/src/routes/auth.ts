@@ -7,6 +7,7 @@ import { db } from '../db/connection.js';
 import { users, roles, ssoConfig, groups, groupMembers } from '../db/schema.js';
 import { authenticate, JWT_SECRET } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -91,7 +92,7 @@ router.get('/sso/login', asyncHandler(async (_req, res) => {
     }
     res.redirect(authUrlStr);
   } catch (err) {
-    console.error('SSO login error:', err);
+    logger.error({ err }, 'SSO login failed');
     res.status(500).json({ error: 'Failed to initiate SSO login' });
   }
 }));
@@ -248,7 +249,7 @@ router.get('/sso/callback', asyncHandler(async (req, res) => {
     res.clearCookie('sso_nonce');
     res.redirect(`${FRONTEND_URL}/`);
   } catch (err) {
-    console.error('SSO callback error:', err);
+    logger.error({ err }, 'SSO callback failed');
     res.redirect(`${FRONTEND_URL}/login?error=sso_failed`);
   }
 }));
@@ -504,7 +505,7 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
       }
     } catch (e) {
       // Refresh failed — continue with existing session
-      console.error('OIDC refresh failed:', String(e));
+      logger.error({ error: String(e) }, 'OIDC token refresh failed');
     }
   }
 

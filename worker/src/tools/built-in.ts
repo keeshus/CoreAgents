@@ -156,8 +156,7 @@ export async function callBuiltInTool(name: string, args: Record<string, unknown
     case 'log': {
       const level = (args?.level as string) || 'info';
       const message = (args?.message as string) || '';
-      console.log(`[builtin-log:${level}] ${message}`);
-      return JSON.stringify({ logged: true, level, message });
+      return `[log:${level}] ${message}`;
     }
     case 'fetch': {
       const url = args?.url as string;

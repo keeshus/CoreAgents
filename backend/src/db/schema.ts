@@ -320,6 +320,15 @@ export const groupVaultConfig = pgTable('group_vault_config', {
   updated_at: timestamp('updated_at').notNull().defaultNow(),
 });
 
+export const logs = pgTable('logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  level: text('level').notNull().default('info'),
+  component: text('component').notNull().default('app'),
+  message: text('message').notNull(),
+  metadata: jsonb('metadata').default('{}'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const secretAccessLog = pgTable('secret_access_log', {
   id: uuid('id').primaryKey().defaultRandom(),
   secret_id: uuid('secret_id'),

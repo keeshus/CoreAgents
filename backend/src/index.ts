@@ -29,13 +29,14 @@ import secretVaultsRouter from './routes/secret-vaults.js';
 import groupVaultConfigRouter from './routes/group-vault-config.js';
 import { authenticate } from './middleware/auth.js';
 import { asyncHandler } from './utils/async-handler.js';
+import { logger } from './utils/logger.js';
 
 // ── Process-level crash handlers ──────────────────────────────────
 process.on('unhandledRejection', (reason) => {
-  console.error('UNHANDLED REJECTION:', reason);
+  logger.error({ reason }, 'Unhandled rejection');
 });
 process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
+  logger.error({ reason: err }, 'Uncaught exception');
   process.exit(1);
 });
 
@@ -106,7 +107,7 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 app.listen(port, () => {
-  console.log(`Backend listening at http://localhost:${port}`);
+  logger.info({ port }, 'Backend started');
 });
 
 export default app;

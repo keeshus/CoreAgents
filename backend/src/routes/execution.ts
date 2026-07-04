@@ -6,6 +6,7 @@ import { FlowExecutor, HitlPauseError, FlowStopError } from '../../../worker/src
 import { getStore, listStores } from '../vector-stores/index.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { logger } from '../utils/logger.js';
 import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
 
 const secretStore = new Map<string, string>();
@@ -811,7 +812,7 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
             eq(executionSteps.iteration, iter),
           ));
         }
-      } catch (e) { console.error('Failed to persist step:', e); }
+      } catch (e) { logger.error({ error: String(e), executionId: exec.id, nodeId: hierarchicalNodeId }, 'Failed to persist step'); }
     };
     const result = await executor.execute(
       flowDef,

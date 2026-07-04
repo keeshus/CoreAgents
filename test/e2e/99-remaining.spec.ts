@@ -401,6 +401,49 @@ return {
     await deleteFlow(request, flow.id);
   });
 
+  test('llm agent log tool output appears in execution events', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+    const name = uniqueFlowName('LogToolTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        {
+          id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 },
+          data: {
+            label: 'Logger',
+            type: 'llm-agent',
+            config: {
+              endpointId: mockEndpointId,
+              model: 'mock-gpt-4',
+              systemPrompt: 'Use tools. MOCK_TOOL_CALL: log {"level":"info","message":"test log entry"}',
+              temperature: 0.7, maxTokens: 256, responseFormat: 'text',
+            },
+          },
+        },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['logger.content'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    // The log tool output should appear in the SSE stream as a tool result
+    const logEvents = events.filter(e => e.type === 'log' && e.data?.toolCall === 'log');
+    expect(logEvents.length).toBeGreaterThan(0);
+    const logResult = logEvents[0]?.data?.toolResult || '';
+    expect(logResult).toContain('test log entry');
+
+    await deleteFlow(request, flow.id);
+  });
+
   // ── Co-Pilot comprehensive test ─────────────────────────────────
 
   test('co-pilot panel opens and accepts input', async ({ page }) => {
