@@ -16,6 +16,7 @@ test.describe('Node type config fields', () => {
         { id: 'n6', type: 'hitl', position: { x: 0, y: 500 }, data: { label: 'HITL', type: 'hitl', config: { prompt: '', buttons: [{ label: 'Approve', value: 'approved' }] } } },
         { id: 'n7', type: 'mcp-tool', position: { x: 0, y: 600 }, data: { label: 'MCP', type: 'mcp-tool', config: { serverId: '', toolName: '' } } },
         { id: 'n8', type: 'retriever', position: { x: 0, y: 700 }, data: { label: 'Ret', type: 'retriever', config: { collectionName: 'default', topK: 5 } } },
+        { id: 'n9', type: 'parallel', position: { x: 0, y: 800 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [] } } },
       ],
       edges: [],
     });
@@ -115,5 +116,12 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My Retriever');
     await expect(page.getByLabel('Node name')).toHaveValue('My Retriever');
+  });
+
+  test('parallel node config fields are accessible', async ({ page }) => {
+    await openNode(page, 'Parallel');
+    await expect(page.getByLabel('Node name')).toBeVisible();
+    await page.getByLabel('Node name').fill('My Parallel');
+    await expect(page.getByLabel('Node name')).toHaveValue('My Parallel');
   });
 });
