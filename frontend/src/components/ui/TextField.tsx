@@ -1,5 +1,10 @@
-import { useState, useId } from 'react';
+import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
+
+let idCounter = 0;
+function uniqueId() {
+  return `tf-${++idCounter}`;
+}
 
 interface TextFieldProps {
   label?: string;
@@ -39,7 +44,7 @@ export function TextField({
   const [focused, setFocused] = useState(false);
   const hasValue = value.length > 0;
   const float = focused || hasValue;
-  const inputId = useId();
+  const [inputId] = useState(uniqueId);
 
   const Tag = multiline ? 'textarea' : 'input';
 
