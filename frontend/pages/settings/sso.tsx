@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { useRouter } from 'next/router';
 import { API_URL } from '@/lib/api-client';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface SSOConfig {
   provider: string;
@@ -45,6 +46,10 @@ export default function SSOSettingsPage() {
 
   const handleSave = async () => {
     if (!config) return;
+    if (!config.provider || !config.clientId || !config.clientSecret || !config.issuer) {
+      setError('Provider name, Client ID, Client Secret, and Issuer URL are required.');
+      return;
+    }
     setSaving(true); setError(''); setSuccess('');
     try {
       const body = {
@@ -115,7 +120,7 @@ export default function SSOSettingsPage() {
             <div className="grid grid-cols-2 gap-4">
               <TextField label="Provider name" value={config.provider} onChange={(v) => setConfig({ ...config, provider: v })} helpText="e.g. keycloak, azure, google" />
               <TextField label="Client ID" value={config.clientId} onChange={(v) => setConfig({ ...config, clientId: v })} />
-              <TextField label="Client Secret" value={config.clientSecret} onChange={(v) => setConfig({ ...config, clientSecret: v })} type="password" helpText="Leave as-is to keep current value" />
+              <TextField label="Client Secret" value={config.clientSecret} onChange={(v) => setConfig({ ...config, clientSecret: v })} type="password" helpText="Leave as-is to keep current value" showPasswordToggle />
               <TextField label="Issuer URL" value={config.issuer} onChange={(v) => setConfig({ ...config, issuer: v })} helpText="OIDC discovery URL" />
               <TextField label="Redirect URI" value={config.redirectUri} onChange={(v) => setConfig({ ...config, redirectUri: v })} />
               <TextField label="Group claim name" value={config.groupClaim} onChange={(v) => setConfig({ ...config, groupClaim: v })} helpText="JWT claim containing group list (default: groups)" />
@@ -126,10 +131,14 @@ export default function SSOSettingsPage() {
               <TextField label="Editor group mapping" value={editorMappingInput} onChange={setEditorMappingInput} helpText="Comma-separated group names that map to editor role" />
             </div>
 
-            <div className="flex justify-end pt-2">
-              <button onClick={handleSave} disabled={saving} className="m3-button disabled:opacity-50">
-                {saving ? <><Icon name="sync" className="text-sm animate-spin" /> Saving...</> : 'Save Configuration'}
-              </button>
+            <div className="flex items-center gap-2 justify-end pt-2">
+              <Tooltip content={(!config?.provider || !config?.clientId || !config?.clientSecret || !config?.issuer) ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button onClick={handleSave} disabled={saving || !config?.provider || !config?.clientId || !config?.clientSecret || !config?.issuer} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">
+                    {saving ? <><Icon name="sync" className="text-sm animate-spin" /> Saving...</> : 'Save Configuration'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </div>
         )}

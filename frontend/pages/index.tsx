@@ -21,6 +21,7 @@ export default function FlowsListPage() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'updated_at' | 'created_at'>('updated_at');
+  const [groupFilter, setGroupFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<Record<string, 'running' | 'ok' | 'error' | null>>({});
   const deleteConfirm = useConfirm({ title: 'Delete flow?', message: 'Are you sure you want to delete this flow? This cannot be undone.' });
@@ -35,6 +36,7 @@ export default function FlowsListPage() {
   const [contextTitle, setContextTitle] = useState('');
   const [contextDescription, setContextDescription] = useState('');
   const [contextContent, setContextContent] = useState('');
+  const [contextGroupId, setContextGroupId] = useState('');
   const contextDeleteConfirm = useConfirm({ title: 'Delete context?', message: 'Are you sure you want to delete this agent context? Flows using it will no longer receive it.' });
 
   useAssistantContext({ pageKey: 'flows-list', description: 'Viewing all flows' });
@@ -57,8 +59,19 @@ export default function FlowsListPage() {
     if (!user || isReader) { setLoading(false); return; }
     if (activeTab === 'contexts') return;
     const isSubflowFilter = activeTab === 'subflows';
-    api.flows.list({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, search: search || undefined, sort, is_subflow: isSubflowFilter }).then(({ data, total }) => { setFlows(data || []); setTotal(total || 0); }).catch(() => { setFlows([]); setTotal(0); }).finally(() => setLoading(false));
-  }, [user, authLoading, isReader, page, search, sort, activeTab]);
+    api.flows.list({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, search: search || undefined, sort, is_subflow: isSubflowFilter, group_id: groupFilter || undefined }).then(({ data, total }) => { setFlows(data || []); setTotal(total || 0); }).catch(() => { setFlows([]); setTotal(0); }).finally(() => setLoading(false));
+  }, [user, authLoading, isReader, page, search, sort, activeTab, groupFilter]);
+
+  // Fetch groups for filter
+  const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    if (!user) return;
+    if (can('admin')) {
+      api.groups.list().then(setGroups).catch(() => {});
+    } else {
+      setGroups(user.groups || []);
+    }
+  }, [user]);
 
   // Fetch agent contexts when tab switches
   useEffect(() => {
@@ -117,6 +130,7 @@ export default function FlowsListPage() {
     setContextTitle('');
     setContextDescription('');
     setContextContent('');
+    setContextGroupId('');
     setEditingContext(null);
     setShowContextForm(false);
   };
@@ -126,12 +140,13 @@ export default function FlowsListPage() {
     setContextTitle(ctx.title);
     setContextDescription(ctx.description || '');
     setContextContent(ctx.content || '');
+    setContextGroupId(ctx.group_id || '');
     setShowContextForm(true);
   };
 
   const handleSaveContext = async () => {
     if (!contextTitle.trim()) return;
-    const body = { title: contextTitle.trim(), description: contextDescription, content: contextContent };
+    const body: Record<string, unknown> = { title: contextTitle.trim(), description: contextDescription, content: contextContent, group_id: contextGroupId || null };
     try {
       if (editingContext) {
         const updated = await fetch(`/api/agent-contexts/${editingContext.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'include' }).then(r => r.json());
@@ -281,6 +296,18 @@ export default function FlowsListPage() {
                     { value: 'created_at', label: 'Created' },
                   ]}
                 />
+                {groups.length > 0 && (
+                  <SelectField
+                    label="Group"
+                    value={groupFilter}
+                    onChange={(v) => { setGroupFilter(v); setPage(0); }}
+                    options={[
+                      { value: '', label: 'All groups' },
+                      ...groups.map(g => ({ value: g.id, label: g.name })),
+                    ]}
+                    className="w-40"
+                  />
+                )}
                 {can('flow:create') && (
                   <button onClick={handleCreate} className="m3-button gap-2 shrink-0">
                     <Icon name="add" className="text-base" /> New Flow
@@ -333,6 +360,9 @@ export default function FlowsListPage() {
                           </div>
                           <div className="min-w-0">
                             <Link href={`/flows/${flow.id}/edit`} className="font-medium text-on-surface hover:text-primary">{flow.name}</Link>
+                            {flow.group_name && (
+                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary-container text-secondary">{flow.group_name}</span>
+                            )}
                             <p className="text-xs text-on-surface-variant mt-0.5">{flow.description || 'No description'}</p>
                             <div className="flex items-center gap-2 mt-1 text-[10px] text-on-surface-variant">
                               <span>Created: {new Date(flow.created_at).toLocaleString('nl-NL')}{flow.created_by_name ? ` by ${flow.created_by_name}` : ''}</span>
@@ -433,6 +463,18 @@ export default function FlowsListPage() {
                     { value: 'created_at', label: 'Created' },
                   ]}
                 />
+                {groups.length > 0 && (
+                  <SelectField
+                    label="Group"
+                    value={groupFilter}
+                    onChange={(v) => { setGroupFilter(v); setPage(0); }}
+                    options={[
+                      { value: '', label: 'All groups' },
+                      ...groups.map(g => ({ value: g.id, label: g.name })),
+                    ]}
+                    className="w-40"
+                  />
+                )}
                 {can('flow:create') && (
                   <button onClick={handleCreate} className="m3-button gap-2 shrink-0">
                     <Icon name="add" className="text-base" /> New Subflow
@@ -485,6 +527,9 @@ export default function FlowsListPage() {
                           </div>
                           <div className="min-w-0">
                             <Link href={`/flows/${flow.id}/edit`} className="font-medium text-on-surface hover:text-primary">{flow.name}</Link>
+                            {flow.group_name && (
+                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary-container text-secondary">{flow.group_name}</span>
+                            )}
                             <p className="text-xs text-on-surface-variant mt-0.5">{flow.description || 'No description'}</p>
                           </div>
                         </div>
@@ -533,8 +578,19 @@ export default function FlowsListPage() {
 
             {showContextForm && (
               <div className="bg-surface rounded-lg border p-4 mb-4 space-y-3">
-                <TextField label="Title" value={contextTitle} onChange={setContextTitle} placeholder="e.g. Brand Voice" />
-                <TextField label="Description" value={contextDescription} onChange={setContextDescription} placeholder="Briefly describe what this context contains" />
+                <TextField label="Title" value={contextTitle} onChange={setContextTitle} />
+                <TextField label="Description" value={contextDescription} onChange={setContextDescription} />
+                {groups.length > 0 && (
+                  <SelectField
+                    label="Group"
+                    value={contextGroupId}
+                    onChange={setContextGroupId}
+                    options={[
+                      ...(can('admin') ? [{ value: '', label: 'No group' }] : []),
+                      ...groups.map(g => ({ value: g.id, label: g.name })),
+                    ]}
+                  />
+                )}
                 <div>
                   <label className="text-xs font-medium text-on-surface-variant block mb-1">Content</label>
                   <textarea
@@ -570,6 +626,9 @@ export default function FlowsListPage() {
                     <div className="flex items-start justify-between">
                       <div className="min-w-0 flex-1">
                         <h3 className="font-medium text-on-surface">{ctx.title}</h3>
+                        {ctx.group_name && (
+                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary-container text-secondary">{ctx.group_name}</span>
+                        )}
                         {ctx.description && <p className="text-xs text-on-surface-variant mt-0.5">{ctx.description}</p>}
                         {ctx.content && (
                           <pre className="mt-2 text-xs font-mono text-on-surface-variant bg-surface-container-high rounded p-2 overflow-hidden max-h-20 whitespace-pre-wrap">{ctx.content}</pre>

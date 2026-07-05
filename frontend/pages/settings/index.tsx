@@ -13,7 +13,7 @@ export default function SettingsIndex() {
       href: '/settings/secrets',
       icon: 'key',
       title: 'Secrets',
-      description: 'Manage app-wide, group, and flow-scoped secrets for secure credential storage',
+      description: 'Manage app-wide encrypted secrets for secure credential storage',
     },
     {
       href: '/settings/endpoints',

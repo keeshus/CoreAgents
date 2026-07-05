@@ -5,6 +5,7 @@ export function TooltipProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+  if (!content) return <>{children}</>;
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>

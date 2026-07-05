@@ -213,10 +213,15 @@ export default function FlowEditPage() {
   const { user } = useAuth();
   useEffect(() => {
     if (!user) return;
-    fetch('/api/groups', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
-      .then(setGroups)
-      .catch(() => {});
+    const isAdmin = user?.permissions?.includes('admin');
+    if (isAdmin) {
+      fetch('/api/groups', { credentials: 'include' })
+        .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+        .then(setGroups)
+        .catch(() => {});
+    } else {
+      setGroups(user.groups || []);
+    }
   }, [user]);
 
   // Auto-open debug overlay from ?debug=1
@@ -349,6 +354,7 @@ export default function FlowEditPage() {
   const [flowSecrets, setFlowSecrets] = useState<any[]>([]);
   const [newSecretName, setNewSecretName] = useState('');
   const [newSecretValue, setNewSecretValue] = useState('');
+  const [newSecretType, setNewSecretType] = useState<'core' | 'cyberark'>('core');
 
   const openFlowSettings = useCallback(() => {
     setFlowSettingsDraft({
@@ -386,7 +392,7 @@ export default function FlowEditPage() {
         const targetId = flowId === 'new' ? undefined : flowId;
         await fetch(`/api/secrets`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ name: s.name, value: s.value, scope: 'flow', scopeId: targetId }),
+          body: JSON.stringify({ name: s.name, value: s.value, referencePath: s.referencePath, secretType: s.secretType || 'core', scope: 'flow', scopeId: targetId }),
         });
       }
       // For existing secrets, the name/value can't be edited — only create/delete
@@ -550,7 +556,7 @@ export default function FlowEditPage() {
                   value={flowSettingsDraft.group_id || ''}
                   onChange={(v) => setFlowSettingsDraft(p => ({ ...p, group_id: v || null }))}
                   options={[
-                    { value: '', label: 'No group' },
+                    ...(user?.permissions?.includes('admin') ? [{ value: '', label: 'No group' }] : []),
                     ...groups.map(g => ({ value: g.id, label: g.name })),
                   ]}
                 />
@@ -581,6 +587,16 @@ export default function FlowEditPage() {
                       ))}
                     </div>
                   )}
+                  <div className="flex items-center gap-2 mb-2">
+                    <button
+                      onClick={() => setNewSecretType('core')}
+                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${newSecretType === 'core' ? 'bg-primary text-on-primary border-primary' : 'bg-surface text-on-surface-variant border-outline'}`}
+                    >Core</button>
+                    <button
+                      onClick={() => setNewSecretType('cyberark')}
+                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${newSecretType === 'cyberark' ? 'bg-primary text-on-primary border-primary' : 'bg-surface text-on-surface-variant border-outline'}`}
+                    >CyberArk</button>
+                  </div>
                   <div className="flex gap-2 items-start">
                     <input
                       placeholder="Secret name"
@@ -589,17 +605,18 @@ export default function FlowEditPage() {
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                     />
                     <input
-                      placeholder="Value"
+                      placeholder={newSecretType === 'cyberark' ? 'Reference path' : 'Value'}
                       value={newSecretValue}
                       onChange={e => setNewSecretValue(e.target.value)}
-                      type="password"
+                      type={newSecretType === 'cyberark' ? 'text' : 'password'}
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                     />
                     <button
                       onClick={() => {
-                        if (!newSecretName || !newSecretValue) return;
+                        if (!newSecretName || (newSecretType === 'core' && !newSecretValue)) return;
+                        if (newSecretType === 'cyberark' && !newSecretValue) return;
                         const tempId = `temp_${Date.now()}`;
-                        setFlowSecrets(prev => [...prev, { id: tempId, name: newSecretName.trim(), value: newSecretValue }]);
+                        setFlowSecrets(prev => [...prev, { id: tempId, name: newSecretName.trim(), secretType: newSecretType, value: newSecretType === 'core' ? newSecretValue : undefined, referencePath: newSecretType === 'cyberark' ? newSecretValue : undefined }]);
                         setNewSecretName('');
                         setNewSecretValue('');
                       }}

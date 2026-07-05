@@ -70,13 +70,14 @@ export const api = {
   },
 
   flows: {
-    list: (params?: { limit?: number; offset?: number; search?: string; sort?: string; is_subflow?: boolean }) => {
+    list: (params?: { limit?: number; offset?: number; search?: string; sort?: string; is_subflow?: boolean; group_id?: string }) => {
       const q = new URLSearchParams();
       if (params?.limit) q.set('limit', String(params.limit));
       if (params?.offset) q.set('offset', String(params.offset));
       if (params?.search) q.set('search', params.search);
       if (params?.sort) q.set('sort', params.sort);
       if (params?.is_subflow !== undefined) q.set('is_subflow', String(params.is_subflow));
+      if (params?.group_id) q.set('group_id', params.group_id);
       const qs = q.toString() ? `?${q.toString()}` : '';
       return request<{ data: any[]; total: number }>(`/flows${qs}`);
     },

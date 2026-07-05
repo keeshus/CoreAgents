@@ -95,6 +95,10 @@ export default function MCPServersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.name || !form.url) {
+      setError('Name and URL are required.');
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -200,13 +204,17 @@ export default function MCPServersPage() {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update Server' : 'Create Server'}
-              </button>
+              <Tooltip content={(!form.name || !form.url) ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button
+                    type="submit"
+                    disabled={saving || !form.name || !form.url}
+                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving...' : editingId ? 'Update Server' : 'Create Server'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </form>
         )}

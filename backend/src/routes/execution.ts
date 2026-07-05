@@ -255,8 +255,27 @@ router.post(
           and(eq(secretsTable.name, secretName), eq(secretsTable.scope, scope))
         ).limit(1);
         if (!secret) return null;
+        // CyberArk reference — resolve live from the vault
+        if (secret.secret_type === 'cyberark' && secret.reference_path) {
+          const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
+          const { secretVaults: vaultsTable } = await import('../db/schema.js');
+          const [vault] = await db.select().from(vaultsTable).where(eq(vaultsTable.is_connected, true)).limit(1);
+          if (!vault) return null;
+          const keyParts = vault.api_key.split(':');
+          const { decrypt } = await import('../utils/encryption.js');
+          const apiKey = await decrypt(keyParts[0], keyParts[1], keyParts[2], parseInt(keyParts[3]));
+          return conjurGetSecret({
+            baseUrl: vault.base_url,
+            account: vault.account,
+            login: vault.login,
+            apiKey,
+            caCert: vault.ca_cert || undefined,
+            selfHosted: vault.self_hosted,
+          }, secret.reference_path);
+        }
+        // Core secret — decrypt from the DB
         const { decrypt } = await import('../utils/encryption.js');
-        return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
+        return decrypt(secret.encrypted_value!, secret.encryption_iv!, secret.encryption_tag!, secret.key_version);
       },
       getCyberArkSecret: async (variableId: string) => {
         const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
@@ -716,8 +735,21 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
         and(eq(secretsTable.name, secretName), eq(secretsTable.scope, scope))
       ).limit(1);
       if (!secret) return null;
+      if (secret.secret_type === 'cyberark' && secret.reference_path) {
+        const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
+        const { secretVaults: vaultsTable } = await import('../db/schema.js');
+        const [vault] = await db.select().from(vaultsTable).where(eq(vaultsTable.is_connected, true)).limit(1);
+        if (!vault) return null;
+        const keyParts = vault.api_key.split(':');
+        const { decrypt } = await import('../utils/encryption.js');
+        const apiKey = await decrypt(keyParts[0], keyParts[1], keyParts[2], parseInt(keyParts[3]));
+        return conjurGetSecret({
+          baseUrl: vault.base_url, account: vault.account, login: vault.login,
+          apiKey, caCert: vault.ca_cert || undefined, selfHosted: vault.self_hosted,
+        }, secret.reference_path);
+      }
       const { decrypt } = await import('../utils/encryption.js');
-      return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
+      return decrypt(secret.encrypted_value!, secret.encryption_iv!, secret.encryption_tag!, secret.key_version);
     },
     getCyberArkSecret: async (variableId: string) => {
       const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');

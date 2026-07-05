@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 export default function GlobalContextPage() {
   const [value, setValue] = useState('');
@@ -54,7 +55,7 @@ export default function GlobalContextPage() {
         {loading ? (
           <p className="text-on-surface-variant text-sm">Loading...</p>
         ) : (
-          <div className="bg-surface rounded-xl border p-4 space-y-4 max-w-2xl">
+          <div className="bg-surface rounded-xl border p-4 space-y-4">
             <div>
               <label className="text-xs font-medium text-on-surface-variant block mb-1">Global Context</label>
               <textarea
@@ -69,10 +70,14 @@ export default function GlobalContextPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button onClick={handleSave} disabled={saving} className="m3-button disabled:opacity-50">
-                <Icon name="save" className="text-sm" /> {saving ? 'Saving...' : 'Save'}
-              </button>
+            <div className="flex items-center gap-2 justify-end">
+              <Tooltip content="">
+                <span>
+                  <button onClick={handleSave} disabled={saving} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">
+                    <Icon name="save" className="text-sm" /> {saving ? 'Saving...' : 'Save'}
+                  </button>
+                </span>
+              </Tooltip>
               {message && (
                 <span className={`text-xs ${message.type === 'success' ? 'text-success' : 'text-error'}`}>
                   {message.text}

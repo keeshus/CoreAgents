@@ -100,9 +100,10 @@ app.use('/api/group-vault-config', authenticate, groupVaultConfigRouter);
 // Global error handler (Express 5)
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
+  const cause = (err as any).cause?.message || (err as any).cause || null;
   res.status(500).json({
     error: 'Internal server error',
-    ...(process.env.NODE_ENV !== 'production' ? { message: err.message } : {}),
+    ...(process.env.NODE_ENV !== 'production' ? { message: cause || err.message } : {}),
   });
 });
 

@@ -133,8 +133,9 @@ export async function reEncryptAllSecrets(): Promise<number> {
   const allSecrets = await db.select().from(secrets);
   let count = 0;
   for (const secret of allSecrets) {
+    if (secret.secret_type === 'cyberark') continue;
     if (secret.key_version === currentKey.version) continue;
-    const plaintext = await decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
+    const plaintext = await decrypt(secret.encrypted_value!, secret.encryption_iv!, secret.encryption_tag!, secret.key_version);
     const { encryptedValue, iv, tag } = await encrypt(plaintext);
     await db.update(secrets)
       .set({ encrypted_value: encryptedValue, encryption_iv: iv, encryption_tag: tag, key_version: currentKey.version })

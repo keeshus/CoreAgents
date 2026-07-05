@@ -119,6 +119,11 @@ router.get('/', asyncHandler(async (req, res) => {
       name: secrets.name,
       scope: secrets.scope,
       scopeId: secrets.scope_id,
+      secretType: secrets.secret_type,
+      referencePath: secrets.reference_path,
+      encryptedValue: secrets.encrypted_value,
+      encryptionIv: secrets.encryption_iv,
+      encryptionTag: secrets.encryption_tag,
       keyVersion: secrets.key_version,
       expiresAt: secrets.expires_at,
       createdAt: secrets.created_at,
@@ -128,14 +133,39 @@ router.get('/', asyncHandler(async (req, res) => {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(secrets.created_at));
 
-  res.json(rows);
+  const result = await Promise.all(rows.map(async (row) => {
+    let maskedValue: string | null = null;
+    if (row.secretType === 'cyberark') {
+      maskedValue = `cyberark:${row.referencePath}`;
+    } else if (row.encryptedValue && row.encryptionIv && row.encryptionTag) {
+      try {
+        const plaintext = await decrypt(row.encryptedValue, row.encryptionIv, row.encryptionTag, row.keyVersion);
+        maskedValue = plaintext.length > 3 ? '*'.repeat(plaintext.length - 3) + plaintext.slice(-3) : plaintext;
+      } catch {}
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      scope: row.scope,
+      scopeId: row.scopeId,
+      secretType: row.secretType,
+      referencePath: row.referencePath,
+      maskedValue,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }));
+
+  res.json(result);
 }));
 
 // POST /api/secrets — create a secret
 router.post('/', requirePermission('secrets:write'), asyncHandler(async (req, res) => {
-  const { name, value, scope = 'app', scopeId } = req.body || {};
+  const { name, value, scope = 'app', scopeId, secretType = 'core', referencePath } = req.body || {};
 
-  if (!name || !value) { res.status(400).json({ error: 'name and value are required' }); return; }
+  if (!name) { res.status(400).json({ error: 'name is required' }); return; }
+  if (secretType === 'core' && !value) { res.status(400).json({ error: 'value is required for core secrets' }); return; }
+  if (secretType === 'cyberark' && !referencePath) { res.status(400).json({ error: 'referencePath is required for cyberark secrets' }); return; }
   if (!['app', 'group', 'flow'].includes(scope)) { res.status(400).json({ error: 'Invalid scope' }); return; }
   if (scope !== 'app' && !scopeId) { res.status(400).json({ error: 'scopeId is required for group/flow scope' }); return; }
 
@@ -149,23 +179,41 @@ router.post('/', requirePermission('secrets:write'), asyncHandler(async (req, re
   );
   if (existing) { res.status(409).json({ error: 'A secret with this name already exists in this scope' }); return; }
 
-  await ensureInitialKeyVersion();
-  const encrypted = await encrypt(value);
+  if (secretType === 'core') {
+    await ensureInitialKeyVersion();
+    const encrypted = await encrypt(value!);
 
-  const [secret] = await db.insert(secrets).values({
-    name,
-    scope,
-    scope_id: scopeId || null,
-    encrypted_value: encrypted.encryptedValue,
-    encryption_iv: encrypted.iv,
-    encryption_tag: encrypted.tag,
-    key_version: encrypted.keyVersion,
-    created_by: user.userId,
-  }).returning();
+    const [secret] = await db.insert(secrets).values({
+      name,
+      scope,
+      scope_id: scopeId || null,
+      secret_type: 'core',
+      encrypted_value: encrypted.encryptedValue,
+      encryption_iv: encrypted.iv,
+      encryption_tag: encrypted.tag,
+      key_version: encrypted.keyVersion,
+      created_by: user.userId,
+    }).returning();
 
-  await logAccess('created', secret.id, user.userId, req.ip);
+    await logAccess('created', secret.id, user.userId, req.ip);
+    res.status(201).json({ id: secret.id, name: secret.name, scope: secret.scope, scopeId: secret.scope_id, secretType: 'core', maskedValue: value!.length > 3 ? '*'.repeat(value!.length - 3) + value!.slice(-3) : value! });
+  } else {
+    const [secret] = await db.insert(secrets).values({
+      name,
+      scope,
+      scope_id: scopeId || null,
+      secret_type: 'cyberark',
+      reference_path: referencePath,
+      encrypted_value: '',
+      encryption_iv: '',
+      encryption_tag: '',
+      key_version: 1,
+      created_by: user.userId,
+    }).returning();
 
-  res.status(201).json({ id: secret.id, name: secret.name, scope: secret.scope, scopeId: secret.scope_id });
+    await logAccess('created', secret.id, user.userId, req.ip);
+    res.status(201).json({ id: secret.id, name: secret.name, scope: secret.scope, scopeId: secret.scope_id, secretType: 'cyberark', referencePath: secret.reference_path, maskedValue: `cyberark:${referencePath}` });
+  }
 }));
 
 // PUT /api/secrets/:id — update secret value
@@ -194,7 +242,8 @@ router.put('/:id', requirePermission('secrets:write'), asyncHandler(async (req, 
 
   await logAccess('updated', id, req.user!.userId, req.ip);
 
-  res.json({ status: 'updated' });
+  const maskedValue = value.length > 3 ? '*'.repeat(value.length - 3) + value.slice(-3) : value;
+  res.json({ status: 'updated', maskedValue });
 }));
 
 // DELETE /api/secrets/:id
@@ -225,7 +274,12 @@ router.post('/:id/reveal', revealLimiter, requirePermission('secrets:read', 'sec
   const access = await checkScopeAccess(secret.scope, secret.scope_id ?? undefined, req.user!);
   if (!access) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
 
-  const value = await decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
+  if (secret.secret_type === 'cyberark') {
+    res.json({ value: `[cyberark:${secret.reference_path}]`, secretType: 'cyberark' });
+    return;
+  }
+
+  const value = await decrypt(secret.encrypted_value!, secret.encryption_iv!, secret.encryption_tag!, secret.key_version);
   await logAccess('revealed', id, req.user!.userId, req.ip);
 
   res.json({ value });

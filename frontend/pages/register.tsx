@@ -77,11 +77,11 @@ export default function RegisterPage() {
               <TextField label="Email" value={email} onChange={setEmail} />
             </div>
             <div>
-              <TextField label="Password" type="password" value={password} onChange={setPassword} helpText="Minimum 8 characters required" />
-              {password.length > 0 && <PasswordStrengthMeter password={password} />}
+<TextField label="Password" type="password" value={password} onChange={setPassword} helpText="Minimum 8 characters required" showPasswordToggle />
+               {password.length > 0 && <PasswordStrengthMeter password={password} />}
             </div>
             <div>
-              <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} />
+               <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} showPasswordToggle />
               {touchedConfirm && (
                 <p className={`mt-1 text-xs flex items-center gap-1 ${passwordsMatch ? 'text-green-600' : 'text-red-600'}`}>
                   {passwordsMatch ? <Icon name="check_circle" className="text-xs shrink-0" /> : <Icon name="cancel" className="text-xs shrink-0" />}

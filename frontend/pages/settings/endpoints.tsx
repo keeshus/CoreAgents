@@ -46,6 +46,7 @@ export default function EndpointsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [defaultIdx, setDefaultIdx] = useState(-1);
 
   const [deleting, setDeleting] = useState<string | null>(null);
   const deleteConfirm = useConfirm({ title: 'Delete endpoint?', message: 'Are you sure you want to delete this endpoint? This cannot be undone.' });
@@ -71,6 +72,7 @@ export default function EndpointsPage() {
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
+    setDefaultIdx(-1);
     setShowForm(false);
   };
 
@@ -83,6 +85,8 @@ export default function EndpointsPage() {
       defaultModel: ep.default_model,
       models: (ep.models || []).join(', '),
     });
+    const models = ep.models || [];
+    setDefaultIdx(models.indexOf(ep.default_model));
     setEditingId(ep.id);
     setShowForm(true);
   };
@@ -116,6 +120,10 @@ export default function EndpointsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.name || (!editingId && !form.apiKey)) {
+      setError('Name and API Key are required.');
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -124,13 +132,15 @@ export default function EndpointsPage() {
       .map((m) => m.trim())
       .filter(Boolean);
 
+    const resolvedDefault = defaultIdx >= 0 && defaultIdx < modelsList.length ? modelsList[defaultIdx] : form.defaultModel;
+
     try {
       if (editingId) {
         const updateData: Record<string, unknown> = {
           name: form.name,
           providerType: form.providerType,
           baseUrl: form.baseUrl || null,
-          defaultModel: form.defaultModel,
+          defaultModel: resolvedDefault,
           models: modelsList,
         };
         if (form.apiKey) updateData.apiKey = form.apiKey;
@@ -145,7 +155,7 @@ export default function EndpointsPage() {
           providerType: form.providerType,
           baseUrl: form.baseUrl || null,
           apiKey: form.apiKey,
-          defaultModel: form.defaultModel,
+          defaultModel: resolvedDefault,
           models: modelsList,
         });
         setEndpoints((prev) => [...prev, created]);
@@ -239,18 +249,19 @@ export default function EndpointsPage() {
                 value={form.apiKey}
                 onChange={(v) => setForm((f) => ({ ...f, apiKey: v }))}
                 helpText={editingId ? 'Leave blank to keep current' : undefined}
+                showPasswordToggle
               />
 
             <div className="col-span-2">
               <span className="text-xs font-medium text-on-surface-variant block mb-1">Models</span>
               <div className="space-y-1.5">
-                {(form.models ? form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '') : []).map((model, i) => (
-                  <div key={i} className={`flex items-center gap-1 p-2 rounded transition-colors ${form.defaultModel === model ? 'bg-secondary-container ring-1 ring-primary' : ''}`}>
+                {(form.models ? form.models.split(',').map(s => s.trim()) : []).map((model, i) => (
+                  <div key={i} className={`flex items-center gap-1 p-2 rounded transition-colors ${defaultIdx === i ? 'bg-secondary-container ring-1 ring-primary' : ''}`}>
                     <span
-                      onClick={() => setForm((f) => ({ ...f, defaultModel: model }))}
+                      onClick={() => setDefaultIdx(i)}
                       className="flex items-center cursor-pointer shrink-0 w-20 justify-center"
                     >
-                      {form.defaultModel === model ? (
+                      {defaultIdx === i ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary text-on-primary font-medium">Default</span>
                       ) : (
                         <span className="text-[10px] px-1.5 py-0.5 text-on-surface-variant">Set default</span>
@@ -260,7 +271,7 @@ export default function EndpointsPage() {
                       label="Model"
                       value={model}
                       onChange={(v) => {
-                        const list = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
+                        const list = form.models.split(',').map(s => s.trim());
                         list[i] = v;
                         setForm((f) => ({ ...f, models: list.join(', ') }));
                       }}
@@ -269,7 +280,7 @@ export default function EndpointsPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        const list = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
+                        const list = form.models.split(',').map(s => s.trim());
                         list.splice(i, 1);
                         setForm((f) => ({ ...f, models: list.join(', ') }));
                       }}
@@ -280,7 +291,12 @@ export default function EndpointsPage() {
                 ))}
                 <button
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, models: f.models ? f.models + ', ' : ' ' }))}
+                  onClick={() => setForm((f) => {
+                    const newModels = f.models ? f.models + ', ' : ' ';
+                    const list = (newModels).split(',').map(s => s.trim());
+                    if (!editingId && defaultIdx < 0) setDefaultIdx(list.length - 1);
+                    return { ...f, models: newModels };
+                  })}
                   className="text-[11px] text-primary hover:underline"
                 >+ Add model</button>
               </div>
@@ -296,13 +312,17 @@ export default function EndpointsPage() {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
-              </button>
+              <Tooltip content={(!form.name || (!editingId && !form.apiKey)) ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button
+                    type="submit"
+                    disabled={saving || !form.name || (!editingId && !form.apiKey)}
+                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </form>
         )}
