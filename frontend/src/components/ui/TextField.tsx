@@ -52,6 +52,7 @@ export function TextField({
           id={label ? inputId : undefined}
           ref={inputRef as any}
           type={multiline ? undefined : type}
+          autoComplete="off"
           value={value}
           onChange={e => onChange(e.target.value)}
           onFocus={(e) => { setFocused(true); onFocus?.(e); }}
