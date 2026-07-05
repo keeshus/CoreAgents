@@ -372,11 +372,28 @@ export default function FlowEditPage() {
     if (!flow) return;
     const { name, description, flow_context, group_id } = flowSettingsDraft;
     setFlow((prev: any) => ({ ...prev, name, description, flow_context, group_id: group_id || null }));
-    if (flow.id !== 'new') {
-      await api.flows.update(flow.id, { name, description, flow_context, group_id: group_id || null });
+
+    // Persist flow metadata
+    const flowId = flow.id;
+    if (flowId !== 'new') {
+      await api.flows.update(flowId, { name, description, flow_context, group_id: group_id || null });
     }
+
+    // Persist in-memory flow secrets
+    for (const s of flowSecrets) {
+      if (s.id.startsWith('temp_')) {
+        // New secret — create via API
+        const targetId = flowId === 'new' ? undefined : flowId;
+        await fetch(`/api/secrets`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ name: s.name, value: s.value, scope: 'flow', scopeId: targetId }),
+        });
+      }
+      // For existing secrets, the name/value can't be edited — only create/delete
+    }
+
     setShowFlowSettings(false);
-  }, [flow, flowSettingsDraft]);
+  }, [flow, flowSettingsDraft, flowSecrets]);
 
   const { theme, toggle: toggleTheme } = useTheme();
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
@@ -542,31 +559,21 @@ export default function FlowEditPage() {
               {/* ── Flow-level Secrets ── */}
               <div className="border-t border-outline-variant pt-4">
                 <span className="text-xs font-medium text-on-surface-variant block mb-2">Flow Secrets</span>
-                {(!flow?.id || flow.id === 'new') ? (
-                  <p className="text-xs text-on-surface-variant">Save the flow first to manage flow-level secrets.</p>
-                ) : (<>
-                  {flowSecrets.length > 0 && (
-                  {flowSecrets.length > 0 && (
+                {flowSecrets.length > 0 && (
                     <div className="space-y-1 mb-3">
                       {flowSecrets.map(s => (
                         <div key={s.id} className="flex items-center justify-between bg-surface-container rounded px-2 py-1.5">
                           <span className="text-xs font-mono text-on-surface">{s.name}</span>
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={async () => {
-                                const res = await fetch(`/api/secrets/${s.id}/reveal`, { method: 'POST', credentials: 'include' });
-                                if (res.ok) {
-                                  const data = await res.json();
-                                  alert(`Secret "${s.name}": ${data.value}`);
-                                }
+                              onClick={() => {
+                                const value = flowSecrets.find(x => x.id === s.id)?.value;
+                                if (value) alert(`Secret "${s.name}": ${value}`);
                               }}
                               className="p-1 text-on-surface-variant hover:text-primary rounded text-xs"
                             ><Icon name="visibility" className="text-sm" /></button>
                             <button
-                              onClick={async () => {
-                                await fetch(`/api/secrets/${s.id}`, { method: 'DELETE', credentials: 'include' });
-                                setFlowSecrets(prev => prev.filter(x => x.id !== s.id));
-                              }}
+                              onClick={() => setFlowSecrets(prev => prev.filter(x => x.id !== s.id))}
                               className="p-1 text-on-surface-variant hover:text-error rounded text-xs"
                             ><Icon name="delete" className="text-sm" /></button>
                           </div>
@@ -589,26 +596,17 @@ export default function FlowEditPage() {
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                     />
                     <button
-                      onClick={async () => {
+                      onClick={() => {
                         if (!newSecretName || !newSecretValue) return;
-                        const res = await fetch(`/api/secrets`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({ name: newSecretName, value: newSecretValue, scope: 'flow', scopeId: flow.id }),
-                        });
-                        if (res.ok) {
-                          const created = await res.json();
-                          setFlowSecrets(prev => [...prev, created]);
-                          setNewSecretName('');
-                          setNewSecretValue('');
-                        }
+                        const tempId = `temp_${Date.now()}`;
+                        setFlowSecrets(prev => [...prev, { id: tempId, name: newSecretName.trim(), value: newSecretValue }]);
+                        setNewSecretName('');
+                        setNewSecretValue('');
                       }}
                       className="m3-button text-xs shrink-0"
                     ><Icon name="add" className="text-xs" /></button>
                   </div>
                   <p className="mt-1 text-[10px] text-on-surface-variant">Secrets are encrypted at rest. Use {'{{secrets.core.flow:NAME}}'} in templates.</p>
-                </>)}
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0">
