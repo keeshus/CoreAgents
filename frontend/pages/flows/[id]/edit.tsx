@@ -397,18 +397,6 @@ export default function FlowEditPage() {
               <Icon name="settings" className="text-base" />
             </button>
           </Tooltip>
-          {groups.length > 0 && (
-            <SelectField
-              label="Group"
-              value={flow.group_id || ''}
-              onChange={(v) => setFlow((prev: any) => ({ ...prev, group_id: v || null }))}
-              options={[
-                { value: '', label: 'No group' },
-                ...groups.map(g => ({ value: g.id, label: g.name })),
-              ]}
-              className="min-w-[120px]"
-            />
-          )}
         </div>
       </div>
 
