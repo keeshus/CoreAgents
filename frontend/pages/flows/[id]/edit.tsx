@@ -540,9 +540,12 @@ export default function FlowEditPage() {
               )}
 
               {/* ── Flow-level Secrets ── */}
-              {flow?.id && flow.id !== 'new' && (
-                <div className="border-t border-outline-variant pt-4">
-                  <span className="text-xs font-medium text-on-surface-variant block mb-2">Flow Secrets</span>
+              <div className="border-t border-outline-variant pt-4">
+                <span className="text-xs font-medium text-on-surface-variant block mb-2">Flow Secrets</span>
+                {(!flow?.id || flow.id === 'new') ? (
+                  <p className="text-xs text-on-surface-variant">Save the flow first to manage flow-level secrets.</p>
+                ) : (<>
+                  {flowSecrets.length > 0 && (
                   {flowSecrets.length > 0 && (
                     <div className="space-y-1 mb-3">
                       {flowSecrets.map(s => (
@@ -605,8 +608,8 @@ export default function FlowEditPage() {
                     ><Icon name="add" className="text-xs" /></button>
                   </div>
                   <p className="mt-1 text-[10px] text-on-surface-variant">Secrets are encrypted at rest. Use {'{{secrets.core.flow:NAME}}'} in templates.</p>
-                </div>
-              )}
+                </>)}
+              </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0">
               <button onClick={() => setShowFlowSettings(false)} className="m3-button-outlined text-sm">Cancel</button>
