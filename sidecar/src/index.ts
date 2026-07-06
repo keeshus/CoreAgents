@@ -137,24 +137,15 @@ async function handleExec(body: Record<string, unknown>) {
   finalEnv['XDG_CONFIG_HOME'] = join(base, '.config');
   finalEnv['HOME'] = cwd;
 
-  // Build landlock-helper command
-  const helperArgs = [
-    '--ro', '/usr',
-    '--ro', '/bin',
-    '--ro', '/lib',
-    '--ro', '/etc',
-    '--rw', base,
-    '--',
-    'bash', '-c', command,
-  ];
-
   const procTimeout = (timeout && timeout > 0) ? timeout : 30_000;
 
+  const helperArgs = [
+    '--ro', '/usr', '--ro', '/bin', '--ro', '/lib', '--ro', '/etc',
+    '--rw', base,
+    '--', 'bash', '-c', command,
+  ];
   const child = spawn(LANDLOCK_HELPER, helperArgs, {
-    cwd,
-    env: finalEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: true,
+    cwd, env: finalEnv, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
 
   let stdout = '';
