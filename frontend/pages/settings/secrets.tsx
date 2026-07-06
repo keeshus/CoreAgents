@@ -83,10 +83,6 @@ export default function SecretsPage() {
   }, [selectedGroupId, groups]);
 
   useEffect(() => {
-    if (selectedGroupId) setShowForm(false);
-  }, [selectedGroupId]);
-
-  useEffect(() => {
     fetchSecrets();
   }, [fetchSecrets]);
 
@@ -208,17 +204,15 @@ export default function SecretsPage() {
         {showForm && (
           <div className="bg-surface rounded-xl border p-4 mb-6 space-y-3">
             <h3 className="text-sm font-semibold text-on-surface">New Secret</h3>
-            {groups.length > 0 && (
-              <SelectField
-                label="Group"
-                value={formGroupId}
-                onChange={(v) => setFormGroupId(v)}
-                options={[
-                  { value: '', label: '— No group (app secret) —' },
-                  ...groups.map(g => ({ value: g.id, label: g.name })),
-                ]}
-              />
-            )}
+            <SelectField
+              label="Group"
+              value={formGroupId}
+              onChange={(v) => setFormGroupId(v)}
+              options={[
+                { value: '', label: '— No group (app secret) —' },
+                ...groups.map(g => ({ value: g.id, label: g.name })),
+              ]}
+            />
             <TextField label="Secret name" value={newSecretName} onChange={setNewSecretName} />
             {formGroupId && (
               <div className="flex gap-1">

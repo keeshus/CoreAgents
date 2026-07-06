@@ -33,6 +33,7 @@ export default function EnvVarsPage() {
 
   const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [formGroupId, setFormGroupId] = useState('');
 
   const [newName, setNewName] = useState('');
   const [newValue, setNewValue] = useState('');
@@ -72,20 +73,20 @@ export default function EnvVarsPage() {
   }, [isAdmin, user?.groups]);
 
   useEffect(() => {
-    const scope = selectedGroupId ? 'group' : 'app';
-    const url = selectedGroupId
-      ? `${API_URL}/secrets?scope=${scope}&scopeId=${selectedGroupId}`
+    const scope = formGroupId ? 'group' : 'app';
+    const url = formGroupId
+      ? `${API_URL}/secrets?scope=${scope}&scopeId=${formGroupId}`
       : `${API_URL}/secrets?scope=app`;
     fetch(url, { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(data => setAvailableSecrets(Array.isArray(data) ? data : []))
       .catch(() => setAvailableSecrets([]));
-  }, [selectedGroupId]);
+  }, [formGroupId]);
 
   const saveEnvVars = async (vars: EnvVarEntry[]) => {
     const body = { envVars: vars };
-    const url = selectedGroupId
-      ? `${API_URL}/env-vars/groups/${selectedGroupId}`
+    const url = formGroupId
+      ? `${API_URL}/env-vars/groups/${formGroupId}`
       : `${API_URL}/env-vars`;
     const res = await fetch(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
@@ -98,7 +99,7 @@ export default function EnvVarsPage() {
   };
 
   const resetForm = () => {
-    setNewName(''); setNewValue(''); setNewType('static');
+    setNewName(''); setNewValue(''); setNewType('static'); setFormGroupId('');
     setShowForm(false);
   };
 
@@ -238,6 +239,15 @@ export default function EnvVarsPage() {
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-on-surface">New Environment Variable</h3>
             </div>
+            <SelectField
+              label="Group"
+              value={formGroupId}
+              onChange={(v) => setFormGroupId(v)}
+              options={[
+                { value: '', label: '— No group (app env var) —' },
+                ...groups.map(g => ({ value: g.id, label: g.name })),
+              ]}
+            />
             <TextField label="Variable name" value={newName} onChange={setNewName} placeholder="e.g. GITLAB_TOKEN" />
             <SelectField
               label="Type"
