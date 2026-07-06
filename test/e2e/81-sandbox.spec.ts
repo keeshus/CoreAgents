@@ -294,4 +294,50 @@ test.describe('Sandboxed tool execution', () => {
     expect(c1out.hasMySafeVar).toBe(true);
     expect(c1out.mySafeVar).toBe('ok');
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Read-only filesystem enforcement ───────────────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('sandbox filesystem is read-only outside HOME', async ({ request }) => {
+    const code = [
+      'const results = {};',
+      'try { require("fs").writeFileSync("/usr/test-write", "x"); results.usrWritable = true; } catch (e) { results.usrWritable = false; }',
+      'try { require("fs").writeFileSync("/etc/test-write", "x"); results.etcWritable = true; } catch (e) { results.etcWritable = false; }',
+      'try { require("fs").writeFileSync("/bin/test-write", "x"); results.binWritable = true; } catch (e) { results.binWritable = false; }',
+      'try { require("fs").writeFileSync(process.env.HOME + "/test-write", "x"); results.homeWritable = true; } catch (e) { results.homeWritable = false; }',
+      'return results;',
+    ].join('\n');
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Sandbox-Readonly'),
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Checker', type: 'code', config: { code } } },
+          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['checker.usrWritable', 'checker.etcWritable', 'checker.binWritable', 'checker.homeWritable'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+          { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        ],
+      },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const output = completed!.data?.output;
+    expect(output).toBeDefined();
+
+    const c1out = output?.c1 || output?.checker || {};
+    expect(c1out.usrWritable).toBe(false);
+    expect(c1out.etcWritable).toBe(false);
+    expect(c1out.binWritable).toBe(false);
+    expect(c1out.homeWritable).toBe(true);
+  });
 });

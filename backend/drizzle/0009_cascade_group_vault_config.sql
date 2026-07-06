@@ -1,0 +1,1 @@
+ALTER TABLE group_vault_config DROP CONSTRAINT group_vault_config_group_id_groups_id_fk, ADD CONSTRAINT group_vault_config_group_id_groups_id_fk FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE;

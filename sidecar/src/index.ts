@@ -135,6 +135,7 @@ async function handleExec(body: Record<string, unknown>) {
   finalEnv['GIT_CONFIG_GLOBAL'] = join(base, '.gitconfig');
   finalEnv['XDG_CACHE_HOME'] = join(base, '.cache');
   finalEnv['XDG_CONFIG_HOME'] = join(base, '.config');
+  finalEnv['HOME'] = cwd;
 
   // Build landlock-helper command
   const helperArgs = [
