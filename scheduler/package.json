@@ -12,14 +12,14 @@
   "dependencies": {
     "core-agents-shared": "*",
     "bullmq": "^5.79.2",
-    "ioredis": "^5.6.1",
-    "drizzle-orm": "^0.43.1",
-    "pg": "^8.14.1"
+    "ioredis": "^5.11.1",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "tsx": "^4.22.5",
+    "tsx": "^4.23.0",
     "@types/node": "^26.1.0",
-    "@types/pg": "^8.11.14"
+    "@types/pg": "^8.20.0"
   }
 }
