@@ -209,10 +209,7 @@ export default function SecretsPage() {
         {/* Add secret form */}
         {showForm && (
           <div className="bg-surface rounded-xl border p-4 mb-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-on-surface">New Secret</h3>
-              <button onClick={resetForm} className="text-xs text-on-surface-variant hover:text-error">Cancel</button>
-            </div>
+            <h3 className="text-sm font-semibold text-on-surface">New Secret</h3>
             {groups.length > 0 && (
               <SelectField
                 label="Group"
