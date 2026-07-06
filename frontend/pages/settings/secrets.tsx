@@ -60,27 +60,21 @@ export default function SecretsPage() {
         const data = await res.json();
         setSecrets(Array.isArray(data) ? data.map((s: any) => ({ ...s, _scope: 'group', _groupName: groups.find(g => g.id === selectedGroupId)?.name })) : []);
       } else {
-        const [appRes, groupRes] = await Promise.all([
+        const [appRes, ...groupResponses] = await Promise.all([
           fetch(`${API_URL}/secrets?scope=app`, { credentials: 'include' }),
           ...groups.map(g =>
             fetch(`${API_URL}/secrets?scope=group&scopeId=${g.id}`, { credentials: 'include' })
-              .then(r => r.ok ? r.json() : [])
-              .catch(() => [])
+              .then(async r => {
+                const data = r.ok ? await r.json() : [];
+                return Array.isArray(data) ? data.map((s: any) => ({ ...s, _scope: 'group', _groupName: g.name })) : [];
+              })
+              .catch(() => [] as any[])
           ),
         ]);
         const appData = appRes.ok ? await appRes.json() : [];
-        // groupRes is actually the promises for each group
-        const groupResults = await Promise.all(
-          groups.map(g =>
-            fetch(`${API_URL}/secrets?scope=group&scopeId=${g.id}`, { credentials: 'include' })
-              .then(r => r.ok ? r.json() : [])
-              .then(data => data.map((s: any) => ({ ...s, _scope: 'group', _groupName: g.name })))
-              .catch(() => [])
-          )
-        );
         setSecrets([
           ...(Array.isArray(appData) ? appData.map((s: any) => ({ ...s, _scope: 'app' })) : []),
-          ...groupResults.flat(),
+          ...groupResponses.flat(),
         ]);
       }
     } catch (err) {
@@ -91,6 +85,10 @@ export default function SecretsPage() {
   useEffect(() => {
     if (selectedGroupId) setShowForm(false);
   }, [selectedGroupId]);
+
+  useEffect(() => {
+    fetchSecrets();
+  }, [fetchSecrets]);
 
   const resetForm = () => {
     setNewSecretName(''); setNewSecretValue(''); setNewSecretType('core'); setFormGroupId('');
