@@ -365,6 +365,7 @@ export default function FlowEditPage() {
   const [newEnvVarValue, setNewEnvVarValue] = useState('');
   const [inheritedSecrets, setInheritedSecrets] = useState<Array<{ name: string; scope: string; groupName?: string }>>([]);
   const [inheritedEnvVars, setInheritedEnvVars] = useState<Array<{ name: string; value: string; scope: string }>>([]);
+  const [availableSecrets, setAvailableSecrets] = useState<Array<{ value: string; label: string }>>([]);
 
   const loadInheritedData = useCallback(async (groupId: string | null) => {
     const secrets: Array<{ name: string; scope: string; groupName?: string }> = [];
@@ -374,6 +375,12 @@ export default function FlowEditPage() {
     try {
       const appSec = await fetch('/api/secrets?scope=app', { credentials: 'include' }).then(r => r.ok ? r.json() : []);
       if (Array.isArray(appSec)) appSec.forEach((s: any) => secrets.push({ name: s.name, scope: 'app' }));
+    } catch {}
+
+    // App-level env vars
+    try {
+      const appEv = await fetch('/api/env-vars', { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+      if (Array.isArray(appEv)) appEv.forEach((v: any) => envVars.push({ name: v.name, value: v.value, scope: 'App-wide' }));
     } catch {}
 
     // Group-level secrets and env vars
@@ -393,6 +400,31 @@ export default function FlowEditPage() {
     setInheritedSecrets(secrets);
     setInheritedEnvVars(envVars);
   }, [groups]);
+
+  // Fetch available secrets for the core_secret dropdown in env vars
+  useEffect(() => {
+    const fetchSecrets = async () => {
+      const results: Array<{ value: string; label: string }> = [];
+      try {
+        const appSec = await fetch('/api/secrets?scope=app', { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+        if (Array.isArray(appSec)) appSec.forEach((s: any) => results.push({ value: `${s.name}`, label: `${s.name} (app)` }));
+      } catch {}
+      if (flow?.group_id) {
+        try {
+          const grpSec = await fetch(`/api/secrets?scope=group&scopeId=${flow.group_id}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+          if (Array.isArray(grpSec)) grpSec.forEach((s: any) => results.push({ value: s.name, label: `${s.name} (group)` }));
+        } catch {}
+      }
+      if (flow?.id && flow.id !== 'new') {
+        try {
+          const flowSec = await fetch(`/api/secrets?scope=flow&scopeId=${flow.id}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+          if (Array.isArray(flowSec)) flowSec.forEach((s: any) => results.push({ value: s.name, label: `${s.name} (flow)` }));
+        } catch {}
+      }
+      setAvailableSecrets(results);
+    };
+    fetchSecrets();
+  }, [flow?.id, flow?.group_id]);
 
   const openFlowSettings = useCallback(() => {
     setFlowSettingsDraft({
@@ -627,7 +659,14 @@ export default function FlowEditPage() {
                     <div className="space-y-1 mb-3">
                       {flowSecrets.map(s => (
                         <div key={s.id} className="flex items-center justify-between bg-surface-container rounded px-2 py-1.5">
-                          <span className="text-xs font-mono text-on-surface">{s.name}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-mono text-on-surface truncate">{s.name}</span>
+                            {s.secretType === 'cyberark' ? (
+                              <span className="text-[9px] px-1 py-0.5 rounded font-medium bg-surface-container-high text-on-surface-variant shrink-0">CyberArk</span>
+                            ) : (
+                              <span className="text-[9px] px-1 py-0.5 rounded font-medium bg-primary-container text-primary shrink-0">Core</span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1">
                             {revealedSecrets[s.id] ? (
                               <div className="flex items-center gap-2 px-2 py-1 bg-secondary-container rounded text-xs">
@@ -676,22 +715,44 @@ export default function FlowEditPage() {
                       onChange={e => setNewSecretName(e.target.value)}
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                     />
-                    <input
-                      data-testid="flow-secret-value"
-                      placeholder="Value"
-                      value={newSecretValue}
-                      onChange={e => setNewSecretValue(e.target.value)}
-                      type="password"
-                      className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
-                    />
+                    <div className="flex gap-1 shrink-0 items-center pt-1">
+                      <button
+                        onClick={() => setNewSecretType('core')}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors ${newSecretType === 'core' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}
+                      >Core</button>
+                      <button
+                        onClick={() => setNewSecretType('cyberark')}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors ${newSecretType === 'cyberark' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}`}
+                      >CyberArk</button>
+                    </div>
+                    {newSecretType === 'cyberark' ? (
+                      <input
+                        placeholder="Reference path"
+                        value={newSecretValue}
+                        onChange={e => setNewSecretValue(e.target.value)}
+                        className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                      />
+                    ) : (
+                      <input
+                        data-testid="flow-secret-value"
+                        placeholder="Value"
+                        value={newSecretValue}
+                        onChange={e => setNewSecretValue(e.target.value)}
+                        type="password"
+                        className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                      />
+                    )}
                     <button
                       onClick={async () => {
                         if (!newSecretName || !newSecretValue) return;
+                        const body: Record<string, unknown> = { name: newSecretName, scope: 'flow', scopeId: flow.id, secretType: newSecretType };
+                        if (newSecretType === 'core') body.value = newSecretValue;
+                        else body.referencePath = newSecretValue;
                         const res = await fetch(`/api/secrets`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           credentials: 'include',
-                          body: JSON.stringify({ name: newSecretName, value: newSecretValue, scope: 'flow', scopeId: flow.id }),
+                          body: JSON.stringify(body),
                         });
                         if (res.ok) {
                           const created = await res.json();
@@ -762,12 +823,32 @@ export default function FlowEditPage() {
                     <option value="core_secret">Secret ref</option>
                     <option value="cyberark">CyberArk</option>
                   </select>
-                  <input
-                    placeholder={newEnvVarType === 'core_secret' ? 'Secret name' : newEnvVarType === 'cyberark' ? 'CyberArk path' : 'Value'}
-                    value={newEnvVarValue}
-                    onChange={e => setNewEnvVarValue(e.target.value)}
-                    className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
-                  />
+                  {newEnvVarType === 'core_secret' ? (
+                    <select
+                      value={newEnvVarValue}
+                      onChange={e => setNewEnvVarValue(e.target.value)}
+                      className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                    >
+                      <option value="">— Select a secret —</option>
+                      {availableSecrets.map(s => (
+                        <option key={s.value + s.label} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  ) : newEnvVarType === 'cyberark' ? (
+                    <input
+                      placeholder="CyberArk path"
+                      value={newEnvVarValue}
+                      onChange={e => setNewEnvVarValue(e.target.value)}
+                      className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                    />
+                  ) : (
+                    <input
+                      placeholder="Value"
+                      value={newEnvVarValue}
+                      onChange={e => setNewEnvVarValue(e.target.value)}
+                      className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                    />
+                  )}
                   <button
                     onClick={async () => {
                       if (!newEnvVarName || !newEnvVarValue) return;
