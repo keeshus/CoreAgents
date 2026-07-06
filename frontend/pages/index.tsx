@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { Tooltip } from '@/components/ui/Tooltip';
 
 type Tab = 'flows' | 'subflows' | 'contexts';
@@ -35,11 +36,25 @@ export default function FlowsListPage() {
   const [contextTitle, setContextTitle] = useState('');
   const [contextDescription, setContextDescription] = useState('');
   const [contextContent, setContextContent] = useState('');
+  const [contextGroupId, setContextGroupId] = useState('');
+  const [contextFilterGroupId, setContextFilterGroupId] = useState('');
   const contextDeleteConfirm = useConfirm({ title: 'Delete context?', message: 'Are you sure you want to delete this agent context? Flows using it will no longer receive it.' });
 
   useAssistantContext({ pageKey: 'flows-list', description: 'Viewing all flows' });
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const isReader = user && !can('flow:create');
+  const isAdmin = can('admin');
+
+  const [contextGroups, setContextGroups] = useState<Array<{ value: string; label: string }>>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    const g = isAdmin
+      ? fetch('/api/groups', { credentials: 'include' }).then(r => r.ok ? r.json() : [])
+      : Promise.resolve(user?.groups || []);
+    g.then(data => setContextGroups(Array.isArray(data) ? data.map((g: any) => ({ value: g.id, label: g.name })) : []))
+      .catch(() => {});
+  }, [isAdmin, user]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -64,12 +79,15 @@ export default function FlowsListPage() {
   useEffect(() => {
     if (activeTab !== 'contexts') return;
     setContextsLoading(true);
-    fetch('/api/agent-contexts', { credentials: 'include' })
+    const url = contextFilterGroupId
+      ? `/api/agent-contexts?group_id=${contextFilterGroupId}`
+      : '/api/agent-contexts';
+    fetch(url, { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(setContexts)
       .catch(() => setContexts([]))
       .finally(() => setContextsLoading(false));
-  }, [activeTab]);
+  }, [activeTab, contextFilterGroupId]);
 
   const handleLogout = async () => {
     await logout();
@@ -117,6 +135,7 @@ export default function FlowsListPage() {
     setContextTitle('');
     setContextDescription('');
     setContextContent('');
+    setContextGroupId('');
     setEditingContext(null);
     setShowContextForm(false);
   };
@@ -126,12 +145,13 @@ export default function FlowsListPage() {
     setContextTitle(ctx.title);
     setContextDescription(ctx.description || '');
     setContextContent(ctx.content || '');
+    setContextGroupId(ctx.group_id || '');
     setShowContextForm(true);
   };
 
   const handleSaveContext = async () => {
     if (!contextTitle.trim()) return;
-    const body = { title: contextTitle.trim(), description: contextDescription, content: contextContent };
+    const body = { title: contextTitle.trim(), description: contextDescription, content: contextContent, group_id: contextGroupId || null };
     try {
       if (editingContext) {
         const updated = await fetch(`/api/agent-contexts/${editingContext.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'include' }).then(r => r.json());
@@ -531,10 +551,32 @@ export default function FlowsListPage() {
               )}
             </div>
 
+            {/* Group filter */}
+            <div className="mb-4 max-w-xs">
+              <SearchableSelect
+                label="Filter by group"
+                value={contextFilterGroupId}
+                onChange={(v) => { setContextFilterGroupId(v); setShowContextForm(false); }}
+                items={contextGroups}
+                includeAll={true}
+                allLabel="All items"
+              />
+            </div>
+
             {showContextForm && (
               <div className="bg-surface rounded-lg border p-4 mb-4 space-y-3">
                 <TextField label="Title" value={contextTitle} onChange={setContextTitle} />
                 <TextField label="Description" value={contextDescription} onChange={setContextDescription} />
+                {contextGroups.length > 0 && (
+                  <SearchableSelect
+                    label="Group"
+                    value={contextGroupId}
+                    onChange={setContextGroupId}
+                    items={contextGroups}
+                    includeAll={true}
+                    allLabel="App-wide"
+                  />
+                )}
                 <div>
                   <label className="text-xs font-medium text-on-surface-variant block mb-1">Content</label>
                   <textarea
@@ -545,11 +587,15 @@ export default function FlowsListPage() {
                     className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={handleSaveContext} disabled={!contextTitle.trim()} className="m3-button disabled:opacity-50">
-                    <Icon name="save" className="text-sm" /> {editingContext ? 'Update' : 'Create'}
-                  </button>
-                  <button onClick={resetContextForm} className="m3-button-outlined text-sm">Cancel</button>
+                <div className="flex items-center gap-2 justify-end">
+                  <button onClick={resetContextForm} className="px-4 py-2 text-sm font-medium text-on-surface-variant bg-surface border border-outline rounded-lg hover:bg-surface-container-high transition-colors">Cancel</button>
+                  <Tooltip content={!contextTitle.trim() ? 'Fill in all required fields' : ''}>
+                    <span>
+                      <button onClick={handleSaveContext} disabled={!contextTitle.trim()} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">
+                        <Icon name="save" className="text-sm" /> {editingContext ? 'Update' : 'Create'}
+                      </button>
+                    </span>
+                  </Tooltip>
                 </div>
               </div>
             )}
@@ -570,6 +616,9 @@ export default function FlowsListPage() {
                     <div className="flex items-start justify-between">
                       <div className="min-w-0 flex-1">
                         <h3 className="font-medium text-on-surface">{ctx.title}</h3>
+                        {ctx.group_name && (
+                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary-container text-secondary">{ctx.group_name}</span>
+                        )}
                         {ctx.description && <p className="text-xs text-on-surface-variant mt-0.5">{ctx.description}</p>}
                         {ctx.content && (
                           <pre className="mt-2 text-xs font-mono text-on-surface-variant bg-surface-container-high rounded p-2 overflow-hidden max-h-20 whitespace-pre-wrap">{ctx.content}</pre>

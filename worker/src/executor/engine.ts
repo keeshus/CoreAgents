@@ -689,7 +689,6 @@ export class FlowExecutor {
         };
 
         // Tool-use loop: LLM may call tools, we execute them, feed back results
-        const MAX_TOOL_ROUNDS = 5;
         const conversation = [...messages];
         let finalContent = '';
 
@@ -756,7 +755,7 @@ export class FlowExecutor {
         const executedTools: Array<{ name: string; input: any; result: string }> = [];
         const result: Record<string, unknown> = { content: '' };
 
-        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        for (let round = 0; ; round++) {
           if (this.abortController.signal.aborted) break;
 
           const response = await callLLM(
@@ -880,9 +879,14 @@ export class FlowExecutor {
           }
           // structured_output is the final response — no more rounds needed
           if (structuredOutputUsed) break;
+
+          // Progress check: ask the LLM if it's still making progress or should wrap up
+          const progressMsg = config.responseFormat === 'json_object'
+            ? 'Are you making progress? If you have enough information, call structured_output with your final answer. If you need more data, continue with your next action.'
+            : 'Are you making progress toward the goal? If yes, continue with your next action. If you have completed the task or are stuck, provide a summary of what you did and stop.';
+          conversation.push({ role: 'user' as const, content: progressMsg });
         }
 
-        
         result.content = finalContent;
         if (executedTools.length > 0) result.toolCalls = executedTools;
         if (!structuredOutputUsed && finalContent && config.responseFormat === 'json_object') {

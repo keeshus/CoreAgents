@@ -54,7 +54,7 @@ export default function GlobalContextPage() {
         {loading ? (
           <p className="text-on-surface-variant text-sm">Loading...</p>
         ) : (
-          <div className="bg-surface rounded-xl border p-4 space-y-4 max-w-2xl">
+          <div className="bg-surface rounded-xl border p-4 space-y-4">
             <div>
               <label className="text-xs font-medium text-on-surface-variant block mb-1">Global Context</label>
               <textarea

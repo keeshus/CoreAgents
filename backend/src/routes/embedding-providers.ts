@@ -41,6 +41,10 @@ router.get('/embedding-providers', requirePermission('embedding:read'), asyncHan
     }
   }
 
+  if (req.query.group_id) {
+    conditions.push(eq(embeddingProviders.group_id, req.query.group_id as string));
+  }
+
   const result = conditions.length > 0
     ? await db.select().from(embeddingProviders).where(and(...conditions))
     : await db.select().from(embeddingProviders);
@@ -113,12 +117,13 @@ router.put('/embedding-providers/:id', requirePermission('embedding:write', 'emb
   }
 
   const data: Record<string, unknown> = { updated_at: new Date() };
-  const { name, providerType, baseUrl, apiKey, model } = req.body;
+  const { name, providerType, baseUrl, apiKey, model, groupId } = req.body;
   if (name !== undefined) data.name = name;
   if (providerType !== undefined) data.provider_type = providerType;
   if (baseUrl !== undefined) data.base_url = baseUrl;
   if (apiKey !== undefined) data.api_key = apiKey;
   if (model !== undefined) data.model = model;
+  if (groupId !== undefined) data.group_id = groupId || null;
 
   const [row] = await db.update(embeddingProviders).set(data).where(eq(embeddingProviders.id, id)).returning();
   res.json(row);

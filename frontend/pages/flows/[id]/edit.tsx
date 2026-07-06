@@ -9,12 +9,12 @@ import { NodeConfigModal } from '@/components/flow/NodeConfigModal';
 import { DebugOverlay } from '@/components/flow/DebugOverlay';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
-import { SelectField } from '@/components/ui/SelectField';
 import { useConfirm } from '@/lib/useConfirm';
 import * as Separator from '@radix-ui/react-separator';
 import { useTheme } from '@/hooks/useTheme';
 import Link from 'next/link';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { getNodeFields } from '@/components/flow/config/InputPreview';
 
 export default function FlowEditPage() {
@@ -363,6 +363,36 @@ export default function FlowEditPage() {
   const [newEnvVarName, setNewEnvVarName] = useState('');
   const [newEnvVarType, setNewEnvVarType] = useState<'static' | 'core_secret' | 'cyberark'>('static');
   const [newEnvVarValue, setNewEnvVarValue] = useState('');
+  const [inheritedSecrets, setInheritedSecrets] = useState<Array<{ name: string; scope: string; groupName?: string }>>([]);
+  const [inheritedEnvVars, setInheritedEnvVars] = useState<Array<{ name: string; value: string; scope: string }>>([]);
+
+  const loadInheritedData = useCallback(async (groupId: string | null) => {
+    const secrets: Array<{ name: string; scope: string; groupName?: string }> = [];
+    const envVars: Array<{ name: string; value: string; scope: string }> = [];
+
+    // App-level secrets
+    try {
+      const appSec = await fetch('/api/secrets?scope=app', { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+      if (Array.isArray(appSec)) appSec.forEach((s: any) => secrets.push({ name: s.name, scope: 'app' }));
+    } catch {}
+
+    // Group-level secrets and env vars
+    if (groupId) {
+      try {
+        const grpSec = await fetch(`/api/secrets?scope=group&scopeId=${groupId}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+        const grpName = groups.find(g => g.id === groupId)?.name || 'Group';
+        if (Array.isArray(grpSec)) grpSec.forEach((s: any) => secrets.push({ name: s.name, scope: 'group', groupName: grpName }));
+      } catch {}
+      try {
+        const grpEv = await fetch(`/api/env-vars/groups/${groupId}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+        const grpName = groups.find(g => g.id === groupId)?.name || 'Group';
+        if (Array.isArray(grpEv)) grpEv.forEach((v: any) => envVars.push({ name: v.name, value: v.value, scope: grpName }));
+      } catch {}
+    }
+
+    setInheritedSecrets(secrets);
+    setInheritedEnvVars(envVars);
+  }, [groups]);
 
   const openFlowSettings = useCallback(() => {
     setFlowSettingsDraft({
@@ -372,6 +402,7 @@ export default function FlowEditPage() {
       group_id: flow?.group_id || '',
     });
     setFlowEnvVars((flow as any)?.env_vars || []);
+    loadInheritedData(flow?.group_id || null);
     if (flow?.id && flow.id !== 'new') {
       fetch(`/api/secrets?scope=flow&scopeId=${flow.id}`, { credentials: 'include' })
         .then(r => r.ok ? r.json() : [])
@@ -381,20 +412,14 @@ export default function FlowEditPage() {
       setFlowSecrets([]);
     }
     setShowFlowSettings(true);
-  }, [flow]);
+  }, [flow, loadInheritedData]);
 
-  const saveFlowSettings = useCallback(async () => {
-    if (!flow) return;
+  const saveFlowSettings = useCallback(async (extraFields?: Record<string, unknown>) => {
+    if (!flow || flow.id === 'new') return;
     const { name, description, flow_context, group_id } = flowSettingsDraft;
     setFlow((prev: any) => ({ ...prev, name, description, flow_context, group_id: group_id || null, envVars: flowEnvVars }));
-
-    // Persist flow metadata
-    const flowId = flow.id;
-    if (flowId !== 'new') {
-      await api.flows.update(flowId, { name, description, flow_context, group_id: group_id || null, envVars: flowEnvVars });
-    }
-    setShowFlowSettings(false);
-  }, [flow, flowSettingsDraft, flowSecrets, flowEnvVars]);
+    await api.flows.update(flow.id, { name, description, flow_context, group_id: group_id || null, envVars: flowEnvVars, ...extraFields });
+  }, [flow, flowSettingsDraft, flowEnvVars]);
 
   const { theme, toggle: toggleTheme } = useTheme();
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
@@ -415,18 +440,6 @@ export default function FlowEditPage() {
               <Icon name="settings" className="text-base" />
             </button>
           </Tooltip>
-          {groups.length > 0 && (
-            <SelectField
-              label="Group"
-              value={flow.group_id || ''}
-              onChange={(v) => setFlow((prev: any) => ({ ...prev, group_id: v || null }))}
-              options={[
-                { value: '', label: 'No group' },
-                ...groups.map(g => ({ value: g.id, label: g.name })),
-              ]}
-              className="min-w-[120px]"
-            />
-          )}
         </div>
       </div>
 
@@ -537,7 +550,7 @@ export default function FlowEditPage() {
       {/* Flow Settings modal */}
       {showFlowSettings && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-12" onClick={() => setShowFlowSettings(false)}>
-          <div className="bg-surface rounded-xl shadow-m3-4 w-full max-w-lg mx-4 max-h-[70vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-surface rounded-xl shadow-m3-4 w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h2 className="text-lg font-semibold text-on-surface">Flow Settings</h2>
               <button onClick={() => setShowFlowSettings(false)} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors cursor-pointer">
@@ -545,29 +558,65 @@ export default function FlowEditPage() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <TextField label="Flow name" value={flowSettingsDraft.name || ''} onChange={(v) => setFlowSettingsDraft(p => ({ ...p, name: v }))} />
-              <TextField label="Description" value={flowSettingsDraft.description || ''} onChange={(v) => setFlowSettingsDraft(p => ({ ...p, description: v }))} multiline rows={2} />
+              <div className="grid grid-cols-2 gap-4">
+                <TextField label="Flow name" value={flowSettingsDraft.name || ''} onChange={(v) => setFlowSettingsDraft(p => ({ ...p, name: v }))} />
+                {groups.length > 0 && (
+                  <SearchableSelect
+                    label="Group"
+                    value={flowSettingsDraft.group_id || ''}
+                    onChange={(v) => { setFlowSettingsDraft(p => ({ ...p, group_id: v || null })); saveFlowSettings({ group_id: v || null }); loadInheritedData(v || null); }}
+                    items={groups.map(g => ({ value: g.id, label: g.name }))}
+                    includeAll={true}
+                    allLabel="No group"
+                  />
+                )}
+              </div>
+              <TextField label="Description" value={flowSettingsDraft.description || ''} onChange={(v) => { setFlowSettingsDraft(p => ({ ...p, description: v })); saveFlowSettings({ description: v }); }} multiline rows={2} />
               <div>
                 <label className="text-xs font-medium text-on-surface-variant block mb-1">Flow Context</label>
                 <textarea
                   value={flowSettingsDraft.flow_context || ''}
-                  onChange={e => setFlowSettingsDraft(p => ({ ...p, flow_context: e.target.value }))}
+                  onChange={e => { setFlowSettingsDraft(p => ({ ...p, flow_context: e.target.value })); saveFlowSettings({ flow_context: e.target.value }); }}
                   placeholder="Context for this specific flow..."
                   rows={6}
                   className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-y"
                 />
                 <p className="mt-1 text-[10px] text-on-surface-variant">This context is injected between the group context and the agent contexts.</p>
               </div>
-              {groups.length > 0 && (
-                <SelectField
-                  label="Group"
-                  value={flowSettingsDraft.group_id || ''}
-                  onChange={(v) => setFlowSettingsDraft(p => ({ ...p, group_id: v || null }))}
-                  options={[
-                    { value: '', label: 'No group' },
-                    ...groups.map(g => ({ value: g.id, label: g.name })),
-                  ]}
-                />
+
+              {/* ── Inherited Secrets (read-only) ── */}
+              {inheritedSecrets.length > 0 && (
+                <div className="border-t border-outline-variant pt-4">
+                  <span className="text-xs font-medium text-on-surface-variant block mb-2">Inherited Secrets</span>
+                  <p className="text-[10px] text-on-surface-variant mb-2">Available via {'{{secrets.NAME}}'} templates. These are inherited from upper scopes and are read-only here.</p>
+                  <div className="space-y-1">
+                    {inheritedSecrets.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-surface-container rounded px-2 py-1.5">
+                        <Icon name="key" className="text-xs text-on-surface-variant shrink-0" />
+                        <span className="text-xs font-mono text-on-surface">{s.name}</span>
+                        <span className="text-[10px] text-on-surface-variant ml-auto">{s.scope === 'app' ? 'App-wide' : s.groupName || 'Group'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Inherited Env Vars (read-only) ── */}
+              {inheritedEnvVars.length > 0 && (
+                <div className="border-t border-outline-variant pt-4">
+                  <span className="text-xs font-medium text-on-surface-variant block mb-2">Inherited Environment Variables</span>
+                  <p className="text-[10px] text-on-surface-variant mb-2">Available via {'{{env.NAME}}'} templates. These are inherited from upper scopes and are read-only here.</p>
+                  <div className="space-y-1">
+                    {inheritedEnvVars.map((v, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-surface-container rounded px-2 py-1.5">
+                        <Icon name="settings" className="text-xs text-on-surface-variant shrink-0" />
+                        <span className="text-xs font-mono text-on-surface">{v.name}</span>
+                        <span className="text-xs text-on-surface-variant ml-2">{v.value}</span>
+                        <span className="text-[10px] text-on-surface-variant ml-auto">{v.scope}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {/* ── Flow-level Secrets ── */}
@@ -683,7 +732,13 @@ export default function FlowEditPage() {
                             className="p-1 text-on-surface-variant hover:text-primary rounded text-xs"
                           ><Icon name="edit" className="text-sm" /></button>
                           <button
-                            onClick={() => setFlowEnvVars(prev => prev.filter((_, i) => i !== idx))}
+                            onClick={async () => {
+                              const updated = flowEnvVars.filter((_, i) => i !== idx);
+                              setFlowEnvVars(updated);
+                              if (flow.id && flow.id !== 'new') {
+                                await api.flows.update(flow.id, { envVars: updated }).catch(() => {});
+                              }
+                            }}
                             className="p-1 text-on-surface-variant hover:text-error rounded text-xs"
                           ><Icon name="delete" className="text-sm" /></button>
                         </div>
@@ -714,22 +769,20 @@ export default function FlowEditPage() {
                     className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                   />
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (!newEnvVarName || !newEnvVarValue) return;
-                      setFlowEnvVars(prev => [...prev, { name: newEnvVarName.trim(), type: newEnvVarType, value: newEnvVarValue.trim() }]);
+                      const updated = [...flowEnvVars, { name: newEnvVarName.trim(), type: newEnvVarType, value: newEnvVarValue.trim() }];
+                      setFlowEnvVars(updated);
                       setNewEnvVarName('');
                       setNewEnvVarValue('');
+                      if (flow.id && flow.id !== 'new') {
+                        await api.flows.update(flow.id, { envVars: updated }).catch(() => {});
+                      }
                     }}
                     className="m3-button text-xs shrink-0"
                   ><Icon name="add" className="text-xs" /></button>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0">
-              <button onClick={() => setShowFlowSettings(false)} className="m3-button-outlined text-sm">Cancel</button>
-              <button onClick={saveFlowSettings} className="m3-button gap-2">
-                <Icon name="save" className="text-sm" /> Save
-              </button>
             </div>
           </div>
         </div>

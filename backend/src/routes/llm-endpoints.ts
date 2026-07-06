@@ -45,6 +45,10 @@ router.get(
       }
     }
 
+    if (req.query.group_id) {
+      conditions.push(eq(llmEndpoints.group_id, req.query.group_id as string));
+    }
+
     const result = conditions.length > 0
       ? await db.select().from(llmEndpoints).where(and(...conditions))
       : await db.select().from(llmEndpoints);
@@ -141,7 +145,7 @@ router.put(
   requirePermission('endpoint:write', 'endpoint:write_group'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
-    const { name, providerType, baseUrl, apiKey, defaultModel, models, isDefault } = req.body;
+    const { name, providerType, baseUrl, apiKey, defaultModel, models, isDefault, groupId } = req.body;
 
     const [existing] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, id)).limit(1);
     if (!existing) {
@@ -188,6 +192,7 @@ router.put(
     } else if (isDefault === false) {
       updateData.is_default = false;
     }
+    if (groupId !== undefined) updateData.group_id = groupId || null;
 
     const result = await db.update(llmEndpoints).set(updateData).where(eq(llmEndpoints.id, id)).returning();
     res.json(result[0]);

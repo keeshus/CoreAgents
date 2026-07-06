@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
-import { SelectField } from '@/components/ui/SelectField';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { API_URL, api } from '@/lib/api-client';
 import { useConfirm } from '@/lib/useConfirm';
 import { useAuth } from '@/lib/auth-context';
@@ -189,14 +189,13 @@ export default function SecretsPage() {
 
         {/* Group filter */}
         <div className="mb-4 max-w-xs">
-          <SelectField
+          <SearchableSelect
             label="Filter by group"
             value={selectedGroupId}
             onChange={(v) => { setSelectedGroupId(v); setShowForm(false); }}
-            options={[
-              { value: '', label: 'All secrets' },
-              ...groups.map(g => ({ value: g.id, label: g.name })),
-            ]}
+            items={groups.map(function(g){return{value:g.id,label:g.name}})}
+            includeAll={true}
+            allLabel="All items"
           />
         </div>
 
@@ -204,14 +203,14 @@ export default function SecretsPage() {
         {showForm && (
           <div className="bg-surface rounded-xl border p-4 mb-6 space-y-3">
             <h3 className="text-sm font-semibold text-on-surface">New Secret</h3>
-            <SelectField
+            <SearchableSelect
               label="Group"
               value={formGroupId}
               onChange={(v) => setFormGroupId(v)}
-              options={[
-                { value: '', label: '— No group (app secret) —' },
-                ...groups.map(g => ({ value: g.id, label: g.name })),
-              ]}
+              items={groups.map(function(g){return{value:g.id,label:g.name}})}
+              includeAll={true}
+              allLabel="App-wide"
+              className="col-span-1"
             />
             <TextField label="Secret name" value={newSecretName} onChange={setNewSecretName} />
             {formGroupId && (

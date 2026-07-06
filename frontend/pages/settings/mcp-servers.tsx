@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
-import { SelectField } from '@/components/ui/SelectField';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { api } from '@/lib/api-client';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useAuth } from '@/lib/auth-context';
@@ -120,10 +120,11 @@ export default function MCPServersPage() {
 
     try {
       if (editingId) {
-        const updateData = {
+        const updateData: Record<string, unknown> = {
           name: form.name,
           url: form.url,
           enabled: form.enabled,
+          groupId: formGroupId || null,
         };
         const updated = await api.mcpServers.update(editingId, updateData);
         setServers((prev) => prev.map((s) => (s.id === editingId ? updated : s)));
@@ -148,10 +149,6 @@ export default function MCPServersPage() {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  const filteredServers = filterGroupId
-    ? servers.filter((s) => s.group_id === filterGroupId || !s.group_id)
-    : servers;
-
   return (
     <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
@@ -161,13 +158,14 @@ export default function MCPServersPage() {
             <Icon name="arrow_back" className="text-base" /> <span>Back</span>
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-on-surface">MCP Servers</h1>
+            <h1 data-testid="mcp-servers-heading" className="text-2xl font-bold text-on-surface">MCP Servers</h1>
             <p className="text-sm text-on-surface-variant mt-1">
               Configure Model Context Protocol servers and their available tools
             </p>
           </div>
           {!showForm && (
             <button
+              data-testid="add-mcp-server-btn"
               onClick={() => setShowForm(true)}
               className="m3-button gap-2"
             >
@@ -178,24 +176,15 @@ export default function MCPServersPage() {
         </div>
 
         {/* Group filter */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <button
-            onClick={() => setFilterGroupId(null)}
-            className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
-              filterGroupId === null ? 'bg-primary text-on-primary shadow-m3-1' : 'bg-surface border border-outline text-on-surface-variant hover:bg-surface-container-high'
-            }`}
-          >
-            <Icon name="public" className="text-sm mr-1" /> App-wide
-          </button>
-          {groups.length > 0 && (
-            <SelectField
-              label="Group"
-              value={filterGroupId || ''}
-              onChange={(v) => setFilterGroupId(v || null)}
-              options={groups.map((g) => ({ value: g.id, label: g.name }))}
-              className="w-48"
-            />
-          )}
+        <div className="mb-4 max-w-xs">
+          <SearchableSelect
+            label="Filter by group"
+            value={filterGroupId || ''}
+            onChange={(v) => { setFilterGroupId(v || null); setShowForm(false); }}
+            items={groups.map(function(g){return{value:g.id,label:g.name}})}
+            includeAll={true}
+            allLabel="All items"
+          />
         </div>
 
         {/* Error banner */}
@@ -238,15 +227,15 @@ export default function MCPServersPage() {
               <span className="text-sm font-medium text-on-surface-variant">Enabled</span>
             </label>
 
-            {!editingId && groups.length > 0 && (
-              <SelectField
-                label="Scope"
+            {groups.length > 0 && (
+              <SearchableSelect
+                label="Group"
                 value={formGroupId}
                 onChange={setFormGroupId}
-                options={[
-                  { value: '', label: 'App-wide' },
-                  ...groups.map((g) => ({ value: g.id, label: g.name })),
-                ]}
+                items={groups.map(function(g){return{value:g.id,label:g.name}})}
+                includeAll={true}
+                allLabel="App-wide"
+                className="col-span-1"
               />
             )}
 
@@ -258,13 +247,17 @@ export default function MCPServersPage() {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update Server' : 'Create Server'}
-              </button>
+              <Tooltip content={!saving && (!form.name || !form.url) ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button
+                    type="submit"
+                    disabled={saving || !form.name || !form.url}
+                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving...' : editingId ? 'Update Server' : 'Create Server'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </form>
         )}
@@ -277,7 +270,7 @@ export default function MCPServersPage() {
         )}
 
         {/* Empty state */}
-        {!loading && !error && filteredServers.length === 0 && (
+        {!loading && !error && servers.length === 0 && (
           <div className="text-center py-16 bg-surface rounded-lg border border-outline-variant">
             <Icon name="dns" className="text-4xl text-on-surface-variant mx-auto mb-3" />
             <p className="text-on-surface-variant font-medium">No MCP servers configured</p>
@@ -288,9 +281,9 @@ export default function MCPServersPage() {
         )}
 
         {/* Server list */}
-        {!loading && filteredServers.length > 0 && (
+        {!loading && servers.length > 0 && (
           <div className="space-y-2">
-            {filteredServers.map((srv) => (
+            {servers.map((srv) => (
               <div key={srv.id} className="bg-surface rounded-lg border border-outline-variant">
                 {/* Server header row */}
                 <div className="p-4 flex items-start gap-4">

@@ -28,9 +28,12 @@ router.get('/', requirePermission('vaults:read'), asyncHandler(async (_req, res)
 
 // POST /api/secret-vaults — CyberArk Conjur
 router.post('/', requirePermission('vaults:write'), asyncHandler(async (req, res) => {
-  const { name, vaultType = 'cyberark', baseUrl, account = 'conjur', login, apiKey, caCert, selfHosted = false } = req.body || {};
+  const { name, vaultType = 'cyberark', baseUrl, account = 'conjur', login, apiKey, caCert, selfHosted = false, groupId } = req.body || {};
   if (!name || !baseUrl || !login || !apiKey) {
     res.status(400).json({ error: 'name, baseUrl, login, and apiKey are required' }); return;
+  }
+  if (!groupId) {
+    res.status(400).json({ error: 'A vault must be assigned to a group. groupId is required.' }); return;
   }
 
   await ensureInitialKeyVersion();
@@ -46,6 +49,13 @@ router.post('/', requirePermission('vaults:write'), asyncHandler(async (req, res
     ca_cert: caCert || null,
     self_hosted: selfHosted,
   }).returning();
+
+  // Bind vault to the specified group
+  await db.insert(groupVaultConfig).values({
+    group_id: groupId,
+    vault_id: vault.id,
+    enabled: true,
+  }).onConflictDoUpdate({ target: groupVaultConfig.group_id, set: { vault_id: vault.id, enabled: true } });
 
   res.status(201).json(sanitizeVault(vault));
 }));
@@ -84,9 +94,7 @@ router.delete('/:id', requirePermission('vaults:write'), asyncHandler(async (req
   const id = req.params.id as string;
   if (!isValidUUID(id)) { res.status(404).json({ error: 'Vault not found' }); return; }
 
-  const [bound] = await db.select().from(groupVaultConfig).where(eq(groupVaultConfig.vault_id, id));
-  if (bound) { res.status(409).json({ error: 'Cannot delete vault that is bound to active groups' }); return; }
-
+  await db.delete(groupVaultConfig).where(eq(groupVaultConfig.vault_id, id));
   await db.delete(secretVaults).where(eq(secretVaults.id, id));
   res.json({ status: 'deleted' });
 }));

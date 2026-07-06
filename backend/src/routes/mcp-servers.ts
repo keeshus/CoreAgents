@@ -44,6 +44,10 @@ router.get(
       }
     }
 
+    if (req.query.group_id) {
+      conditions.push(eq(mcpServers.group_id, req.query.group_id as string));
+    }
+
     const result = conditions.length > 0
       ? await db.select().from(mcpServers).where(and(...conditions))
       : await db.select().from(mcpServers);
@@ -122,7 +126,7 @@ router.put(
   requirePermission('mcp:write', 'mcp:write_group'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
-    const { name, url, tools, enabled } = req.body;
+    const { name, url, tools, enabled, groupId } = req.body;
 
     const [existing] = await db.select().from(mcpServers).where(eq(mcpServers.id, id)).limit(1);
     if (!existing) {
@@ -154,6 +158,7 @@ router.put(
     if (url !== undefined) updateData.url = url;
     if (tools !== undefined) updateData.tools = tools;
     if (enabled !== undefined) updateData.enabled = enabled;
+    if (groupId !== undefined) updateData.group_id = groupId || null;
 
     const result = await db.update(mcpServers).set(updateData).where(eq(mcpServers.id, id)).returning();
     res.json(result[0]);

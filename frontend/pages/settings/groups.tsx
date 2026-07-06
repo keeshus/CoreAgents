@@ -387,9 +387,13 @@ export default function GroupsSettingsPage() {
             <div className="space-y-3">
               <TextField label="Name" value={newName} onChange={setNewName} />
               <TextField label="Description" value={newDescription} onChange={setNewDescription} multiline rows={2} />
-              <button onClick={handleCreate} disabled={creating} className="w-full m3-button disabled:opacity-50">
-                {creating ? 'Creating...' : 'Create Group'}
-              </button>
+              <Tooltip content={!creating && !newName?.trim() ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button onClick={handleCreate} disabled={creating || !newName?.trim()} className="w-full m3-button disabled:opacity-50 disabled:cursor-not-allowed">
+                    {creating ? 'Creating...' : 'Create Group'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -406,7 +410,11 @@ export default function GroupsSettingsPage() {
             <div className="space-y-3">
               <TextField label="Name" value={editName} onChange={setEditName} />
               <TextField label="Description" value={editDescription} onChange={setEditDescription} multiline rows={2} />
-              <button onClick={handleEdit} className="w-full m3-button">Save</button>
+              <Tooltip content={!editName?.trim() ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button onClick={handleEdit} className="w-full m3-button">Save</button>
+                </span>
+              </Tooltip>
             </div>
           </div>
         </div>

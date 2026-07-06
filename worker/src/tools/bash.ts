@@ -66,6 +66,8 @@ FILESYSTEM RULES:
   - This is the ONLY directory where you can create, modify, or delete files.
   - Use $TMPDIR for temporary files — it is automatically cleaned up after each execution.
   - All data outside $HOME and $TMPDIR is read-only (system binaries, libraries, config).
+  - IMPORTANT: Always use $HOME (not /home/user or any other absolute path) when
+    constructing file paths. Absolute paths like /home/user/... do NOT exist.
 
 WORKING DIRECTORY:
   - The working directory starts at $HOME.

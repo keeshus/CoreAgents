@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { API_URL } from '@/lib/api-client';
 import { useConfirm } from '@/lib/useConfirm';
 import { useAuth } from '@/lib/auth-context';
@@ -47,21 +48,32 @@ export default function EnvVarsPage() {
   const fetchEnvVars = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      let raw: any;
+      let items: any[] = [];
       if (selectedGroupId) {
         const res = await fetch(`${API_URL}/env-vars/groups/${selectedGroupId}`, { credentials: 'include' });
         if (!res.ok) throw new Error('Failed to load environment variables');
-        raw = await res.json();
+        const raw = await res.json();
+        items = (Array.isArray(raw) ? raw : raw?.envVars || []).map((v: any) => ({ ...v, _scope: 'group', _groupName: groups.find(g => g.id === selectedGroupId)?.name }));
       } else {
-        const res = await fetch(`${API_URL}/env-vars`, { credentials: 'include' });
-        if (!res.ok) throw new Error('Failed to load environment variables');
-        raw = await res.json();
+        // Fetch app-level + all groups
+        const appRes = await fetch(`${API_URL}/env-vars`, { credentials: 'include' });
+        const appData = appRes.ok ? (await appRes.json()) : [];
+        items = Array.isArray(appData) ? appData.map((v: any) => ({ ...v, _scope: 'app' })) : [];
+        const groupResults = await Promise.all(
+          groups.map(g =>
+            fetch(`${API_URL}/env-vars/groups/${g.id}`, { credentials: 'include' })
+              .then(r => r.ok ? r.json() : [])
+              .then(data => (Array.isArray(data) ? data : []).map((v: any) => ({ ...v, _scope: 'group', _groupName: g.name })))
+              .catch(() => [])
+          )
+        );
+        items = [...items, ...groupResults.flat()];
       }
-      setEnvVars(Array.isArray(raw) ? raw : raw?.envVars || []);
+      setEnvVars(items);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load environment variables');
     } finally { setLoading(false); }
-  }, [selectedGroupId]);
+  }, [selectedGroupId, groups]);
 
   useEffect(() => { fetchEnvVars(); }, [fetchEnvVars]);
 
@@ -73,14 +85,18 @@ export default function EnvVarsPage() {
   }, [isAdmin, user?.groups]);
 
   useEffect(() => {
-    const scope = formGroupId ? 'group' : 'app';
-    const url = formGroupId
-      ? `${API_URL}/secrets?scope=${scope}&scopeId=${formGroupId}`
-      : `${API_URL}/secrets?scope=app`;
-    fetch(url, { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setAvailableSecrets(Array.isArray(data) ? data : []))
-      .catch(() => setAvailableSecrets([]));
+    const fetchSecrets = async () => {
+      const appRes = await fetch(`${API_URL}/secrets?scope=app`, { credentials: 'include' });
+      const appData = appRes.ok ? await appRes.json() : [];
+      let allSecrets = Array.isArray(appData) ? [...appData] : [];
+      if (formGroupId) {
+        const grpRes = await fetch(`${API_URL}/secrets?scope=group&scopeId=${formGroupId}`, { credentials: 'include' });
+        const grpData = grpRes.ok ? await grpRes.json() : [];
+        if (Array.isArray(grpData)) allSecrets = [...allSecrets, ...grpData];
+      }
+      setAvailableSecrets(allSecrets);
+    };
+    fetchSecrets();
   }, [formGroupId]);
 
   const saveEnvVars = async (vars: EnvVarEntry[]) => {
@@ -111,19 +127,34 @@ export default function EnvVarsPage() {
     setNewSaving(true); setError(null);
     try {
       const entry: EnvVarEntry = { name: newName.trim(), type: newType, value: newValue };
-      await saveEnvVars([...envVars, entry]);
+      // Only include items from the current scope (don't mix scopes when saving)
+      const isAppItem = (v: any) => !v._scope || v._scope === 'app';
+      const scopeItems = (envVars as any[]).filter(v => formGroupId ? v._scope === 'group' && v._groupName === groups.find(g => g.id === formGroupId)?.name : isAppItem(v));
+      await saveEnvVars([...scopeItems, entry]);
       resetForm();
       await fetchEnvVars();
     } catch (err) { setError(err instanceof Error ? err.message : 'Create failed'); }
     finally { setNewSaving(false); }
   };
 
-  const handleDelete = async (name: string) => {
+  const handleDelete = async (name: string, scope?: string, groupName?: string) => {
     const confirmed = await deleteConfirm.confirm();
     if (!confirmed) return;
     setDeleting(name);
     try {
-      await saveEnvVars(envVars.filter(v => v.name !== name));
+      const isGroup = scope === 'group' && groupName;
+      const g = isGroup ? groups.find(g => g.name === groupName) : null;
+      const url = g ? `${API_URL}/env-vars/groups/${g.id}` : `${API_URL}/env-vars`;
+      const allItems = envVars as any[];
+      const isAppItem = (v: any) => !v._scope || v._scope === 'app';
+      const scopeItems = g
+        ? allItems.filter(v => v._scope === 'group' && v._groupName === groupName)
+        : allItems.filter(v => isAppItem(v));
+      const res = await fetch(url, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ envVars: scopeItems.filter((v: any) => v.name !== name).map((v: any) => ({ name: v.name, type: v.type, value: v.value })) }),
+      });
+      if (!res.ok) throw new Error('Delete failed');
       await fetchEnvVars();
     } catch { setError('Delete failed'); }
     finally { setDeleting(null); }
@@ -133,7 +164,9 @@ export default function EnvVarsPage() {
     if (!editingValue) { setError('Value is required.'); return; }
     setEditingSaving(true); setError(null);
     try {
-      const updated = envVars.map(v =>
+      const isAppItem = (v: any) => !v._scope || v._scope === 'app';
+      const scopeItems = (envVars as any[]).filter(v => formGroupId ? v._scope === 'group' && v._groupName === groups.find(g => g.id === formGroupId)?.name : isAppItem(v));
+      const updated = scopeItems.map((v: any) =>
         v.name === name ? { ...v, type: editingType, value: editingValue } : v
       );
       await saveEnvVars(updated);
@@ -148,7 +181,7 @@ export default function EnvVarsPage() {
   const typeOptions = [
     { value: 'static', label: 'Static' },
     { value: 'core_secret', label: 'Core Secret' },
-    { value: 'cyberark', label: 'CyberArk' },
+    ...(formGroupId ? [{ value: 'cyberark', label: 'CyberArk' }] : []),
   ];
 
   const secretOptions = availableSecrets.map(s => ({ value: s.name, label: s.name }));
@@ -219,15 +252,14 @@ export default function EnvVarsPage() {
         {error && <div className="bg-error-container border text-error text-sm rounded p-3 mb-4">{error}</div>}
 
         {/* Group filter */}
-        <div data-testid="group-filter" className="mb-4 max-w-xs">
-          <SelectField
+        <div className="mb-4 max-w-xs">
+          <SearchableSelect
             label="Filter by group"
             value={selectedGroupId}
             onChange={(v) => setSelectedGroupId(v)}
-            options={[
-              { value: '', label: 'App-wide variables' },
-              ...groups.map(g => ({ value: g.id, label: g.name })),
-            ]}
+            items={groups.map(function(g){return{value:g.id,label:g.name}})}
+            includeAll={true}
+            allLabel="All items"
           />
         </div>
 
@@ -237,14 +269,14 @@ export default function EnvVarsPage() {
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-on-surface">New Environment Variable</h3>
             </div>
-            <SelectField
+            <SearchableSelect
               label="Group"
               value={formGroupId}
               onChange={(v) => setFormGroupId(v)}
-              options={[
-                { value: '', label: '— No group (app env var) —' },
-                ...groups.map(g => ({ value: g.id, label: g.name })),
-              ]}
+              items={groups.map(function(g){return{value:g.id,label:g.name}})}
+              includeAll={true}
+              allLabel="App-wide"
+              className="col-span-1"
             />
             <TextField label="Variable name" value={newName} onChange={setNewName} />
             <SelectField
@@ -290,7 +322,7 @@ export default function EnvVarsPage() {
             {envVars.map(v => {
               const isEditing = editingName === v.name;
               return (
-                <div key={v.name} data-testid="env-var-item" className="bg-surface rounded-lg border px-4 py-2.5">
+                <div key={(v as any)._scope ? `${v.name}-${(v as any)._scope}-${(v as any)._groupName || ''}` : v.name} data-testid="env-var-item" className="bg-surface rounded-lg border px-4 py-2.5">
                   {isEditing ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -316,8 +348,13 @@ export default function EnvVarsPage() {
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
                         <span className="text-sm font-medium text-on-surface">{v.name}</span>
-                        {badge(v.type)}
-                        <span className="text-xs font-mono text-on-surface-variant ml-2">{v.value}</span>
+                        {badge((v as any).type)}
+                        <span className="text-xs font-mono text-on-surface-variant ml-2">{(v as any).value}</span>
+                        {(v as any)._scope === 'app' ? (
+                          <span className="text-[10px] text-on-surface-variant ml-2">app-wide</span>
+                        ) : (v as any)._groupName ? (
+                          <span className="text-[10px] text-on-surface-variant ml-2">{(v as any)._groupName}</span>
+                        ) : null}
                         {readOnly && <span className="text-[10px] text-on-surface-variant ml-1">· read-only</span>}
                       </div>
                       {!readOnly && (
@@ -328,7 +365,7 @@ export default function EnvVarsPage() {
                             </button>
                           </Tooltip>
                           <Tooltip content="Delete variable">
-                            <button data-testid="delete-var-btn" onClick={() => handleDelete(v.name)} disabled={deleting === v.name} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded text-xs">
+                            <button data-testid="delete-var-btn" onClick={() => handleDelete(v.name, (v as any)._scope, (v as any)._groupName)} disabled={deleting === v.name} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded text-xs">
                               <Icon name="delete" className="text-sm" />
                             </button>
                           </Tooltip>

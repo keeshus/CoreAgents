@@ -139,6 +139,10 @@ router.get('/vector-stores', asyncHandler(async (req, res) => {
     }
   }
 
+  if (req.query.group_id) {
+    conditions.push(eq(vectorStores.group_id, req.query.group_id as string));
+  }
+
   const result = conditions.length > 0
     ? await db.select().from(vectorStores).where(and(...conditions))
     : await db.select().from(vectorStores);
@@ -217,10 +221,11 @@ router.put('/vector-stores/:id', requirePermission('store:write', 'store:write_g
   }
 
   const data: Record<string, unknown> = { updated_at: new Date() };
-  const { name, url, apiKey } = req.body;
+  const { name, url, apiKey, groupId } = req.body;
   if (name !== undefined) data.name = name;
   if (url !== undefined) data.url = url;
   if (apiKey !== undefined) data.api_key = apiKey;
+  if (groupId !== undefined) data.group_id = groupId || null;
 
   if (url) {
     try {

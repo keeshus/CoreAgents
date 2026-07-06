@@ -1,12 +1,13 @@
-import { useAssistantContext } from '@/hooks/useAssistantContext';
-import { useAuth } from '@/lib/auth-context';
-import { useConfirm } from '@/lib/useConfirm';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { api } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth-context';
+import { useAssistantContext } from '@/hooks/useAssistantContext';
+import { useConfirm } from '@/lib/useConfirm';
 import { Tooltip } from '@/components/ui/Tooltip';
 
 interface Group {
@@ -52,6 +53,9 @@ export default function SecretVaultsPage() {
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
 
   const [vaults, setVaults] = useState<Vault[]>([]);
+  const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [filterGroupId, setFilterGroupId] = useState<string | null>(null);
+  const [formGroupId, setFormGroupId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   useAssistantContext({ pageKey: 'settings:secret-vaults', description: 'Managing secret vaults' });
@@ -77,13 +81,23 @@ export default function SecretVaultsPage() {
     }
   };
 
+  const isAdmin = can('admin');
+
   useEffect(() => {
     fetchVaults();
-  }, []);
+  }, [filterGroupId]);
+
+  useEffect(() => {
+    const g = isAdmin
+      ? fetch('/api/groups', { credentials: 'include' }).then(r => r.ok ? r.json() : [])
+      : Promise.resolve(user?.groups || []);
+    g.then(setGroups).catch(() => {});
+  }, [isAdmin, user?.groups]);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
+    setFormGroupId('');
     setShowForm(false);
   };
 
@@ -142,6 +156,7 @@ export default function SecretVaultsPage() {
       baseUrl: form.baseUrl,
       login: form.login,
       apiKey: form.apiKey,
+      groupId: formGroupId || undefined,
     };
     if (form.account) body.account = form.account;
     if (form.caCert) body.caCert = form.caCert;
@@ -156,6 +171,7 @@ export default function SecretVaultsPage() {
         setVaults((prev) => [...prev, created]);
       }
       resetForm();
+      fetchVaults();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save vault');
     } finally {
@@ -210,6 +226,18 @@ export default function SecretVaultsPage() {
           </div>
         )}
 
+        {/* Group filter */}
+        <div className="mb-4 max-w-xs">
+          <SearchableSelect
+            label="Filter by group"
+            value={filterGroupId || ''}
+            onChange={(v) => setFilterGroupId(v || null)}
+            items={groups.map(g => ({ value: g.id, label: g.name }))}
+            includeAll={true}
+            allLabel="All items"
+          />
+        </div>
+
         {/* Add / Edit form */}
         {showForm && (
           <form
@@ -226,6 +254,17 @@ export default function SecretVaultsPage() {
                 value={form.name}
                 onChange={(v) => setForm((f) => ({ ...f, name: v }))}
               />
+
+              {!editingId && groups.length > 0 && (
+                <SearchableSelect
+                  label="Bind to group (required)"
+                  value={formGroupId}
+                  onChange={setFormGroupId}
+                  items={groups.map(g => ({ value: g.id, label: g.name }))}
+                  includeAll={false}
+                  placeholder="Select a group..."
+                />
+              )}
 
               <TextField
                 label="URL"
@@ -282,13 +321,17 @@ export default function SecretVaultsPage() {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update Vault' : 'Create Vault'}
-              </button>
+              <Tooltip content={(!form.name || !form.baseUrl || !form.login || (!editingId && !form.apiKey)) ? 'Fill in all required fields' : (!editingId && !formGroupId) ? 'Select a group' : ''}>
+                <span>
+                  <button
+                    type="submit"
+                    disabled={saving || !form.name || !form.baseUrl || !form.login || (!editingId && !form.apiKey) || (!editingId && !formGroupId)}
+                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving...' : editingId ? 'Update Vault' : 'Create Vault'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </form>
         )}

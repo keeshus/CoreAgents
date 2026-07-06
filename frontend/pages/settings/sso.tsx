@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { useRouter } from 'next/router';
 import { API_URL } from '@/lib/api-client';
 
@@ -127,9 +128,13 @@ export default function SSOSettingsPage() {
             </div>
 
             <div className="flex justify-end pt-2">
-              <button onClick={handleSave} disabled={saving} className="m3-button disabled:opacity-50">
-                {saving ? <><Icon name="sync" className="text-sm animate-spin" /> Saving...</> : 'Save Configuration'}
-              </button>
+              <Tooltip content={!saving && config && (!config.provider || !config.clientId || !config.issuer || !config.redirectUri) ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button onClick={handleSave} disabled={saving || !config?.provider || !config?.clientId || !config?.issuer} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">
+                    {saving ? <><Icon name="sync" className="text-sm animate-spin" /> Saving...</> : 'Save Configuration'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </div>
         )}

@@ -6,6 +6,7 @@ import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useConfirm } from '@/lib/useConfirm';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useAuth } from '@/lib/auth-context';
 
@@ -151,6 +152,7 @@ export default function EndpointsPage() {
           baseUrl: form.baseUrl || null,
           defaultModel: form.defaultModel,
           models: modelsList,
+          groupId: formGroupId || null,
         };
         if (form.apiKey) updateData.apiKey = form.apiKey;
 
@@ -178,10 +180,6 @@ export default function EndpointsPage() {
     }
   };
 
-  const filteredEndpoints = filterGroupId
-    ? endpoints.filter((ep) => ep.group_id === filterGroupId || !ep.group_id)
-    : endpoints;
-
   return (
     <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
@@ -191,7 +189,7 @@ export default function EndpointsPage() {
             <Icon name="arrow_back" className="text-base" /> <span>Back</span>
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-on-surface">LLM Endpoints</h1>
+            <h1 data-testid="endpoints-heading" className="text-2xl font-bold text-on-surface">LLM Endpoints</h1>
             <p className="text-sm text-on-surface-variant mt-1">
               Manage your LLM provider connections
             </p>
@@ -201,6 +199,7 @@ export default function EndpointsPage() {
           </div>
           {!showForm && (
             <button
+              data-testid="add-endpoint-btn"
               onClick={() => setShowForm(true)}
               className="m3-button gap-2"
             >
@@ -211,24 +210,15 @@ export default function EndpointsPage() {
         </div>
 
         {/* Group filter */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <button
-            onClick={() => setFilterGroupId(null)}
-            className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
-              filterGroupId === null ? 'bg-primary text-on-primary shadow-m3-1' : 'bg-surface border border-outline text-on-surface-variant hover:bg-surface-container-high'
-            }`}
-          >
-            <Icon name="public" className="text-sm mr-1" /> App-wide
-          </button>
-          {groups.length > 0 && (
-            <SelectField
-              label="Group"
-              value={filterGroupId || ''}
-              onChange={(v) => setFilterGroupId(v || null)}
-              options={groups.map((g) => ({ value: g.id, label: g.name }))}
-              className="w-48"
-            />
-          )}
+        <div className="mb-4 max-w-xs">
+          <SearchableSelect
+            label="Filter by group"
+            value={filterGroupId || ''}
+            onChange={(v) => { setFilterGroupId(v || null); setShowForm(false); }}
+            items={groups.map(function(g){return{value:g.id,label:g.name}})}
+            includeAll={true}
+            allLabel="All items"
+          />
         </div>
 
         {/* Error banner */}
@@ -333,15 +323,15 @@ export default function EndpointsPage() {
             </div>
           </div>
 
-            {!editingId && groups.length > 0 && (
-              <SelectField
-                label="Scope"
+            {groups.length > 0 && (
+              <SearchableSelect
+                label="Group"
                 value={formGroupId}
                 onChange={setFormGroupId}
-                options={[
-                  { value: '', label: 'App-wide' },
-                  ...groups.map((g) => ({ value: g.id, label: g.name })),
-                ]}
+                items={groups.map(function(g){return{value:g.id,label:g.name}})}
+                includeAll={true}
+                allLabel="App-wide"
+                className="col-span-1"
               />
             )}
 
@@ -353,13 +343,17 @@ export default function EndpointsPage() {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
-              </button>
+              <Tooltip content={!saving && (!form.name || (!editingId && !form.apiKey)) ? 'Fill in all required fields' : ''}>
+                <span>
+                  <button
+                    type="submit"
+                    disabled={saving || !form.name || (!editingId && !form.apiKey)}
+                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
+                  </button>
+                </span>
+              </Tooltip>
             </div>
           </form>
         )}
@@ -370,7 +364,7 @@ export default function EndpointsPage() {
         )}
 
         {/* Empty state */}
-        {!loading && !error && filteredEndpoints.length === 0 && (
+        {!loading && !error && endpoints.length === 0 && (
           <div className="text-center py-16 bg-surface rounded-lg border border-outline-variant">
             <Icon name="memory" className="text-4xl text-on-surface-variant mx-auto mb-3" />
             <p className="text-on-surface-variant font-medium">No endpoints configured</p>
@@ -381,9 +375,9 @@ export default function EndpointsPage() {
         )}
 
         {/* Endpoint list */}
-        {!loading && filteredEndpoints.length > 0 && (
+        {!loading && endpoints.length > 0 && (
           <div className="space-y-3">
-            {[...filteredEndpoints].sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : 0)).map((ep) => (
+            {[...endpoints].sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : 0)).map((ep) => (
               <div
                 key={ep.id}
                 className="bg-surface rounded-lg border border-outline-variant p-4 flex items-start gap-4"
