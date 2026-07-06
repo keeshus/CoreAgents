@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <linux/landlock.h>
 #include <sys/syscall.h>
+#include <sys/prctl.h>
 
 /*
  * Fallback __NR_* definitions for architectures whose kernel headers
@@ -153,6 +154,10 @@ static void add_rule(int ruleset_fd, const char *path, __u64 access) {
 }
 
 static void restrict_self(int ruleset_fd) {
+    /* Landlock requires no_new_privs before restrict_self.
+     * Without it, the kernel requires CAP_SYS_ADMIN. */
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0))
+        die_errno("prctl(PR_SET_NO_NEW_PRIVS)");
     if (syscall(__NR_landlock_restrict_self, ruleset_fd, 0))
         die_errno("landlock_restrict_self");
     close(ruleset_fd);
