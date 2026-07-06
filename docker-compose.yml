@@ -42,11 +42,8 @@ services:
       dockerfile: sidecar/Dockerfile
     container_name: core-agents-sidecar
     tmpfs: /var/flow-data
-<<<<<<< HEAD
-=======
     ports:
       - "4001:4001"
->>>>>>> bca33d9 (feat: env var management UI — app, group, and flow level)
     restart: unless-stopped
 
   backend:
