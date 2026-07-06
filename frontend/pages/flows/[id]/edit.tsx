@@ -621,12 +621,14 @@ export default function FlowEditPage() {
                   )}
                   <div className="flex gap-2 items-start">
                     <input
+                      data-testid="flow-secret-name"
                       placeholder="Secret name"
                       value={newSecretName}
                       onChange={e => setNewSecretName(e.target.value)}
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                     />
                     <input
+                      data-testid="flow-secret-value"
                       placeholder="Value"
                       value={newSecretValue}
                       onChange={e => setNewSecretValue(e.target.value)}

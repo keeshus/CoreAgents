@@ -20,7 +20,7 @@ export function createReaper(
         .where(
           and(
             eq(executionsTable.status, 'awaiting_approval'),
-            lt(executionsTable.updated_at, sql`now() - interval '1 hour' * ${ttlHours}`),
+            lt(executionsTable.started_at, sql`now() - interval '1 hour' * ${ttlHours}`),
           ),
         );
 

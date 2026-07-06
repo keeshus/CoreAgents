@@ -44,11 +44,15 @@ function jsonError(res: ServerResponse, status: number, message: string) {
 }
 
 function validateExecutionId(id: string): boolean {
-  return /^[a-zA-Z0-9-]+$/.test(id);
+  return /^[a-zA-Z0-9_-]+$/.test(id);
 }
 
 function sanitizeEnv(raw: Record<string, string> | undefined): Record<string, string> {
   const out: Record<string, string> = {};
+  // Always include allowlisted vars from the current process environment
+  for (const key of ENV_ALLOWLIST) {
+    if (process.env[key]) out[key] = process.env[key];
+  }
   if (!raw) return out;
   for (const [k, v] of Object.entries(raw)) {
     if (ENV_ALLOWLIST.has(k) || /^[A-Z_][A-Z0-9_]*$/.test(k)) {
@@ -79,13 +83,17 @@ async function handleSetup(body: Record<string, unknown>) {
 }
 
 async function handleExec(body: Record<string, unknown>) {
-  const { executionId, command, timeout, workdir, env } = body as {
+  const { executionId, command, timeout, workdir, env, codeFile, codeFileName } = body as {
     executionId: string;
     command: string;
     timeout?: number;
     workdir?: string;
     env?: Record<string, string>;
+    codeFile?: string;
+    codeFileName?: string;
   };
+
+  console.log(`sidecar: exec executionId=${executionId} command.length=${command?.length} command=${command?.slice(0, 200)} codeFile=${!!codeFile}`);
 
   if (!executionId || !validateExecutionId(executionId)) {
     return { status: 400, body: { error: 'Invalid executionId' } };
@@ -97,6 +105,13 @@ async function handleExec(body: Record<string, unknown>) {
   const base = execBaseDir(executionId);
   if (!existsSync(base)) {
     return { status: 404, body: { error: 'Execution session not found. Call /setup first.' } };
+  }
+
+  // Write code file before executing
+  const cwd = workdir ?? join(base, 'home');
+  if (codeFile && typeof codeFile === 'string') {
+    mkdirSync(cwd, { recursive: true });
+    writeFileSync(join(cwd, codeFileName || 'run.js'), codeFile, 'utf-8');
   }
 
   // Check landlock-helper availability
@@ -126,14 +141,11 @@ async function handleExec(body: Record<string, unknown>) {
     '--ro', '/usr',
     '--ro', '/bin',
     '--ro', '/lib',
-    '--ro', '/lib64',
     '--ro', '/etc',
     '--rw', base,
     '--',
     'bash', '-c', command,
   ];
-
-  const cwd = workdir ?? join(base, 'home');
 
   const procTimeout = (timeout && timeout > 0) ? timeout : 30_000;
 

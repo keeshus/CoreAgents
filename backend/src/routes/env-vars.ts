@@ -71,12 +71,24 @@ router.put('/groups/:groupId', async (req, res) => {
       }
     }
 
-    const [updated] = await db.update(groupVaultConfig)
-      .set({ env_vars: envVars, updated_at: new Date() })
+    const [existing] = await db.select().from(groupVaultConfig)
       .where(eq(groupVaultConfig.group_id, groupId))
-      .returning();
+      .limit(1);
+
+    let updated;
+    if (existing) {
+      [updated] = await db.update(groupVaultConfig)
+        .set({ env_vars: envVars, updated_at: new Date() })
+        .where(eq(groupVaultConfig.group_id, groupId))
+        .returning();
+    } else {
+      [updated] = await db.insert(groupVaultConfig)
+        .values({ group_id: groupId, env_vars: envVars, enabled: true, vault_id: null })
+        .returning();
+    }
     return res.json(updated?.env_vars || []);
   } catch (err) {
+    console.error('Failed to update group env vars:', err);
     return res.status(500).json({ error: 'Failed to update group env vars' });
   }
 });

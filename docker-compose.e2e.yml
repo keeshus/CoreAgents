@@ -138,6 +138,8 @@ services:
       dockerfile: sidecar/Dockerfile.e2e
     container_name: core-agents-e2e-sidecar
     tmpfs: /var/flow-data
+    cap_add:
+      - SYS_ADMIN
     ports:
       - "4001:4001"
 

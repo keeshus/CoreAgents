@@ -22,7 +22,7 @@ RUN cd sidecar && npx tsc
 
 # Stage 3: Runtime
 FROM node:25-alpine
-RUN apk add --no-cache git github-cli gitlab-cli curl jq yq python3 py3-pip make gcc g++ musl-dev zip unzip bash shadow
+RUN apk add --no-cache git curl jq yq python3 py3-pip make gcc g++ musl-dev zip unzip bash shadow
 
 COPY --from=landlock-builder /src/landlock-helper /usr/local/bin/landlock-helper
 

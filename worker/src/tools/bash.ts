@@ -123,9 +123,12 @@ export async function executeCode(
   env: Record<string, string>,
   timeout?: number,
 ): Promise<unknown> {
-  // Serialize the input as JSON and pass it to node -e
+  // Inject input as a variable, wrap code in an IIFE so `return` works, serialize result
   const serializedInput = JSON.stringify(input);
-  const nodeCommand = `node -e "const input = JSON.parse(process.argv[1]); ${code.replace(/`/g, '\\`')}" ${serializedInput.replace(/ /g, '')}`;
+  const wrappedCode = `const input = ${serializedInput}; const __run = () => { ${code} }; const __result = __run(); process.stdout.write(JSON.stringify(__result));`;
+  // Write code as a file on the sidecar and execute it — avoids bash quoting issues
+  const fileName = `run_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.js`;
+  const nodeCommand = `node ${fileName}`;
 
   const sanitizedEnv = sanitizeEnvVars(env);
 
@@ -134,10 +137,17 @@ export async function executeCode(
     command: nodeCommand,
     timeout: Math.min(timeout ?? 30000, 300000),
     env: sanitizedEnv,
+    codeFile: wrappedCode,
+    codeFileName: fileName,
   });
 
   if (result.error) {
     throw new Error(`Code execution failed: ${result.error}`);
+  }
+
+  // Debug: log stderr if present
+  if (result.stderr?.trim()) {
+    console.error(`[code stderr] ${result.stderr.trim()}`);
   }
 
   // Try to parse stdout as JSON (the code node usually returns structured data)

@@ -142,13 +142,11 @@ test.describe('Secrets management', () => {
     await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
 
     // Fill in new secret fields
-    const nameInput = page.locator('input[placeholder="Secret name"]');
-    const valueInput = page.locator('input[placeholder="Value"]');
-    await nameInput.fill('db-password');
-    await valueInput.fill('s3cr3t');
+    await page.getByTestId('flow-secret-name').fill('db-password');
+    await page.getByTestId('flow-secret-value').fill('s3cr3t');
 
-    // Click the add icon button next to the value field
-    await page.locator('button').filter({ hasText: 'add' }).last().click();
+    // Click the add button next to the value input
+    await page.getByTestId('flow-secret-value').locator('..').locator('button').click();
 
     // The secret should appear in the list
     await expect(page.getByText('db-password')).toBeVisible({ timeout: 5000 });

@@ -207,11 +207,11 @@ export default function EnvVarsPage() {
             <Icon name="arrow_back" className="text-base" /> <span>Back</span>
           </Link>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-on-surface">Environment Variables</h1>
+            <h1 data-testid="env-vars-heading" className="text-2xl font-bold text-on-surface">Environment Variables</h1>
             <p className="text-sm text-on-surface-variant mt-1">Manage environment variables for app-wide use and per-group scopes.</p>
           </div>
           {!showForm && (selectedGroupId || isAdmin) && (
-            <button onClick={() => setShowForm(true)} className="m3-button gap-2">
+            <button data-testid="add-variable-btn" onClick={() => setShowForm(true)} className="m3-button gap-2">
               <Icon name="add" className="text-base" /> Add Variable
             </button>
           )}
@@ -220,7 +220,7 @@ export default function EnvVarsPage() {
         {error && <div className="bg-error-container border text-error text-sm rounded p-3 mb-4">{error}</div>}
 
         {/* Group filter */}
-        <div className="mb-4 max-w-xs">
+        <div data-testid="group-filter" className="mb-4 max-w-xs">
           <SelectField
             label="Filter by group"
             value={selectedGroupId}
@@ -234,7 +234,7 @@ export default function EnvVarsPage() {
 
         {/* Add form */}
         {showForm && (
-          <div className="bg-surface rounded-xl border p-4 mb-6 space-y-3">
+          <div data-testid="add-var-form" className="bg-surface rounded-xl border p-4 mb-6 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-on-surface">New Environment Variable</h3>
             </div>
@@ -249,6 +249,7 @@ export default function EnvVarsPage() {
             <div className="flex items-center gap-2 justify-end">
               <button
                 type="button"
+                data-testid="cancel-var-btn"
                 onClick={resetForm}
                 className="px-4 py-2 text-sm font-medium text-on-surface-variant bg-surface border border-outline rounded-lg hover:bg-surface-container-high transition-colors"
               >
@@ -256,7 +257,7 @@ export default function EnvVarsPage() {
               </button>
               <Tooltip content={(!newName || !newValue) ? 'Fill in all required fields' : ''}>
                 <span>
-                  <button onClick={handleCreate} disabled={newSaving || !newName || !newValue} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">{newSaving ? 'Saving...' : 'Create'}</button>
+                  <button data-testid="create-var-btn" onClick={handleCreate} disabled={newSaving || !newName || !newValue} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">{newSaving ? 'Saving...' : 'Create'}</button>
                 </span>
               </Tooltip>
             </div>
@@ -281,7 +282,7 @@ export default function EnvVarsPage() {
             {envVars.map(v => {
               const isEditing = editingName === v.name;
               return (
-                <div key={v.name} className="bg-surface rounded-lg border px-4 py-2.5">
+                <div key={v.name} data-testid="env-var-item" className="bg-surface rounded-lg border px-4 py-2.5">
                   {isEditing ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -314,12 +315,12 @@ export default function EnvVarsPage() {
                       {!readOnly && (
                         <div className="flex items-center gap-1 shrink-0 ml-3">
                           <Tooltip content="Edit variable">
-                            <button onClick={() => { setEditingName(v.name); setEditingValue(v.value); setEditingType(v.type); }} className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded text-xs">
+                            <button data-testid="edit-var-btn" onClick={() => { setEditingName(v.name); setEditingValue(v.value); setEditingType(v.type); }} className="p-1.5 text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded text-xs">
                               <Icon name="edit" className="text-sm" />
                             </button>
                           </Tooltip>
                           <Tooltip content="Delete variable">
-                            <button onClick={() => handleDelete(v.name)} disabled={deleting === v.name} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded text-xs">
+                            <button data-testid="delete-var-btn" onClick={() => handleDelete(v.name)} disabled={deleting === v.name} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded text-xs">
                               <Icon name="delete" className="text-sm" />
                             </button>
                           </Tooltip>

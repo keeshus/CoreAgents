@@ -91,6 +91,7 @@ export const flows = pgTable('flows', {
   group_id: uuid('group_id').references(() => groups.id),
   is_subflow: boolean('is_subflow').notNull().default(false),
   flow_context: text('flow_context').notNull().default(''),
+  env_vars: jsonb('env_vars').default('[]'),
   created_at: timestamp('created_at').notNull().defaultNow(),
   updated_at: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -317,7 +318,7 @@ export const secretVaults = pgTable('secret_vaults', {
 export const groupVaultConfig = pgTable('group_vault_config', {
   id: uuid('id').primaryKey().defaultRandom(),
   group_id: uuid('group_id').notNull().unique().references(() => groups.id),
-  vault_id: uuid('vault_id').notNull().references(() => secretVaults.id),
+  vault_id: uuid('vault_id').references(() => secretVaults.id),
   enabled: boolean('enabled').notNull().default(true),
   env_vars: jsonb('env_vars').default('[]'),
   created_at: timestamp('created_at').notNull().defaultNow(),

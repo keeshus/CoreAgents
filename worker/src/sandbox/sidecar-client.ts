@@ -4,6 +4,8 @@ export interface ExecRequest {
   timeout?: number;
   workdir?: string;
   env?: Record<string, string>;
+  codeFile?: string;
+  codeFileName?: string;
 }
 
 export interface ExecResponse {

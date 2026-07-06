@@ -109,6 +109,7 @@ router.get(
       created_by_name: users.name,
       group_id: flows.group_id,
       flow_context: flows.flow_context,
+      env_vars: flows.env_vars,
       created_at: flows.created_at,
       updated_at: flows.updated_at,
     }).from(flows).leftJoin(users, eq(flows.created_by, users.id)).where(eq(flows.id, id)).limit(1);
