@@ -128,7 +128,7 @@ router.post(
   '/',
   requirePermission('flow:create'),
   asyncHandler(async (req, res) => {
-    const { name, description = '', nodes = [], edges = [], group_id, flow_context } = req.body;
+    const { name, description = '', nodes = [], edges = [], group_id, flow_context, envVars } = req.body;
 
     if (!name || !name.trim()) {
       res.status(400).json({ error: 'Flow name is required' });
@@ -156,6 +156,7 @@ router.post(
         created_by: req.user?.userId,
         group_id,
         flow_context: flow_context || '',
+        env_vars: envVars || [],
       })
       .returning();
 

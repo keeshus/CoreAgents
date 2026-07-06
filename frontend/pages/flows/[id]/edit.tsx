@@ -371,7 +371,7 @@ export default function FlowEditPage() {
       flow_context: flow?.flow_context || '',
       group_id: flow?.group_id || '',
     });
-    setFlowEnvVars((flow as any)?.envVars || []);
+    setFlowEnvVars((flow as any)?.env_vars || []);
     if (flow?.id && flow.id !== 'new') {
       fetch(`/api/secrets?scope=flow&scopeId=${flow.id}`, { credentials: 'include' })
         .then(r => r.ok ? r.json() : [])

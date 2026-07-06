@@ -7,7 +7,7 @@ import { getStore, listStores } from '../vector-stores/index.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { logger } from '../utils/logger.js';
-import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
+import type { SSEEvent, FlowDefinition, ExecutionStep, EnvVarEntry } from 'core-agents-shared';
 import { createSidecarClient, createSandboxManager } from '../../../worker/src/sandbox/index.js';
 
 const secretStore = new Map<string, string>();
@@ -89,6 +89,27 @@ router.get('/executions', requirePermission('admin'), asyncHandler(async (req, r
   })));
 }));
 
+// GET /api/executions/:id — get single execution
+router.get('/executions/:id', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
+  const id = req.params.id as string;
+  const [exec] = await db.select({
+    id: executions.id,
+    flow_id: executions.flow_id,
+    status: executions.status,
+    input: executions.input,
+    output: executions.output,
+    error: executions.error,
+    started_at: executions.started_at,
+    completed_at: executions.completed_at,
+    created_at: executions.created_at,
+    pending_hitls: executions.pending_hitls,
+  }).from(executions).where(eq(executions.id, id)).limit(1);
+  if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
+  const [flow] = await db.select({ name: flows.name }).from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+  const steps = await db.select().from(executionSteps).where(eq(executionSteps.execution_id, id)).orderBy(executionSteps.started_at);
+  res.json({ ...exec, flow_name: flow?.name || 'Unknown', steps });
+}));
+
 // POST /api/executions/:executionId/cancel — cancel a running execution
 router.post('/executions/:executionId/cancel', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
@@ -147,6 +168,7 @@ router.post(
     let flowName = '';
     let flowContext = '';
     let flowGroupId: string | undefined;
+    let flowDefEnvVars: any[] | undefined;
 
     if (!flowNodes || !flowEdges) {
       const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
@@ -165,6 +187,13 @@ router.post(
       flowName = flow.name;
       flowContext = flow.flow_context || '';
       flowGroupId = flow.group_id || undefined;
+      flowDefEnvVars = flow.env_vars as any[] | undefined;
+    } else {
+      // Canvas nodes provided (debug from editor) — still load envVars from DB
+      const [envFlow] = await db.select({ env_vars: flows.env_vars }).from(flows).where(eq(flows.id, flowId)).limit(1);
+      if (envFlow) {
+        flowDefEnvVars = envFlow.env_vars as any[] | undefined;
+      }
     }
 
     // Create execution record ------------------------------------
@@ -265,6 +294,7 @@ router.post(
           nodes: flow.nodes as any,
           edges: flow.edges as any,
           version: flow.version,
+          envVars: flow.env_vars as EnvVarEntry[] | undefined,
           createdAt: flow.created_at?.toISOString() || '',
           updatedAt: flow.updated_at?.toISOString() || '',
         };
@@ -355,6 +385,28 @@ router.post(
       sandboxExecutionId,
       sandboxEnv: (input as any)?.__env || {},
     };
+
+    // Resolve flow-level env vars (static, core_secret, cyberark) into sandboxEnv
+    const inputEnv: Record<string, string> = (input as any)?.__env || {};
+    const flowEnvVars = flowDefEnvVars;
+    if (Array.isArray(flowEnvVars)) {
+      for (const entry of flowEnvVars) {
+        if (entry.type === 'static' || !entry.type) {
+          inputEnv[entry.name] = entry.value;
+        } else if (entry.type === 'core_secret' && executionContext.getSecret) {
+          try {
+            const secretVal = await executionContext.getSecret(entry.value);
+            if (secretVal) inputEnv[entry.name] = secretVal;
+          } catch {}
+        } else if (entry.type === 'cyberark' && executionContext.getCyberArkSecret) {
+          try {
+            const cyberVal = await executionContext.getCyberArkSecret(entry.value);
+            if (cyberVal) inputEnv[entry.name] = cyberVal;
+          } catch {}
+        }
+      }
+    }
+    executionContext.sandboxEnv = inputEnv;
 
     // Map Drizzle row (snake_case) to FlowDefinition (camelCase) BEFORE building context
     const flowDef: FlowDefinition = {
@@ -737,6 +789,7 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
         nodes: flow.nodes as any,
         edges: flow.edges as any,
         version: flow.version,
+        envVars: flow.env_vars as EnvVarEntry[] | undefined,
         createdAt: flow.created_at?.toISOString() || '',
         updatedAt: flow.updated_at?.toISOString() || '',
       };
