@@ -12,7 +12,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY shared/package*.json ./shared/
 COPY sidecar/package*.json ./sidecar/
-RUN npm install -w shared -w sidecar --omit=dev && npm cache clean --force
+RUN npm install -w shared -w sidecar && npm cache clean --force
 
 COPY shared/tsconfig.json ./shared/
 COPY shared/src ./shared/src/
