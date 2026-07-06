@@ -140,7 +140,8 @@ async function handleExec(body: Record<string, unknown>) {
   const procTimeout = (timeout && timeout > 0) ? timeout : 30_000;
 
   const helperArgs = [
-    '--ro', '/usr', '--ro', '/bin', '--ro', '/lib', '--ro', '/etc', '--ro', '/dev',
+    '--ro', '/usr', '--ro', '/bin', '--ro', '/lib', '--ro', '/etc',
+    '--rw', '/dev',
     '--rw', base,
     '--', 'bash', '-c', command,
   ];
