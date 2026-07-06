@@ -42,6 +42,8 @@ services:
       dockerfile: sidecar/Dockerfile
     container_name: core-agents-sidecar
     tmpfs: /var/flow-data
+    cap_add:
+      - SYS_ADMIN
     ports:
       - "4001:4001"
     restart: unless-stopped
