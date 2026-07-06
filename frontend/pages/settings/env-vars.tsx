@@ -186,7 +186,6 @@ export default function EnvVarsPage() {
           label={label}
           value={value}
           onChange={onChange}
-          placeholder="e.g. /apps/myapp/deploy/key"
         />
       );
     }
@@ -195,7 +194,6 @@ export default function EnvVarsPage() {
         label={label}
         value={value}
         onChange={onChange}
-        placeholder="Enter plain text value"
       />
     );
   };
@@ -248,7 +246,7 @@ export default function EnvVarsPage() {
                 ...groups.map(g => ({ value: g.id, label: g.name })),
               ]}
             />
-            <TextField label="Variable name" value={newName} onChange={setNewName} placeholder="e.g. GITLAB_TOKEN" />
+            <TextField label="Variable name" value={newName} onChange={setNewName} />
             <SelectField
               label="Type"
               value={newType}

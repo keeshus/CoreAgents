@@ -533,8 +533,8 @@ export default function FlowsListPage() {
 
             {showContextForm && (
               <div className="bg-surface rounded-lg border p-4 mb-4 space-y-3">
-                <TextField label="Title" value={contextTitle} onChange={setContextTitle} placeholder="e.g. Brand Voice" />
-                <TextField label="Description" value={contextDescription} onChange={setContextDescription} placeholder="Briefly describe what this context contains" />
+                <TextField label="Title" value={contextTitle} onChange={setContextTitle} />
+                <TextField label="Description" value={contextDescription} onChange={setContextDescription} />
                 <div>
                   <label className="text-xs font-medium text-on-surface-variant block mb-1">Content</label>
                   <textarea

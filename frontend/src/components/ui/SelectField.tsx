@@ -18,17 +18,17 @@ export function SelectField({ label, value, onChange, options, error, helpText, 
   return (
     <div className={`relative ${className}`}>
       <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
-        <Select.Trigger
-          className={`w-full rounded-t bg-surface-container-high border-b-2 transition-colors flex items-stretch text-left cursor-pointer min-h-[48px] group ${
+         <Select.Trigger
+          className={`w-full rounded-t bg-surface-container-high border-b-2 transition-colors flex items-center justify-between text-left cursor-pointer min-h-[48px] group ${
             error ? 'border-error' : 'border-outline-variant data-[state=open]:border-primary focus:border-primary'
           } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
         >
           <Select.Value asChild>
-            <span className="flex-1 text-on-surface outline-none px-4 pt-5 pb-2 text-sm truncate leading-[1.5]">
+            <span className="text-on-surface outline-none px-4 pt-5 pb-2 text-sm truncate leading-[1.5]">
               {selectedLabel || ''}
             </span>
           </Select.Value>
-          <Select.Icon className="flex items-center pr-3">
+          <Select.Icon className="pr-3 shrink-0">
             <Icon name="arrow_drop_down" className="text-lg text-on-surface-variant transition-transform group-data-[state=open]:rotate-180" />
           </Select.Icon>
         </Select.Trigger>
