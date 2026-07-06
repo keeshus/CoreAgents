@@ -174,3 +174,7 @@ services:
     container_name: core-agents-e2e-mock-cyberark
     ports:
       - "3005:3005"
+
+networks:
+  default:
+    name: core-agents-e2e
