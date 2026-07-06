@@ -243,9 +243,12 @@ export default function GroupsSettingsPage() {
               const isLocal = g.provider === 'local';
               return (
                 <div key={g.id} className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggleExpand(g.id)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors text-left"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(g.id); } }}
+                    className="w-full flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors text-left cursor-pointer"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <Icon name={expandedId === g.id ? "expand_less" : "expand_more"} className="text-base text-on-surface-variant shrink-0" />
@@ -278,7 +281,7 @@ export default function GroupsSettingsPage() {
                         </div>
                       )}
                     </div>
-                  </button>
+                  </div>
 
                   {expandedId === g.id && (
                     <div className="border-t border-outline-variant px-4 py-3">
