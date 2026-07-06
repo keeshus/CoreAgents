@@ -14,6 +14,9 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-worker
     spec:
+      volumes:
+        - name: flow-data
+          emptyDir: {}
       containers:
         - name: worker
           image: "{{ .Values.image.repository }}-worker:{{ .Values.image.tag }}"
@@ -21,8 +24,33 @@ spec:
           env:
             - name: VALKEY_HOST
               value: {{ include "core-agents.fullname" . }}-valkey
+            - name: SIDECAR_URL
+              value: "http://localhost:4001"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.fullname" . }}-secret
+                  key: database-url
           envFrom:
             - secretRef:
                 name: {{ include "core-agents.fullname" . }}-secret
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
+        - name: sidecar
+          image: "{{ .Values.image.repository }}-sidecar:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 4001
+              name: sidecar
+          args: ["--ttl-hours=168"]
+          volumeMounts:
+            - name: flow-data
+              mountPath: /var/flow-data
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 1001
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.sidecar.resources | nindent 12 }}

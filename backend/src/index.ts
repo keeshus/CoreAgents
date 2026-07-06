@@ -26,6 +26,7 @@ import ssoConfigRouter from './routes/sso-config.js';
 import settingsRouter from './routes/settings.js';
 import secretsRouter from './routes/secrets.js';
 import secretVaultsRouter from './routes/secret-vaults.js';
+import envVarsRouter from './routes/env-vars.js';
 import groupVaultConfigRouter from './routes/group-vault-config.js';
 import { authenticate } from './middleware/auth.js';
 import { asyncHandler } from './utils/async-handler.js';
@@ -96,14 +97,14 @@ app.use('/api/settings', authenticate, settingsRouter);
 app.use('/api/secrets', authenticate, secretsRouter);
 app.use('/api/secret-vaults', authenticate, secretVaultsRouter);
 app.use('/api/group-vault-config', authenticate, groupVaultConfigRouter);
+app.use('/api/env-vars', authenticate, envVarsRouter);
 
 // Global error handler (Express 5)
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
-  const cause = (err as any).cause?.message || (err as any).cause || null;
   res.status(500).json({
     error: 'Internal server error',
-    ...(process.env.NODE_ENV !== 'production' ? { message: cause || err.message } : {}),
+    ...(process.env.NODE_ENV !== 'production' ? { message: err.message } : {}),
   });
 });
 

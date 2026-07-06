@@ -16,9 +16,8 @@ spec:
     spec:
       containers:
         - name: scheduler
-          image: "{{ .Values.image.repository }}-worker:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}-scheduler:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["node", "worker/dist/scheduler-run.js"]
           env:
             - name: VALKEY_HOST
               value: {{ include "core-agents.fullname" . }}-valkey

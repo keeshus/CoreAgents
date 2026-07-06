@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { groupVaultConfig, groupMembers, groups, secretVaults } from '../db/schema.js';
+import { groupVaultConfig, groupMembers, groups, secretVaults } from 'core-agents-shared';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
@@ -48,6 +48,7 @@ router.get('/:groupId', asyncHandler(async (req, res) => {
     vaultId: config.vault_id,
     vaultName: vault?.name ?? null,
     enabled: config.enabled,
+    envVars: config.env_vars || [],
     createdAt: config.created_at,
     updatedAt: config.updated_at,
   });

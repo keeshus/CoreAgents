@@ -1,0 +1,17 @@
+# Stage 1: Build Landlock helper
+FROM alpine:3.21 AS landlock-builder
+RUN apk add --no-cache build-base musl-dev linux-headers
+COPY sidecar/cmd/landlock-helper/ /src/
+WORKDIR /src
+RUN make
+
+# Stage 2: Runtime with tsx
+FROM node:25-alpine
+RUN apk add --no-cache git github-cli gitlab-cli curl jq yq python3 py3-pip make gcc g++ musl-dev zip unzip bash shadow
+
+COPY --from=landlock-builder /src/landlock-helper /usr/local/bin/landlock-helper
+
+COPY . /repo
+WORKDIR /repo
+RUN npm install -w shared -w sidecar
+CMD ["npx", "tsx", "sidecar/src/index.ts", "--ttl-hours=168"]

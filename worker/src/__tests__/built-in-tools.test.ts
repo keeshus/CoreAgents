@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { BUILT_IN_TOOLS } from '../tools/built-in.js';
 
 describe('BUILT_IN_TOOLS', () => {
-  it('exports exactly 12 tools', () => {
-    expect(BUILT_IN_TOOLS).toHaveLength(12);
+  it('exports exactly 7 tools', () => {
+    expect(BUILT_IN_TOOLS).toHaveLength(7);
   });
 
   it('each tool has name and description properties', () => {
@@ -25,34 +25,30 @@ describe('BUILT_IN_TOOLS', () => {
     expect(names).toEqual(['store_delete', 'store_get', 'store_list', 'store_set']);
   });
 
-  it('contains all expected file tools', () => {
-    const fileTools = BUILT_IN_TOOLS.filter(t => t.name.startsWith('file_'));
-    expect(fileTools).toHaveLength(3);
-
-    const names = fileTools.map(t => t.name).sort();
-    expect(names).toEqual(['file_list', 'file_read', 'file_write']);
-  });
-
-  it('contains all expected utility tools (now, uuid, log, fetch, secret_get)', () => {
-    const utilityTools = BUILT_IN_TOOLS.filter(
-      t => !t.name.startsWith('store_') && !t.name.startsWith('file_'),
-    );
-    expect(utilityTools).toHaveLength(5);
+  it('contains all expected utility tools (now, uuid, log)', () => {
+    const utilityTools = BUILT_IN_TOOLS.filter(t => !t.name.startsWith('store_'));
+    expect(utilityTools).toHaveLength(3);
 
     const names = utilityTools.map(t => t.name).sort();
-    expect(names).toEqual(['fetch', 'log', 'now', 'secret_get', 'uuid']);
+    expect(names).toEqual(['log', 'now', 'uuid']);
   });
 
-  it('secret_get tool has expected properties', () => {
-    const tool = BUILT_IN_TOOLS.find(t => t.name === 'secret_get')!;
-    expect(tool).toBeDefined();
-    expect(tool.description).toMatch(/secret/i);
+  it('does not contain file tools (replaced by bash)', () => {
+    const fileTools = BUILT_IN_TOOLS.filter(t => t.name.startsWith('file_'));
+    expect(fileTools).toHaveLength(0);
   });
 
-  describe('utility tool schemas (as defined in engine.ts auto-injection)', () => {
-    // These schemas are duplicated in engine.ts for LLM auto-injection.
-    // We verify them here against the BUILT_IN_TOOLS entries.
+  it('does not contain fetch tool (replaced by curl via bash)', () => {
+    const fetchTool = BUILT_IN_TOOLS.find(t => t.name === 'fetch');
+    expect(fetchTool).toBeUndefined();
+  });
 
+  it('does not contain secret_get tool (replaced by env vars)', () => {
+    const secretTool = BUILT_IN_TOOLS.find(t => t.name === 'secret_get');
+    expect(secretTool).toBeUndefined();
+  });
+
+  describe('utility tool descriptions', () => {
     it('`now` tool has expected description', () => {
       const tool = BUILT_IN_TOOLS.find(t => t.name === 'now')!;
       expect(tool.description).toMatch(/current date and time/i);
@@ -66,11 +62,6 @@ describe('BUILT_IN_TOOLS', () => {
     it('`log` tool has expected description', () => {
       const tool = BUILT_IN_TOOLS.find(t => t.name === 'log')!;
       expect(tool.description).toMatch(/log entry/i);
-    });
-
-    it('`fetch` tool has expected description', () => {
-      const tool = BUILT_IN_TOOLS.find(t => t.name === 'fetch')!;
-      expect(tool.description).toMatch(/http get/i);
     });
   });
 

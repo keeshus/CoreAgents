@@ -1,0 +1,364 @@
+import {
+  boolean,
+  foreignKey,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
+
+export const executionStatusEnum = pgEnum('execution_status', [
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+  'awaiting_approval',
+]);
+
+export const executionStepStatusEnum = pgEnum('execution_step_status', [
+  'pending',
+  'running',
+  'completed',
+  'failed',
+]);
+
+export const providerTypeEnum = pgEnum('provider_type', [
+  'anthropic',
+  'openai',
+  'litellm',
+]);
+
+export const messageRoleEnum = pgEnum('message_role', [
+  'user',
+  'assistant',
+  'system',
+]);
+
+export const groups = pgTable('groups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  description: text('description').notNull().default(''),
+  context: text('context').notNull().default(''),
+  provider: text('provider').notNull().default('local'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const groupMembers = pgTable('group_members', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  group_id: uuid('group_id').notNull().references(() => groups.id),
+  user_id: uuid('user_id').notNull().references(() => users.id),
+  role: text('role').notNull().default('member'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const agentContexts = pgTable('agent_contexts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  content: text('content').notNull().default(''),
+  group_id: uuid('group_id').references(() => groups.id),
+  created_by: uuid('created_by').references(() => users.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const ssoConfig = pgTable('sso_config', {
+  id: integer('id').primaryKey().default(1),
+  provider: text('provider').notNull().default(''),
+  client_id: text('client_id').notNull().default(''),
+  client_secret: text('client_secret').notNull().default(''),
+  issuer: text('issuer').notNull().default(''),
+  redirect_uri: text('redirect_uri').notNull().default('http://localhost:3001/api/auth/sso/callback'),
+  group_claim: text('group_claim').notNull().default('groups'),
+  admin_group_mapping: text('admin_group_mapping').array().notNull().default([]),
+  editor_group_mapping: text('editor_group_mapping').array().notNull().default([]),
+  enabled: boolean('enabled').notNull().default(false),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const flows = pgTable('flows', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  nodes: jsonb('nodes').notNull().default('[]'),
+  edges: jsonb('edges').notNull().default('[]'),
+  version: integer('version').notNull().default(1),
+  created_by: uuid('created_by').references(() => users.id),
+  group_id: uuid('group_id').references(() => groups.id),
+  is_subflow: boolean('is_subflow').notNull().default(false),
+  flow_context: text('flow_context').notNull().default(''),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const flowVersions = pgTable('flow_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flow_id: uuid('flow_id')
+    .notNull()
+    .references(() => flows.id),
+  nodes: jsonb('nodes').notNull(),
+  edges: jsonb('edges').notNull(),
+  version: integer('version').notNull(),
+  group_id: uuid('group_id'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const executions = pgTable('executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flow_id: uuid('flow_id')
+    .notNull()
+    .references(() => flows.id),
+  status: executionStatusEnum('status').notNull().default('pending'),
+  input: jsonb('input').notNull(),
+  output: jsonb('output'),
+  error: text('error'),
+  pending_hitls: jsonb('pending_hitls').default('[]'),
+  started_at: timestamp('started_at'),
+  completed_at: timestamp('completed_at'),
+  parent_execution_id: uuid('parent_execution_id'),
+  subflow_node_id: text('subflow_node_id'),
+  subflow_depth: integer('subflow_depth').notNull().default(0),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  parentExecutionRef: foreignKey({
+    columns: [table.parent_execution_id],
+    foreignColumns: [table.id],
+  }),
+}));
+
+export const executionSteps = pgTable('execution_steps', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  execution_id: uuid('execution_id')
+    .notNull()
+    .references(() => executions.id),
+  node_id: text('node_id').notNull(),
+  node_type: text('node_type').notNull(),
+  node_label: text('node_label'),
+  iteration: integer('iteration').notNull().default(0),
+  status: executionStepStatusEnum('status').notNull().default('pending'),
+  input: jsonb('input'),
+  output: jsonb('output'),
+  error: text('error'),
+  hierarchy: jsonb('hierarchy'),
+  started_at: timestamp('started_at'),
+  completed_at: timestamp('completed_at'),
+});
+
+export const llmEndpoints = pgTable('llm_endpoints', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  provider_type: providerTypeEnum('provider_type').notNull(),
+  base_url: text('base_url'),
+  api_key: text('api_key').notNull(),
+  default_model: text('default_model').notNull(),
+  models: jsonb('models').notNull().default('[]'),
+  is_default: boolean('is_default').notNull().default(false),
+  group_id: uuid('group_id').references(() => groups.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const mcpServers = pgTable('mcp_servers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  url: text('url').notNull(),
+  tools: jsonb('tools').notNull().default('[]'),
+  enabled: boolean('enabled').notNull().default(true),
+  group_id: uuid('group_id').references(() => groups.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const chatSessions = pgTable('chat_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flow_id: uuid('flow_id')
+    .notNull()
+    .references(() => flows.id),
+  title: text('title'),
+  metadata: jsonb('metadata').notNull().default('{}'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const chatMessages = pgTable('chat_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  session_id: uuid('session_id')
+    .notNull()
+    .references(() => chatSessions.id),
+  role: messageRoleEnum('role').notNull(),
+  content: text('content').notNull(),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const documents = pgTable('documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  content: text('content').notNull(),
+  metadata: jsonb('metadata').notNull().default('{}'),
+  collection_name: text('collection_name').notNull().default('default'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const embeddings = pgTable('embeddings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  document_id: uuid('document_id')
+    .notNull()
+    .references(() => documents.id),
+  chunk_index: integer('chunk_index').notNull(),
+  chunk_text: text('chunk_text').notNull(),
+  embedding: jsonb('embedding').notNull().default('[]'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const embeddingProviders = pgTable('embedding_providers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  provider_type: providerTypeEnum('provider_type').notNull(),
+  base_url: text('base_url'),
+  api_key: text('api_key').notNull(),
+  model: text('model').notNull().default('text-embedding-ada-002'),
+  group_id: uuid('group_id').references(() => groups.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const vectorStores = pgTable('vector_stores', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  store_type: text('store_type').notNull().default('qdrant'),
+  url: text('url').notNull(),
+  api_key: text('api_key'),
+  collections: jsonb('collections').default('[]'),
+  group_id: uuid('group_id').references(() => groups.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const agentStore = pgTable('agent_store', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull().default('null'),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const roles = pgTable('roles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  description: text('description').notNull().default(''),
+  permissions: text('permissions').array().notNull().default([]),
+  is_system: boolean('is_system').notNull().default(false),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  password_hash: text('password_hash').notNull(),
+  name: text('name').notNull(),
+  role_id: uuid('role_id').references(() => roles.id),
+  is_active: boolean('is_active').notNull().default(true),
+  provider: text('provider').notNull().default('local'),
+  provider_id: text('provider_id'),
+  oidc_refresh_token: text('oidc_refresh_token'),
+  oidc_token_expires_at: timestamp('oidc_token_expires_at'),
+  last_login_at: timestamp('last_login_at'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const secrets = pgTable('secrets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  scope: text('scope').notNull().default('app'),
+  scope_id: uuid('scope_id'),
+  secret_type: text('secret_type').notNull().default('core'),
+  reference_path: text('reference_path'),
+  encrypted_value: text('encrypted_value'),
+  encryption_iv: text('encryption_iv'),
+  encryption_tag: text('encryption_tag'),
+  key_version: integer('key_version').notNull().default(1),
+  created_by: uuid('created_by').references(() => users.id),
+  expires_at: timestamp('expires_at'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const encryptionKeyVersions = pgTable('encryption_key_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  version: integer('version').notNull().unique(),
+  key_material_encrypted: text('key_material_encrypted').notNull(),
+  key_material_iv: text('key_material_iv').notNull(),
+  key_material_tag: text('key_material_tag').notNull(),
+  is_current: boolean('is_current').notNull().default(false),
+  activated_at: timestamp('activated_at'),
+  deactivated_at: timestamp('deactivated_at'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const secretVaults = pgTable('secret_vaults', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  vault_type: text('vault_type').notNull().default('cyberark'),
+  base_url: text('base_url').notNull(),
+  account: text('account').notNull().default('conjur'),
+  login: text('login').notNull(),
+  api_key: text('api_key').notNull(),
+  ca_cert: text('ca_cert'),
+  self_hosted: boolean('self_hosted').notNull().default(false),
+  is_connected: boolean('is_connected').notNull().default(false),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const groupVaultConfig = pgTable('group_vault_config', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  group_id: uuid('group_id').notNull().unique().references(() => groups.id),
+  vault_id: uuid('vault_id').notNull().references(() => secretVaults.id),
+  enabled: boolean('enabled').notNull().default(true),
+  env_vars: jsonb('env_vars').default('[]'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const appEnvVars = pgTable('app_env_vars', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  env_vars: jsonb('env_vars').notNull().default('[]'),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const logs = pgTable('logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  level: text('level').notNull().default('info'),
+  component: text('component').notNull().default('app'),
+  message: text('message').notNull(),
+  metadata: jsonb('metadata').default('{}'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const secretAccessLog = pgTable('secret_access_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  secret_id: uuid('secret_id'),
+  action: text('action').notNull(),
+  user_id: uuid('user_id').references(() => users.id),
+  ip_address: text('ip_address'),
+  metadata: jsonb('metadata').default('{}'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const userAssignments = pgTable('user_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  execution_id: uuid('execution_id').notNull().references(() => executions.id),
+  hitl_node_id: text('hitl_node_id').notNull(),
+  assigned_to_user_id: uuid('assigned_to_user_id').references(() => users.id),
+  assigned_to_role_id: uuid('assigned_to_role_id').references(() => roles.id),
+  assigned_to_group_id: uuid('assigned_to_group_id').references(() => groups.id),
+  status: text('status').notNull().default('pending'),
+  feedback: text('feedback'),
+  decided_by_user_id: uuid('decided_by_user_id').references(() => users.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  decided_at: timestamp('decided_at'),
+});

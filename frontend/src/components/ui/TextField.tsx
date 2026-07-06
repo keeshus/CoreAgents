@@ -13,7 +13,6 @@ interface TextFieldProps {
   rows?: number;
   disabled?: boolean;
   className?: string;
-  showPasswordToggle?: boolean;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onFocus?: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onBlur?: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
@@ -32,18 +31,15 @@ export function TextField({
   rows = 3,
   disabled,
   className = '',
-  showPasswordToggle,
   onKeyDown,
   onFocus,
   onBlur,
   inputRef,
 }: TextFieldProps) {
   const [focused, setFocused] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const hasValue = value.length > 0;
   const float = focused || hasValue;
   const inputId = useId();
-  const effectiveType = showPasswordToggle && showPassword ? 'text' : type;
 
   const Tag = multiline ? 'textarea' : 'input';
 
@@ -55,7 +51,7 @@ export function TextField({
         <Tag
           id={label ? inputId : undefined}
           ref={inputRef as any}
-          type={multiline ? undefined : effectiveType}
+          type={multiline ? undefined : type}
           value={value}
           onChange={e => onChange(e.target.value)}
           onFocus={(e) => { setFocused(true); onFocus?.(e); }}
@@ -66,18 +62,8 @@ export function TextField({
           onKeyDown={onKeyDown}
           className={`w-full bg-transparent text-on-surface outline-none px-4 transition-all ${
             multiline ? 'pt-5 pb-3 text-sm resize-y' : label ? `${float ? 'pt-5 pb-2' : 'py-2'} text-sm` : 'py-2 text-sm'
-          } ${disabled ? 'opacity-40' : ''} ${showPasswordToggle ? 'pr-10' : ''}`}
+          } ${disabled ? 'opacity-40' : ''}`}
         />
-        {showPasswordToggle && type === 'password' && (
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="flex items-center justify-center w-8 h-8 mr-1 shrink-0 text-on-surface-variant hover:text-on-surface rounded transition-colors"
-            tabIndex={-1}
-          >
-            <Icon name={showPassword ? 'visibility_off' : 'visibility'} className="text-base" />
-          </button>
-        )}
       </div>
 
       {label && (

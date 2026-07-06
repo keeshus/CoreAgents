@@ -46,14 +46,6 @@ router.get(
 
       effectiveWhere = effectiveWhere ? and(effectiveWhere, groupFilter) : groupFilter;
     }
-
-    // Filter by specific group if requested (admin can filter any group)
-    const filterGroupId = req.query.group_id as string | undefined;
-    if (filterGroupId) {
-      const groupCondition = eq(flows.group_id, filterGroupId);
-      effectiveWhere = effectiveWhere ? and(effectiveWhere, groupCondition) : groupCondition;
-    }
-
     const baseQuery = db.select({
       id: flows.id,
       name: flows.name,
@@ -62,13 +54,11 @@ router.get(
       edges: flows.edges,
       version: flows.version,
       is_subflow: flows.is_subflow,
-      group_id: flows.group_id,
-      group_name: groups.name,
       created_by: flows.created_by,
       created_by_name: users.name,
       created_at: flows.created_at,
       updated_at: flows.updated_at,
-    }).from(flows).leftJoin(users, eq(flows.created_by, users.id)).leftJoin(groups, eq(flows.group_id, groups.id));
+    }).from(flows).leftJoin(users, eq(flows.created_by, users.id));
     const countQuery = db.select({ count: sql<number>`count(*)` }).from(flows);
     const dataPromise = (effectiveWhere ? baseQuery.where(effectiveWhere) : baseQuery).orderBy(orderDir(sortBy)).limit(limit).offset(offset);
     const countPromise = effectiveWhere ? countQuery.where(effectiveWhere) : countQuery;
@@ -144,13 +134,6 @@ router.post(
       return;
     }
 
-    // Non-admin users must assign a group
-    const isAdmin = req.user?.permissions?.includes('admin');
-    if (!isAdmin && !group_id) {
-      res.status(403).json({ error: 'Editor users must assign a group when creating a flow' });
-      return;
-    }
-
     // Check for duplicate name
     const existing = await db.select({ id: flows.id }).from(flows)
       .where(sql`LOWER(${flows.name}) = LOWER(${name.trim()})`).limit(1);
@@ -200,6 +183,7 @@ router.put(
     if (edges !== undefined) updateData.edges = edges;
     if (group_id !== undefined) updateData.group_id = group_id;
     if (flow_context !== undefined) updateData.flow_context = flow_context;
+    if (req.body.envVars !== undefined) updateData.env_vars = req.body.envVars;
 
     // Check for duplicate name if name changed
     if (name !== undefined && name.trim()) {

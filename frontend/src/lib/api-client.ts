@@ -70,14 +70,13 @@ export const api = {
   },
 
   flows: {
-    list: (params?: { limit?: number; offset?: number; search?: string; sort?: string; is_subflow?: boolean; group_id?: string }) => {
+    list: (params?: { limit?: number; offset?: number; search?: string; sort?: string; is_subflow?: boolean }) => {
       const q = new URLSearchParams();
       if (params?.limit) q.set('limit', String(params.limit));
       if (params?.offset) q.set('offset', String(params.offset));
       if (params?.search) q.set('search', params.search);
       if (params?.sort) q.set('sort', params.sort);
       if (params?.is_subflow !== undefined) q.set('is_subflow', String(params.is_subflow));
-      if (params?.group_id) q.set('group_id', params.group_id);
       const qs = q.toString() ? `?${q.toString()}` : '';
       return request<{ data: any[]; total: number }>(`/flows${qs}`);
     },
@@ -123,19 +122,44 @@ export const api = {
     list: () => request<any[]>('/catalog'),
   },
   llmEndpoints: {
-    list: () => request<any[]>('/llm-endpoints'),
+    list: (params?: { groupId?: string }) => {
+      const q = params?.groupId ? `?group_id=${encodeURIComponent(params.groupId)}` : '';
+      return request<any[]>(`/llm-endpoints${q}`);
+    },
     get: (id: string) => request<any>(`/llm-endpoints/${id}`),
     create: (data: any) => request<any>('/llm-endpoints', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/llm-endpoints/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/llm-endpoints/${id}`, { method: 'DELETE' }),
   },
   mcpServers: {
-    list: () => request<any[]>('/mcp-servers'),
+    list: (params?: { groupId?: string }) => {
+      const q = params?.groupId ? `?group_id=${encodeURIComponent(params.groupId)}` : '';
+      return request<any[]>(`/mcp-servers${q}`);
+    },
     get: (id: string) => request<any>(`/mcp-servers/${id}`),
     create: (data: any) => request<any>('/mcp-servers', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/mcp-servers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/mcp-servers/${id}`, { method: 'DELETE' }),
     refreshTools: (id: string) => request<any>(`/mcp-servers/${id}/refresh`, { method: 'POST' }),
+  },
+  embeddingProviders: {
+    list: (params?: { groupId?: string }) => {
+      const q = params?.groupId ? `?group_id=${encodeURIComponent(params.groupId)}` : '';
+      return request<any[]>(`/embedding-providers${q}`);
+    },
+    create: (data: any) => request<any>('/embedding-providers', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: any) => request<any>(`/embedding-providers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/embedding-providers/${id}`, { method: 'DELETE' }),
+  },
+  vectorStores: {
+    list: (params?: { groupId?: string }) => {
+      const q = params?.groupId ? `?group_id=${encodeURIComponent(params.groupId)}` : '';
+      return request<any[]>(`/vector-stores${q}`);
+    },
+    create: (data: any) => request<any>('/vector-stores', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: any) => request<any>(`/vector-stores/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/vector-stores/${id}`, { method: 'DELETE' }),
+    refresh: (id: string) => request<any>(`/vector-stores/${id}/refresh`, { method: 'POST' }),
   },
   secretVaults: {
     list: () => request<any[]>('/secret-vaults'),

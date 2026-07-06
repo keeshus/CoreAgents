@@ -10,9 +10,10 @@ interface MCPToolConfigProps {
     parameters: Record<string, any>;
   };
   onChange: (config: any) => void;
+  flow?: { group_id?: string };
 }
 
-export function MCPToolConfig({ config, onChange }: MCPToolConfigProps) {
+export function MCPToolConfig({ config, onChange, flow }: MCPToolConfigProps) {
   const [servers, setServers] = useState<any[]>([]);
   const [selectedServer, setSelectedServer] = useState<any>(null);
 
@@ -20,10 +21,14 @@ export function MCPToolConfig({ config, onChange }: MCPToolConfigProps) {
     api.mcpServers.list().then(setServers).catch(() => {});
   }, []);
 
+  const filteredServers = flow?.group_id
+    ? servers.filter((s: any) => !s.group_id || s.group_id === flow.group_id)
+    : servers;
+
   useEffect(() => {
-    const srv = servers.find((s: any) => s.id === config.serverId);
+    const srv = filteredServers.find((s: any) => s.id === config.serverId);
     setSelectedServer(srv || null);
-  }, [config.serverId, servers]);
+  }, [config.serverId, filteredServers]);
 
   const toolNames: string[] = config.toolNames || [];
   const tools = selectedServer?.tools || [];
@@ -51,12 +56,12 @@ export function MCPToolConfig({ config, onChange }: MCPToolConfigProps) {
         label="MCP Server"
         value={config.serverId}
         onChange={(v) => {
-          const srv = servers.find((s: any) => s.id === v);
+          const srv = filteredServers.find((s: any) => s.id === v);
           onChange({ ...config, serverId: v, serverName: srv?.name || '', toolName: '', toolNames: [] });
         }}
         options={[
           { value: '', label: 'Select server...' },
-          ...servers.map((s: any) => ({ value: s.id, label: `${s.name} (${s.tools?.length || 0} tools)` })),
+          ...filteredServers.map((s: any) => ({ value: s.id, label: `${s.name} (${s.tools?.length || 0} tools)` })),
         ]}
       />
 

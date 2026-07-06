@@ -31,6 +31,7 @@ interface NodeConfigModalProps {
   nodes: any[];
   edges: any[];
   flowId: string;
+  flow?: any;
   onConfigChange: (config: Record<string, any>) => void;
   onLabelChange: (label: string) => void;
   onDelete: () => void;
@@ -43,6 +44,7 @@ export function NodeConfigModal({
   nodes,
   edges,
   flowId,
+  flow,
   onConfigChange,
   onLabelChange,
   onDelete,
@@ -256,11 +258,11 @@ export function NodeConfigModal({
 
           {/* ── Node-specific config form ── */}
           {node.data.type === 'llm-agent' && (
-            <LLMAgentConfig config={node.data.config} onChange={onConfigChange} suggestions={{ upstreamLabels, nodes, edges, nodeId: node.id }} />
+            <LLMAgentConfig config={node.data.config} onChange={onConfigChange} suggestions={{ upstreamLabels, nodes, edges, nodeId: node.id }} flow={flow} />
           )}
 
           {node.data.type === 'mcp-tool' && (
-            <MCPToolConfig config={node.data.config} onChange={onConfigChange} />
+            <MCPToolConfig config={node.data.config} onChange={onConfigChange} flow={flow} />
           )}
 
           {node.data.type === 'branch' && (
@@ -361,7 +363,7 @@ export function NodeConfigModal({
           )}
 
           {node.data.type === 'retriever' && (
-            <RetrieverConfig config={node.data.config} onChange={onConfigChange} />
+            <RetrieverConfig config={node.data.config} onChange={onConfigChange} flow={flow} />
           )}
 
           {node.data.type === 'trigger' && (

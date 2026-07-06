@@ -60,13 +60,17 @@ router.post('/roles/seed', requirePermission('admin'), asyncHandler(async (_req,
       ],
     },
     {
-      name: 'group_admin', description: 'Can manage group members, vault bindings, and group secrets', is_system: true,
+      name: 'group_admin', description: 'Can manage group members, vault bindings, group secrets, and group-scoped resources', is_system: true,
       permissions: [
         'secrets:read_group', 'secrets:write_group',
         'vaults:read',
         'group:read', 'groups:manage',
         'flow:read', 'flow:create', 'flow:edit',
         'execution:approve', 'chat:create',
+        'endpoint:read_group', 'endpoint:write_group',
+        'mcp:read_group', 'mcp:write_group',
+        'embedding:read_group', 'embedding:write_group',
+        'store:read_group', 'store:write_group',
       ],
     },
   ];

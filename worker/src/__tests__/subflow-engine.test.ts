@@ -7,6 +7,29 @@ vi.mock('../providers/index.js', () => ({
   callLLM: vi.fn(() => Promise.resolve({ text: 'mock LLM response' })),
 }));
 
+vi.mock('../sandbox/sidecar-client.js', () => ({
+  createSidecarClient: vi.fn(() => ({
+    setup: vi.fn(),
+    exec: vi.fn(async () => ({ stdout: 'mock', stderr: '', exitCode: 0 })),
+    teardown: vi.fn(),
+  })),
+}));
+
+vi.mock('../tools/bash.js', async () => {
+  const actual = await vi.importActual('../tools/bash.js');
+  return {
+    ...actual,
+    executeCode: vi.fn(async (_client: any, _executionId: string, code: string, input: unknown) => {
+      try {
+        const fn = new Function('input', code);
+        return fn(input);
+      } catch (err) {
+        throw new Error(`Code execution failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }),
+  };
+});
+
 function makeNode(id: string, nodeType: string, overrides: Record<string, unknown> = {}): FlowNode {
   return {
     id,
@@ -66,6 +89,8 @@ describe('compileFlow — subflow validation', () => {
     context = {
       getEndpoint: vi.fn().mockResolvedValue({ providerType: 'anthropic' as const, apiKey: 'test-key', baseUrl: null }),
       getFlow: vi.fn().mockResolvedValue(makeSubflowDef('subflow-1', { inputSchema: '{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}' })),
+      sandboxExecutionId: 'test-exec-id',
+
     };
   });
 
@@ -127,6 +152,8 @@ describe('SubFlowExecutor — recursive execution', () => {
       onSubExecution: vi.fn().mockResolvedValue('sub-exec-1'),
       completeSubExecution: vi.fn().mockResolvedValue(undefined),
       currentExecutionId: 'parent-exec-1',
+      sandboxExecutionId: 'test-exec-id',
+
     };
   });
 
@@ -261,6 +288,8 @@ describe('compileFlow — subflow requires output node', () => {
     onEvent = vi.fn();
     context = {
       getEndpoint: vi.fn().mockResolvedValue({ providerType: 'anthropic' as const, apiKey: 'test-key', baseUrl: null }),
+      sandboxExecutionId: 'test-exec-id',
+
     };
   });
 
@@ -314,6 +343,8 @@ describe('compileFlow — subflow input mapping validation', () => {
     onEvent = vi.fn();
     context = {
       getEndpoint: vi.fn().mockResolvedValue({ providerType: 'anthropic' as const, apiKey: 'test-key', baseUrl: null }),
+      sandboxExecutionId: 'test-exec-id',
+
     };
   });
 
@@ -389,6 +420,7 @@ describe('SubFlowExecutor — depth limit', () => {
       onSubExecution: vi.fn().mockResolvedValue('sub-exec'),
       completeSubExecution: vi.fn(),
       currentExecutionId: 'parent',
+      sandboxExecutionId: 'test-exec-id',
     };
   });
 
@@ -436,7 +468,9 @@ describe('compileFlow — subflow id must exist in flow list', () => {
     executor = new FlowExecutor();
     onEvent = vi.fn();
     // getFlow returns null (not found)
-    context = { getFlow: vi.fn().mockResolvedValue(null), getEndpoint: vi.fn() };
+    context = { getFlow: vi.fn().mockResolvedValue(null), getEndpoint: vi.fn() ,
+      sandboxExecutionId: 'test-exec-id',
+    };
   });
 
   it('fails when the referenced subflow does not exist', async () => {
@@ -469,6 +503,8 @@ describe('SubFlowExecutor — event emissions', () => {
       onSubExecution: vi.fn().mockResolvedValue('sub-exec-1'),
       completeSubExecution: vi.fn(),
       currentExecutionId: 'parent-1',
+      sandboxExecutionId: 'test-exec-id',
+
     };
   });
 
@@ -518,5 +554,68 @@ describe('SubFlowExecutor — event emissions', () => {
     expect(startedEvents[0][1].hierarchy).toBeDefined();
     expect(startedEvents[0][1].hierarchy.depth).toBe(1);
     expect(startedEvents[0][1].hierarchy.path).toBe('sub');
+  });
+});
+
+describe('SubFlowExecutor — env var inheritance', () => {
+  let executor: FlowExecutor;
+  let onEvent: any;
+  let context: ExecutionContext;
+
+  beforeEach(() => {
+    executor = new FlowExecutor();
+    onEvent = vi.fn();
+    context = {
+      getEndpoint: vi.fn().mockResolvedValue({ providerType: 'anthropic' as const, apiKey: 'test-key', baseUrl: null }),
+      getFlow: vi.fn().mockResolvedValue(makeSubflowDef('sf-1')),
+      onSubExecution: vi.fn().mockResolvedValue('sub-exec-1'),
+      completeSubExecution: vi.fn(),
+      currentExecutionId: 'parent-1',
+      sandboxExecutionId: 'test-exec-id',
+      sandboxEnv: { PARENT_VAR: 'parent-value', SHARED_VAR: 'from-parent' },
+    };
+  });
+
+  it('overrides parent env var when subflow defines same name', async () => {
+    const subflow: FlowDefinition = {
+      ...makeSubflowDef('sf-override'),
+      envVars: [
+        { name: 'SHARED_VAR', type: 'static', value: 'from-subflow' },
+        { name: 'SUBFLOW_ONLY', type: 'static', value: 'subflow-value' },
+      ],
+    };
+    context.getFlow = vi.fn().mockResolvedValue(subflow);
+
+    const flow = makeFlow(
+      [makeNode('trigger', 'trigger'), makeNode('sub', 'subflow', { config: { subflowId: 'sf-override', inputMapping: {} } })],
+      [makeEdge('e1', 'trigger', 'sub')],
+    );
+
+    const result = await executor.execute(flow, { message: 'test' }, onEvent, context);
+    expect(result).toBeDefined();
+  });
+
+  it('does not leak subflow env vars back to parent context', async () => {
+    const subflow: FlowDefinition = {
+      ...makeSubflowDef('sf-leak'),
+      envVars: [
+        { name: 'SUBFOW_SECRET', type: 'static', value: 'should-not-leak' },
+      ],
+    };
+    context.getFlow = vi.fn().mockResolvedValue(subflow);
+
+    const originalEnv = { ...context.sandboxEnv };
+    const parentRef = context.sandboxEnv; // track reference to detect mutation
+
+    const flow = makeFlow(
+      [makeNode('trigger', 'trigger'), makeNode('sub', 'subflow', { config: { subflowId: 'sf-leak', inputMapping: {} } })],
+      [makeEdge('e1', 'trigger', 'sub')],
+    );
+
+    await executor.execute(flow, { message: 'test' }, onEvent, context);
+
+    // Parent's sandboxEnv reference should be unchanged
+    expect(context.sandboxEnv).toBe(parentRef);
+    expect(context.sandboxEnv).toEqual(originalEnv);
   });
 });

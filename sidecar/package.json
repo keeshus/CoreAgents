@@ -1,0 +1,19 @@
+{
+  "name": "core-agents-sidecar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "core-agents-shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "tsx": "^4.19.4",
+    "@types/node": "^26.1.0"
+  }
+}

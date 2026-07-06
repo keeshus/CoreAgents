@@ -81,11 +81,11 @@ export default function SetupPage() {
               <TextField label="Email" value={email} onChange={setEmail} />
             </div>
             <div>
-<TextField label="Password" type="password" value={password} onChange={setPassword} helpText="Minimum 8 characters required" showPasswordToggle />
-               {password.length > 0 && <PasswordStrengthMeter password={password} />}
+              <TextField label="Password" type="password" value={password} onChange={setPassword} helpText="Minimum 8 characters required" />
+              {password.length > 0 && <PasswordStrengthMeter password={password} />}
             </div>
             <div>
-               <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} showPasswordToggle />
+              <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} />
             </div>
             <button type="submit" disabled={loading} className="w-full m3-button disabled:opacity-50">
               {loading ? 'Creating admin account...' : 'Create Admin Account'}

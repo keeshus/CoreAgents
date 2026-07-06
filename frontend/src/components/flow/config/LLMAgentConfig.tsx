@@ -23,9 +23,10 @@ interface LLMAgentConfigProps {
   };
   onChange: (config: any) => void;
   suggestions?: { upstreamLabels: string[]; nodes: any[]; edges: any[]; nodeId: string };
+  flow?: { group_id?: string };
 }
 
-export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfigProps) {
+export function LLMAgentConfig({ config, onChange, suggestions, flow }: LLMAgentConfigProps) {
   const [endpoints, setEndpoints] = useState<any[]>([]);
   const [selectedEndpoint, setSelectedEndpoint] = useState<any>(null);
   const [agentContexts, setAgentContexts] = useState<any[]>([]);
@@ -45,6 +46,10 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
     const ep = endpoints.find((e: any) => e.id === config.endpointId);
     setSelectedEndpoint(ep || null);
   }, [config.endpointId, endpoints]);
+
+  const filteredEndpoints = flow?.group_id
+    ? endpoints.filter((ep: any) => !ep.group_id || ep.group_id === flow.group_id)
+    : endpoints;
 
   const handleEndpointChange = (endpointId: string) => {
     const ep = endpoints.find((e: any) => e.id === endpointId);
@@ -69,7 +74,7 @@ export function LLMAgentConfig({ config, onChange, suggestions }: LLMAgentConfig
           onChange={(v) => handleEndpointChange(v)}
           options={[
             { value: '', label: 'Select endpoint...' },
-            ...endpoints.map((ep: any) => ({ value: ep.id, label: `${ep.name} (${PROVIDER_LABELS[ep.provider_type] || ep.provider_type})` })),
+            ...filteredEndpoints.map((ep: any) => ({ value: ep.id, label: `${ep.name} (${PROVIDER_LABELS[ep.provider_type] || ep.provider_type})` })),
           ]}
         />
         {selectedEndpoint && (

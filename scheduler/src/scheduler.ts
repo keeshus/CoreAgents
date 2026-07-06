@@ -1,8 +1,4 @@
-/**
- * Scheduler for cron-based flow triggers.
- * Checks for scheduled flows every 30 seconds and pushes them to the BullMQ queue.
- */
-import { enqueueExecution } from './queue.js';
+import type { FlowDefinition } from 'core-agents-shared';
 
 interface ScheduledFlow {
   flowId: string;
@@ -20,8 +16,6 @@ interface ScheduleEntry {
   lastRun: number;
 }
 
-// Simple cron matcher — supports minute/hour/day-of-month/month/day-of-week
-// Format: "minute hour day-of-month month day-of-week"
 function cronMatches(expression: string, date: Date): boolean {
   const parts = expression.trim().split(/\s+/);
   if (parts.length !== 5) return false;
@@ -52,7 +46,6 @@ function cronMatches(expression: string, date: Date): boolean {
 function fieldMatches(pattern: string, value: number): boolean {
   if (pattern === '*') return true;
 
-  // Step values: */5 or 1-5/2
   const stepMatch = pattern.match(/^(\*|\d+(?:-\d+)?)\/(\d+)$/);
   if (stepMatch) {
     const range = stepMatch[1];
@@ -63,18 +56,15 @@ function fieldMatches(pattern: string, value: number): boolean {
     return value >= (lo || 0) && value <= (hi || 59) && (value - (lo || 0)) % step === 0;
   }
 
-  // Comma-separated values
   if (pattern.includes(',')) {
     return pattern.split(',').some(p => fieldMatches(p.trim(), value));
   }
 
-  // Range: 1-5
   if (pattern.includes('-')) {
     const [lo, hi] = pattern.split('-').map(Number);
     return value >= lo && value <= hi;
   }
 
-  // Exact value
   return parseInt(pattern) === value;
 }
 
@@ -82,16 +72,20 @@ export class Scheduler {
   private schedules = new Map<string, ScheduleEntry>();
   private interval: NodeJS.Timeout | null = null;
   private loadFn: () => Promise<ScheduledFlow[]>;
+  private enqueueFn: (flowDef: FlowDefinition, input: Record<string, unknown>) => Promise<void>;
 
-  constructor(loadFn: () => Promise<ScheduledFlow[]>) {
+  constructor(
+    loadFn: () => Promise<ScheduledFlow[]>,
+    enqueueFn: (flowDef: FlowDefinition, input: Record<string, unknown>) => Promise<void>,
+  ) {
     this.loadFn = loadFn;
+    this.enqueueFn = enqueueFn;
   }
 
   async start(): Promise<void> {
     console.log('Scheduler: starting...');
     await this.reload();
 
-    // Check every 30 seconds
     this.interval = setInterval(() => this.tick(), 30_000);
     console.log('Scheduler: running (checking every 30s)');
   }
@@ -109,16 +103,14 @@ export class Scheduler {
       const flows = await this.loadFn();
       const newIds = new Set(flows.map(f => f.flowId));
 
-      // Remove deleted flows
       for (const [id] of this.schedules) {
         if (!newIds.has(id)) this.schedules.delete(id);
       }
 
-      // Add/update flows
       for (const flow of flows) {
         const existing = this.schedules.get(flow.flowId);
         if (existing) {
-          existing.flow = flow; // update config
+          existing.flow = flow;
         } else {
           this.schedules.set(flow.flowId, { flow, lastRun: 0 });
         }
@@ -137,17 +129,14 @@ export class Scheduler {
     for (const [, entry] of this.schedules) {
       const { flow, lastRun } = entry;
 
-      // Check cron match
       if (!cronMatches(flow.cronExpression, nowDate)) continue;
 
-      // Rate limit: don't run more than once per minute (smallest cron granularity)
       if (now - lastRun < 60_000) continue;
 
       entry.lastRun = now;
 
       console.log(`Scheduler: triggering flow "${flow.flowName}" (${flow.flowId})`);
 
-      // Build a FlowDefinition from the scheduled flow data
       const flowDef = {
         id: flow.flowId,
         name: flow.flowName,
@@ -161,7 +150,6 @@ export class Scheduler {
         groupId: flow.groupId || undefined,
       };
 
-      // Build input payload
       const input: Record<string, unknown> = (() => {
         const raw = flow.inputMessage?.trim();
         if (!raw) return { triggerType: 'schedule', timestamp: new Date().toISOString() };
@@ -173,9 +161,8 @@ export class Scheduler {
         }
       })();
 
-      // Enqueue rather than executing inline
-      enqueueExecution(flowDef, input).catch(err => {
-        console.error(`Scheduler: failed to enqueue flow "${flow.flowName}":`, err.message);
+      this.enqueueFn(flowDef, input).catch(err => {
+        console.error(`Scheduler: failed to enqueue flow "${flow.flowName}":`, (err as Error).message);
       });
     }
   }

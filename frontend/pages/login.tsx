@@ -72,7 +72,7 @@ export default function LoginPage() {
               <TextField label="Email" type="email" value={email} onChange={setEmail} />
             </div>
             <div>
-              <TextField label="Password" type="password" value={password} onChange={setPassword} showPasswordToggle />
+              <TextField label="Password" type="password" value={password} onChange={setPassword} />
             </div>
             <button type="submit" disabled={loading} className="w-full m3-button disabled:opacity-50">
               {loading ? 'Signing in...' : 'Sign In'}

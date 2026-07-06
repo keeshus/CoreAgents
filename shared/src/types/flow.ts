@@ -180,6 +180,22 @@ export interface FlowDefinition {
   updatedAt: string;
   groupId?: string;
   flowContext?: string;
+  envVars?: EnvVarEntry[];
+  cyberarkMappings?: Record<string, string>;
+}
+
+// ── Env var configuration ──────────────────────────────────────
+
+export type EnvVarType = 'static' | 'core_secret' | 'cyberark';
+
+export interface EnvVarEntry {
+  name: string;
+  type: EnvVarType;
+  value: string;
+}
+
+export interface EnvVarConfig {
+  envVars: EnvVarEntry[];
 }
 
 // ── Execution ────────────────────────────────────────────────

@@ -243,12 +243,9 @@ export default function GroupsSettingsPage() {
               const isLocal = g.provider === 'local';
               return (
                 <div key={g.id} className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
-                <div
+                  <button
                     onClick={() => toggleExpand(g.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(g.id); } }}
-                    className="w-full flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors cursor-pointer text-left"
+                    className="w-full flex items-center justify-between p-4 hover:bg-surface-container-high transition-colors text-left"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <Icon name={expandedId === g.id ? "expand_less" : "expand_more"} className="text-base text-on-surface-variant shrink-0" />
@@ -281,7 +278,7 @@ export default function GroupsSettingsPage() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </button>
 
                   {expandedId === g.id && (
                     <div className="border-t border-outline-variant px-4 py-3">
@@ -387,16 +384,9 @@ export default function GroupsSettingsPage() {
             <div className="space-y-3">
               <TextField label="Name" value={newName} onChange={setNewName} />
               <TextField label="Description" value={newDescription} onChange={setNewDescription} multiline rows={2} />
-              <div className="flex items-center gap-2 justify-end">
-                <button type="button" onClick={() => { setShowCreate(false); setNewName(''); setNewDescription(''); }} className="px-4 py-2 text-sm font-medium text-on-surface-variant bg-surface border border-outline rounded-lg hover:bg-surface-container-high transition-colors">Cancel</button>
-                <Tooltip content={!newName?.trim() ? 'Fill in all required fields' : ''}>
-                  <span>
-                    <button onClick={handleCreate} disabled={creating || !newName?.trim()} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">
-                      {creating ? 'Creating...' : 'Create Group'}
-                    </button>
-                  </span>
-                </Tooltip>
-              </div>
+              <button onClick={handleCreate} disabled={creating} className="w-full m3-button disabled:opacity-50">
+                {creating ? 'Creating...' : 'Create Group'}
+              </button>
             </div>
           </div>
         </div>
@@ -413,14 +403,7 @@ export default function GroupsSettingsPage() {
             <div className="space-y-3">
               <TextField label="Name" value={editName} onChange={setEditName} />
               <TextField label="Description" value={editDescription} onChange={setEditDescription} multiline rows={2} />
-              <div className="flex items-center gap-2 justify-end">
-                <button type="button" onClick={() => setEditingGroup(null)} className="px-4 py-2 text-sm font-medium text-on-surface-variant bg-surface border border-outline rounded-lg hover:bg-surface-container-high transition-colors">Cancel</button>
-                <Tooltip content={!editName?.trim() ? 'Fill in all required fields' : ''}>
-                  <span>
-                    <button onClick={handleEdit} disabled={!editName?.trim()} className="m3-button disabled:opacity-50 disabled:cursor-not-allowed">Save</button>
-                  </span>
-                </Tooltip>
-              </div>
+              <button onClick={handleEdit} className="w-full m3-button">Save</button>
             </div>
           </div>
         </div>

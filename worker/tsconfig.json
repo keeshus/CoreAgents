@@ -4,6 +4,6 @@
     "outDir": "./dist",
     "rootDir": ".."
   },
-  "include": ["src", "../backend/src/db"],
+  "include": ["src"],
   "references": [{ "path": "../shared" }]
 }

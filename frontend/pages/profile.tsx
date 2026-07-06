@@ -214,13 +214,13 @@ function PasswordSection() {
       </h3>
       <div className="space-y-4">
         <div>
-           <TextField label="Current Password" type="password" value={currentPassword} onChange={setCurrentPassword} showPasswordToggle />
+          <TextField label="Current Password" type="password" value={currentPassword} onChange={setCurrentPassword} />
         </div>
         <div>
-           <TextField label="New Password" type="password" value={newPassword} onChange={setNewPassword} showPasswordToggle />
+          <TextField label="New Password" type="password" value={newPassword} onChange={setNewPassword} />
         </div>
         <div>
-           <TextField label="Confirm New Password" type="password" value={confirmPassword} onChange={setConfirmPassword} showPasswordToggle />
+          <TextField label="Confirm New Password" type="password" value={confirmPassword} onChange={setConfirmPassword} />
         </div>
         {status !== 'idle' && (
           <div className={`flex items-center gap-2 text-sm ${status === 'success' ? 'text-success' : 'text-error'}`}>

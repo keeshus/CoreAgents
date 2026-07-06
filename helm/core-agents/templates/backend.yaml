@@ -30,6 +30,9 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-backend
     spec:
+      volumes:
+        - name: flow-data
+          emptyDir: {}
       initContainers:
         - name: migrate
           image: "{{ .Values.image.repository }}-backend:{{ .Values.image.tag }}"
@@ -51,6 +54,8 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.backend.port | quote }}
+            - name: SIDECAR_URL
+              value: "http://localhost:4001"
           envFrom:
             - secretRef:
                 name: {{ include "core-agents.fullname" . }}-secret
@@ -62,3 +67,21 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
+        - name: sidecar
+          image: "{{ .Values.image.repository }}-sidecar:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 4001
+              name: sidecar
+          args: ["--ttl-hours=168"]
+          volumeMounts:
+            - name: flow-data
+              mountPath: /var/flow-data
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 1001
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.sidecar.resources | nindent 12 }}

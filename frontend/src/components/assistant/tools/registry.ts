@@ -1095,13 +1095,13 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'approvals': [getPendingApprovals, approveExecution, rejectExecution],
   'executions': [listExecutions, getExecutionDetails, deleteExecution],
   'secret-crud': [listSecrets, createSecret, updateSecret, deleteSecret, rotateKey],
-  'vault-crud': [listVaults, createVault, updateVault, deleteVault, testVaultConnection],
   'group-vault-config': [listGroups, getGroupVault, setGroupVault],
   'global-context-crud': [getGlobalContext, updateGlobalContext],
   'sso-crud': [getSSOConfig, updateSSOConfig],
   'group-context-crud': [getGroupContext],
   'groups-crud': [createGroup, updateGroup, deleteGroup, addGroupMember, removeGroupMember],
   'agent-contexts-crud': [listAgentContexts, createAgentContext, updateAgentContext, deleteAgentContext],
+  'vault-crud': [listVaults, createVault, updateVault, deleteVault, testVaultConnection],
   'read-resources': [listEndpoints, listMcpServers, listEmbeddingProviders, listVectorStores],
 };
 

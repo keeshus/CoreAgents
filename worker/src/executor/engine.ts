@@ -10,6 +10,7 @@ import type {
 import { topologicalSort } from './dag.js';
 import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
 import { randomUUID } from 'node:crypto';
+import { BASH_SANDBOX_SYSTEM_PROMPT, BASH_TOOL_DEFINITION } from '../tools/bash.js';
 
 const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
 
@@ -74,6 +75,8 @@ export interface ExecutionContext {
   getCyberArkSecret?: (secretPath: string) => Promise<string | null>;
   setSecret?: (name: string, value: string) => void;
   logSecretAccess?: (entry: { name: string; action: string; source: string }) => void;
+  sandboxEnv?: Record<string, string>;  // env vars for the sandbox (merged from secrets, CyberArk)
+  sandboxExecutionId?: string;          // execution ID for sandbox communication
 }
 
 export class FlowExecutor {
@@ -662,20 +665,16 @@ export class FlowExecutor {
           }
         }
 
-        // Auto-inject built-in tools so the LLM can use store, file, utility tools
+        // Auto-inject built-in tools — file and fetch tools removed (replaced by bash)
         toolDefs.push(
           { name: 'store_get', description: 'Read a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
           { name: 'store_set', description: 'Persist a value by key (upserts)', input_schema: { type: 'object', properties: { key: { type: 'string' }, value: { type: 'string', description: 'Any JSON-serializable value' } }, required: ['key', 'value'] } },
           { name: 'store_delete', description: 'Remove a persisted value by key', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } },
           { name: 'store_list', description: 'List all stored keys', input_schema: { type: 'object', properties: {} } },
-          { name: 'file_read', description: 'Read a file from the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
-          { name: 'file_write', description: 'Write content to a file in the shared workspace', input_schema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
-          { name: 'file_list', description: 'List files in a directory', input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
           { name: 'now', description: 'Get the current date and time. Specify timezone (e.g. "Europe/Amsterdam") or locale (e.g. "nl-NL") for localized output.', input_schema: { type: 'object', properties: { timezone: { type: 'string' }, locale: { type: 'string' } } } },
           { name: 'uuid', description: 'Generate a UUID', input_schema: { type: 'object', properties: {} } },
           { name: 'log', description: 'Write a log entry (info/warn/error)', input_schema: { type: 'object', properties: { level: { type: 'string' }, message: { type: 'string' } }, required: ['message'] } },
-          { name: 'fetch', description: 'Perform an HTTP GET request', input_schema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
-          { name: 'secret_get', description: 'Retrieve a secret by name. Supports local secrets (core) and CyberArk (cyberark).', input_schema: { type: 'object', properties: { name: { type: 'string' }, cyberark: { type: 'boolean' } }, required: ['name'] } },
+          BASH_TOOL_DEFINITION,
         );
 
         // Token streaming callback
@@ -731,6 +730,11 @@ export class FlowExecutor {
 
         // Inject structured output tool when JSON output is selected
         const allTools = [...(toolDefs || [])];
+
+        // Append sandbox environment info to the system prompt if bash tool is available
+        if (allTools.some(t => t.name === 'bash')) {
+          resolvedPrompt += (resolvedPrompt ? '\n\n' : '') + BASH_SANDBOX_SYSTEM_PROMPT;
+        }
         let structuredOutputUsed = false;
         if (config.responseFormat === 'json_object') {
           const outputDesc = 'Call this tool to output structured data. Use it to respond — do not output text, only call this tool.';
@@ -824,33 +828,23 @@ export class FlowExecutor {
 
               // Handle built-in utility tools (auto-injected, no MCP node required)
               if (toolResult === 'Tool not found') {
-                // Handle secret_get specially — needs ExecutionContext
-                if (tc.name === 'secret_get') {
-                  const name = tc.input?.name as string | undefined;
-                  const useCyberArk = tc.input?.cyberark === true;
-                  if (name) {
-                    try {
-                      let value: string | null = null;
-                      if (useCyberArk && context?.getCyberArkSecret) {
-                        value = await context.getCyberArkSecret(name);
-                      } else if (context?.getSecret) {
-                        value = await context.getSecret(name);
-                      }
-                      if (value !== null && value !== undefined) {
-                        context?.setSecret?.(name, value);
-                        toolResult = JSON.stringify({ success: true, name });
-                        // Audit log: log secret retrieval to the database
-                        if (context.logSecretAccess) {
-                          context.logSecretAccess({ name, action: 'tool_access', source: useCyberArk ? 'cyberark' : 'core' });
-                        }
-                        } else {
-                        toolResult = JSON.stringify({ success: false, error: 'Secret not found' });
-                      }
-                    } catch (err) {
-                      toolResult = JSON.stringify({ success: false, error: (err as Error).message });
-                    }
-                  } else {
-                    toolResult = JSON.stringify({ success: false, error: 'Secret name is required' });
+                // Handle bash tool — execute via sidecar
+                if (tc.name === 'bash' && context.sandboxExecutionId) {
+                  try {
+                    const { createSidecarClient } = await import('../sandbox/sidecar-client.js');
+                    const { executeBash } = await import('../tools/bash.js');
+                    const sidecarClient = createSidecarClient();
+                    const env = { ...context.sandboxEnv };
+                    toolResult = await executeBash(
+                      sidecarClient,
+                      context.sandboxExecutionId,
+                      (tc.input?.command as string) || '',
+                      env,
+                      tc.input?.timeout as number | undefined,
+                      tc.input?.workdir as string | undefined,
+                    );
+                  } catch (err) {
+                    toolResult = `Error: ${err instanceof Error ? err.message : String(err)}`;
                   }
                 } else {
                   try {
@@ -1024,12 +1018,32 @@ export class FlowExecutor {
       case 'code': {
         const config = (nodeData as any).config;
         const code = config.code || 'return input;';
+        const codeLanguage = config.language || 'javascript';
 
+        if (codeLanguage !== 'javascript') {
+          throw new Error(`Code node: unsupported language "${codeLanguage}". Only "javascript" is supported.`);
+        }
+
+        if (!context.sandboxExecutionId) {
+          throw new Error('Code node: sandbox not available — cannot execute code securely. Ensure the sidecar is running and execution has a sandbox context.');
+        }
+
+        // Run code in the sandbox via sidecar
         try {
-          const fn = new Function('input', code);
-          return fn(input);
+          const { executeCode } = await import('../tools/bash.js');
+          const { createSidecarClient } = await import('../sandbox/sidecar-client.js');
+          const sidecarClient = createSidecarClient();
+          const result = await executeCode(
+            sidecarClient,
+            context.sandboxExecutionId,
+            code,
+            input,
+            context.sandboxEnv || {},
+            config.timeout as number | undefined,
+          );
+          return result;
         } catch (err) {
-          throw new Error(`Code node execution failed: ${err instanceof Error ? err.message : String(err)}`);
+          throw new Error(`Code node execution failed in sandbox: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
@@ -1126,7 +1140,20 @@ export class FlowExecutor {
         if (subflowReplayFrom) subOptions.replayFrom = subflowReplayFrom;
         if (subflowReplayOutputs) subOptions.replayOutputs = subflowReplayOutputs;
 
-        const result = await subExecutor.execute(subflowDef, subflowInput, onEvent, context, Object.keys(subOptions).length > 0 ? subOptions : undefined);
+        // Merge env vars: parent env vars first, then subflow's own envVars override
+        const subflowEnv: Record<string, string> = { ...(context.sandboxEnv || {}) };
+        if (subflowDef.envVars) {
+          for (const entry of subflowDef.envVars) {
+            if (entry.type === 'static' || entry.type === 'core_secret') {
+              subflowEnv[entry.name] = entry.value;
+            }
+          }
+        }
+
+        // Create a subflow context that inherits parent's sandbox with overridden env vars
+        const subflowContext = { ...context, sandboxEnv: subflowEnv };
+
+        const result = await subExecutor.execute(subflowDef, subflowInput, onEvent, subflowContext, Object.keys(subOptions).length > 0 ? subOptions : undefined);
 
         return result.output;
       }
@@ -1394,6 +1421,15 @@ async function resolveTemplate(template: string, data: unknown, context?: Execut
   }
   const syncLookup = (name: string, _scope?: 'app' | 'group' | 'flow') => secretsMap.get(`${_scope || 'default'}:${name}`) ?? null;
   let result = resolveTemplateSync(template, data, syncLookup);
+
+  // Resolve {{env.VAR_NAME}} — merged env var map
+  const envVars = context?.sandboxEnv || {};
+  result = result.replace(/\{\{env\.(?:app\.|group\.|flow\.)?([^}]+)\}\}/g, (match, name: string) => {
+    const value = envVars[name.trim()];
+    if (value !== undefined) return value;
+    console.warn(`Template variable ${match} could not be resolved`);
+    return '';
+  });
 
   // Resolve {{secrets.cyberark.PATH}} — live CyberArk query (async)
   const cyberarkMatches = result.match(/\{\{secrets\.cyberark\.([^}]+)\}\}/g);

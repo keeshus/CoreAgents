@@ -5,6 +5,7 @@
 import { FlowExecutor, HitlPauseError, FlowStopError } from './engine.js';
 import type { ExecutionContext } from './engine.js';
 import type { FlowDefinition, SSEEvent } from 'core-agents-shared';
+import { createSidecarClient, createSandboxManager } from '../sandbox/index.js';
 
 interface RunnerOptions {
   flow: FlowDefinition;
@@ -33,10 +34,22 @@ interface RunnerOptions {
 export async function executeFlowWithPersistence(options: RunnerOptions): Promise<{ status: string; output?: any }> {
   const { flow, input, executionId, db: database, executionsTable, executionStepsTable, eq: eqFn, and: andFn, onEvent } = options;
 
+  // Initialize sandbox
+  const sidecarClient = createSidecarClient();
+  const sandboxManager = createSandboxManager(sidecarClient);
+
+  // Setup sandbox execution directory
+  await sandboxManager.setup(executionId).catch(err => {
+    console.error(`Failed to setup sandbox for ${executionId}:`, err);
+    // Non-fatal — execution continues without sandbox
+  });
+
   // Build execution context with context resolver support
   const executionContext: ExecutionContext = {
     flowNodes: flow.nodes,
     flowEdges: flow.edges,
+    sandboxExecutionId: executionId,
+    sandboxEnv: (input as any)?.__env || {},
     getGlobalContext: async () => {
       if (!options.agentStoreTable) return '';
       const [row] = await database.select().from(options.agentStoreTable).where(eqFn(options.agentStoreTable.key, 'global_context')).limit(1);
@@ -94,6 +107,11 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
       status: 'completed', output: result.output as any, completed_at: new Date(),
     }).where(eqFn(executionsTable.id, executionId));
 
+    // Teardown sandbox on success
+    await sandboxManager.teardown(executionId).catch(err => {
+      console.error(`Failed to teardown sandbox for ${executionId}:`, err);
+    });
+
     return { status: 'completed', output: result.output };
   } catch (err) {
     if (err instanceof HitlPauseError) {
@@ -105,6 +123,12 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
       }).where(eqFn(executionsTable.id, executionId));
       return { status: 'awaiting_approval' };
     }
+    
+    // Teardown sandbox on failure/cancellation (but not HITL)
+    await sandboxManager.teardown(executionId).catch(err => {
+      console.error(`Failed to teardown sandbox for ${executionId}:`, err);
+    });
+
     if (err instanceof FlowStopError) {
       await database.update(executionsTable).set({
         status: err.status as any, error: err.message, completed_at: new Date(),

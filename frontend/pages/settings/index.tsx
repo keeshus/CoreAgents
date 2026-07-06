@@ -13,7 +13,13 @@ export default function SettingsIndex() {
       href: '/settings/secrets',
       icon: 'key',
       title: 'Secrets',
-      description: 'Manage app-wide encrypted secrets for secure credential storage',
+      description: 'Manage app-wide, group, and flow-scoped secrets for secure credential storage',
+    },
+    {
+      href: '/settings/env-vars',
+      icon: 'settings_applications',
+      title: 'Environment Variables',
+      description: 'Manage environment variables for app-wide and group-level configuration',
     },
     {
       href: '/settings/endpoints',
@@ -56,6 +62,12 @@ export default function SettingsIndex() {
       icon: 'language',
       title: 'Global Context',
       description: 'Set the global system context for all LLM agents across all flows',
+    }] : []),
+    ...(can('admin') ? [{
+      href: '/settings/executions',
+      icon: 'pause_circle',
+      title: 'Pending Approvals',
+      description: 'View and manage executions awaiting human approval',
     }] : []),
     ...(can('admin') ? [{
       href: '/settings/sso',

@@ -119,6 +119,7 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
     getEndpoint: async (endpointId: string) => {
       const [endpoint] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, endpointId));
       if (!endpoint) return null;
+      if (endpoint.group_id && endpoint.group_id !== flow.group_id) return null;
       return {
         providerType: endpoint.provider_type as 'anthropic' | 'openai' | 'litellm',
         apiKey: endpoint.api_key,
@@ -128,6 +129,7 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
     getMCPServer: async (serverId: string) => {
       const [server] = await db.select().from(mcpServers).where(eq(mcpServers.id, serverId));
       if (!server) return null;
+      if (server.group_id && server.group_id !== flow.group_id) return null;
       return {
         id: server.id,
         name: server.name,
@@ -139,11 +141,13 @@ router.post('/chat/sessions/:sessionId/messages', requirePermission('chat:create
     getEmbeddingProvider: async (providerId: string) => {
       const [ep] = await db.select().from(embeddingProviders).where(eq(embeddingProviders.id, providerId));
       if (!ep) return null;
+      if (ep.group_id && ep.group_id !== flow.group_id) return null;
       return { providerType: ep.provider_type, apiKey: ep.api_key, baseUrl: ep.base_url, model: ep.model };
     },
     getVectorStore: async (storeId: string) => {
       const [vs] = await db.select().from(vectorStores).where(eq(vectorStores.id, storeId));
       if (!vs) return null;
+      if (vs.group_id && vs.group_id !== flow.group_id) return null;
       return { name: vs.name, url: vs.url, apiKey: vs.api_key };
     },
     flowNodes: flow.nodes as any[],

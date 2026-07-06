@@ -50,11 +50,8 @@ const EMPTY_FORM: FormState = {
 export default function SecretVaultsPage() {
   const { user } = useAuth();
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
-  const isAdmin = can('admin');
 
   const [vaults, setVaults] = useState<Vault[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   useAssistantContext({ pageKey: 'settings:secret-vaults', description: 'Managing secret vaults' });
@@ -84,17 +81,9 @@ export default function SecretVaultsPage() {
     fetchVaults();
   }, []);
 
-  useEffect(() => {
-    const g = isAdmin
-      ? fetch('/api/groups', { credentials: 'include' }).then(r => r.ok ? r.json() : [])
-      : Promise.resolve(user?.groups || []);
-    g.then(setGroups).catch(() => {});
-  }, [isAdmin, user?.groups]);
-
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
-    setSelectedGroupId('');
     setShowForm(false);
   };
 
@@ -145,14 +134,6 @@ export default function SecretVaultsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.baseUrl || !form.login || (!editingId && !form.apiKey)) {
-      setError('Name, URL, Login, and API Key are required.');
-      return;
-    }
-    if (!editingId && !selectedGroupId) {
-      setError('Please select a group to bind this vault to.');
-      return;
-    }
     setSaving(true);
     setError(null);
 
@@ -173,18 +154,8 @@ export default function SecretVaultsPage() {
       } else {
         const created = await api.secretVaults.create(body);
         setVaults((prev) => [...prev, created]);
-        // Bind to the selected group
-        if (selectedGroupId) {
-          await fetch(`/api/group-vault-config/${selectedGroupId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ vaultId: created.id, enabled: true }),
-          }).catch(() => {});
-        }
       }
       resetForm();
-      fetchVaults();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save vault');
     } finally {
@@ -256,24 +227,6 @@ export default function SecretVaultsPage() {
                 onChange={(v) => setForm((f) => ({ ...f, name: v }))}
               />
 
-              {!editingId && (
-                groups.length > 0 ? (
-                  <SelectField
-                    label="Bind to group"
-                    value={selectedGroupId}
-                    onChange={setSelectedGroupId}
-                    options={[
-                      { value: '', label: '— Select a group —' },
-                      ...groups.map(g => ({ value: g.id, label: g.name })),
-                    ]}
-                  />
-                ) : (
-                  <div className="col-span-2 p-3 bg-error-container rounded-lg text-sm text-error">
-                    No groups available. Create a group first before adding a vault.
-                  </div>
-                )
-              )}
-
               <TextField
                 label="URL"
                 value={form.baseUrl}
@@ -301,7 +254,6 @@ export default function SecretVaultsPage() {
                 value={form.apiKey}
                 onChange={(v) => setForm((f) => ({ ...f, apiKey: v }))}
                 helpText={editingId ? 'Leave blank to keep current' : undefined}
-                showPasswordToggle
               />
 
               <label className="flex items-center gap-2 text-sm cursor-pointer col-span-2">
@@ -330,17 +282,13 @@ export default function SecretVaultsPage() {
               >
                 Cancel
               </button>
-              <Tooltip content={(!form.name || !form.baseUrl || !form.login || (!editingId && !form.apiKey)) ? 'Fill in all required fields' : (!editingId && !selectedGroupId) ? 'Select a group' : ''}>
-                <span>
-                  <button
-                    type="submit"
-                    disabled={saving || !form.name || !form.baseUrl || !form.login || (!editingId && !form.apiKey) || (!editingId && !selectedGroupId)}
-                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {saving ? 'Saving...' : editingId ? 'Update Vault' : 'Create Vault'}
-                  </button>
-                </span>
-              </Tooltip>
+              <button
+                type="submit"
+                disabled={saving}
+                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : editingId ? 'Update Vault' : 'Create Vault'}
+              </button>
             </div>
           </form>
         )}

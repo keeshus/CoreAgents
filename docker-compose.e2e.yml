@@ -69,12 +69,15 @@ services:
       VALKEY_HOST: valkey-e2e
       VALKEY_PASSWORD: dev-valkey
       SECRETS_ENCRYPTION_KEY: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+      SIDECAR_URL: http://sidecar-e2e:4001
     depends_on:
       postgres-e2e:
         condition: service_healthy
       db-migrate-e2e:
         condition: service_completed_successfully
       mock-oidc-e2e:
+        condition: service_started
+      sidecar-e2e:
         condition: service_started
 
   frontend-e2e:
@@ -101,6 +104,7 @@ services:
       VALKEY_HOST: valkey-e2e
       VALKEY_PASSWORD: dev-valkey
       SECRETS_ENCRYPTION_KEY: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+      SIDECAR_URL: http://sidecar-e2e:4001
     depends_on:
       postgres-e2e:
         condition: service_healthy
@@ -108,6 +112,34 @@ services:
         condition: service_completed_successfully
       valkey-e2e:
         condition: service_started
+      sidecar-e2e:
+        condition: service_started
+
+  scheduler-e2e:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile.e2e
+    container_name: core-agents-e2e-scheduler
+    environment:
+      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
+      VALKEY_HOST: valkey-e2e
+      VALKEY_PASSWORD: dev-valkey
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      db-migrate-e2e:
+        condition: service_completed_successfully
+      valkey-e2e:
+        condition: service_started
+
+  sidecar-e2e:
+    build:
+      context: .
+      dockerfile: sidecar/Dockerfile.e2e
+    container_name: core-agents-e2e-sidecar
+    tmpfs: /var/flow-data
+    ports:
+      - "4001:4001"
 
   mock-llm-e2e:
     build:

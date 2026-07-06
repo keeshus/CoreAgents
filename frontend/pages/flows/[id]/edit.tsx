@@ -10,6 +10,7 @@ import { DebugOverlay } from '@/components/flow/DebugOverlay';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
+import { useConfirm } from '@/lib/useConfirm';
 import * as Separator from '@radix-ui/react-separator';
 import { useTheme } from '@/hooks/useTheme';
 import Link from 'next/link';
@@ -31,6 +32,14 @@ export default function FlowEditPage() {
   const [showDebug, setShowDebug] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   useAssistantContext({ pageKey: 'flow:' + (flow?.id || ""), description: 'Editing flow' });
+  const revealSecretConfirm = useConfirm({ title: 'Reveal secret?', message: 'Reveal the value of this secret? It will be visible on screen for 10 seconds.', variant: 'default' });
+  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, { value: string; expiresAt: number }>>({});
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Selected node for config editing
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -213,15 +222,10 @@ export default function FlowEditPage() {
   const { user } = useAuth();
   useEffect(() => {
     if (!user) return;
-    const isAdmin = user?.permissions?.includes('admin');
-    if (isAdmin) {
-      fetch('/api/groups', { credentials: 'include' })
-        .then(r => r.ok ? r.json() : Promise.reject('Failed'))
-        .then(setGroups)
-        .catch(() => {});
-    } else {
-      setGroups(user.groups || []);
-    }
+    fetch('/api/groups', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+      .then(setGroups)
+      .catch(() => {});
   }, [user]);
 
   // Auto-open debug overlay from ?debug=1
@@ -355,6 +359,10 @@ export default function FlowEditPage() {
   const [newSecretName, setNewSecretName] = useState('');
   const [newSecretValue, setNewSecretValue] = useState('');
   const [newSecretType, setNewSecretType] = useState<'core' | 'cyberark'>('core');
+  const [flowEnvVars, setFlowEnvVars] = useState<Array<{ name: string; type: string; value: string }>>([]);
+  const [newEnvVarName, setNewEnvVarName] = useState('');
+  const [newEnvVarType, setNewEnvVarType] = useState<'static' | 'core_secret' | 'cyberark'>('static');
+  const [newEnvVarValue, setNewEnvVarValue] = useState('');
 
   const openFlowSettings = useCallback(() => {
     setFlowSettingsDraft({
@@ -363,6 +371,7 @@ export default function FlowEditPage() {
       flow_context: flow?.flow_context || '',
       group_id: flow?.group_id || '',
     });
+    setFlowEnvVars((flow as any)?.envVars || []);
     if (flow?.id && flow.id !== 'new') {
       fetch(`/api/secrets?scope=flow&scopeId=${flow.id}`, { credentials: 'include' })
         .then(r => r.ok ? r.json() : [])
@@ -377,29 +386,15 @@ export default function FlowEditPage() {
   const saveFlowSettings = useCallback(async () => {
     if (!flow) return;
     const { name, description, flow_context, group_id } = flowSettingsDraft;
-    setFlow((prev: any) => ({ ...prev, name, description, flow_context, group_id: group_id || null }));
+    setFlow((prev: any) => ({ ...prev, name, description, flow_context, group_id: group_id || null, envVars: flowEnvVars }));
 
     // Persist flow metadata
     const flowId = flow.id;
     if (flowId !== 'new') {
-      await api.flows.update(flowId, { name, description, flow_context, group_id: group_id || null });
+      await api.flows.update(flowId, { name, description, flow_context, group_id: group_id || null, envVars: flowEnvVars });
     }
-
-    // Persist in-memory flow secrets
-    for (const s of flowSecrets) {
-      if (s.id.startsWith('temp_')) {
-        // New secret — create via API
-        const targetId = flowId === 'new' ? undefined : flowId;
-        await fetch(`/api/secrets`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ name: s.name, value: s.value, referencePath: s.referencePath, secretType: s.secretType || 'core', scope: 'flow', scopeId: targetId }),
-        });
-      }
-      // For existing secrets, the name/value can't be edited — only create/delete
-    }
-
     setShowFlowSettings(false);
-  }, [flow, flowSettingsDraft, flowSecrets]);
+  }, [flow, flowSettingsDraft, flowSecrets, flowEnvVars]);
 
   const { theme, toggle: toggleTheme } = useTheme();
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
@@ -420,6 +415,18 @@ export default function FlowEditPage() {
               <Icon name="settings" className="text-base" />
             </button>
           </Tooltip>
+          {groups.length > 0 && (
+            <SelectField
+              label="Group"
+              value={flow.group_id || ''}
+              onChange={(v) => setFlow((prev: any) => ({ ...prev, group_id: v || null }))}
+              options={[
+                { value: '', label: 'No group' },
+                ...groups.map(g => ({ value: g.id, label: g.name })),
+              ]}
+              className="min-w-[120px]"
+            />
+          )}
         </div>
       </div>
 
@@ -446,6 +453,7 @@ export default function FlowEditPage() {
             nodes={nodes}
             edges={edges}
             flowId={flow.id}
+            flow={flow}
             onConfigChange={handleConfigChange}
             onLabelChange={handleLabelChange}
             onDelete={handleDeleteNode}
@@ -556,30 +564,54 @@ export default function FlowEditPage() {
                   value={flowSettingsDraft.group_id || ''}
                   onChange={(v) => setFlowSettingsDraft(p => ({ ...p, group_id: v || null }))}
                   options={[
-                    ...(user?.permissions?.includes('admin') ? [{ value: '', label: 'No group' }] : []),
+                    { value: '', label: 'No group' },
                     ...groups.map(g => ({ value: g.id, label: g.name })),
                   ]}
                 />
               )}
 
               {/* ── Flow-level Secrets ── */}
-              <div className="border-t border-outline-variant pt-4">
-                <span className="text-xs font-medium text-on-surface-variant block mb-2">Flow Secrets</span>
-                {flowSecrets.length > 0 && (
+              {flow?.id && flow.id !== 'new' && (
+                <div className="border-t border-outline-variant pt-4">
+                  <span className="text-xs font-medium text-on-surface-variant block mb-2">Flow Secrets</span>
+                  {flowSecrets.length > 0 && (
                     <div className="space-y-1 mb-3">
                       {flowSecrets.map(s => (
                         <div key={s.id} className="flex items-center justify-between bg-surface-container rounded px-2 py-1.5">
                           <span className="text-xs font-mono text-on-surface">{s.name}</span>
                           <div className="flex items-center gap-1">
+                            {revealedSecrets[s.id] ? (
+                              <div className="flex items-center gap-2 px-2 py-1 bg-secondary-container rounded text-xs">
+                                <span className="font-mono text-on-surface max-w-[150px] truncate">{revealedSecrets[s.id].value}</span>
+                                <span className="text-[10px] text-on-surface-variant whitespace-nowrap">{Math.max(0, Math.floor((revealedSecrets[s.id].expiresAt - now) / 1000))}s</span>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  const confirmed = await revealSecretConfirm.confirm({ message: `Reveal the value of "${s.name}"?` });
+                                  if (!confirmed) return;
+                                  const res = await fetch(`/api/secrets/${s.id}/reveal`, { method: 'POST', credentials: 'include' });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    const expiresAt = Date.now() + 10000;
+                                    setRevealedSecrets(prev => ({ ...prev, [s.id]: { value: data.value, expiresAt } }));
+                                    setTimeout(() => {
+                                      setRevealedSecrets(prev => {
+                                        const next = { ...prev };
+                                        delete next[s.id];
+                                        return next;
+                                      });
+                                    }, 10000);
+                                  }
+                                }}
+                                className="p-1 text-on-surface-variant hover:text-primary rounded text-xs"
+                              ><Icon name="visibility" className="text-sm" /></button>
+                            )}
                             <button
-                              onClick={() => {
-                                const value = flowSecrets.find(x => x.id === s.id)?.value;
-                                if (value) alert(`Secret "${s.name}": ${value}`);
+                              onClick={async () => {
+                                await fetch(`/api/secrets/${s.id}`, { method: 'DELETE', credentials: 'include' });
+                                setFlowSecrets(prev => prev.filter(x => x.id !== s.id));
                               }}
-                              className="p-1 text-on-surface-variant hover:text-primary rounded text-xs"
-                            ><Icon name="visibility" className="text-sm" /></button>
-                            <button
-                              onClick={() => setFlowSecrets(prev => prev.filter(x => x.id !== s.id))}
                               className="p-1 text-on-surface-variant hover:text-error rounded text-xs"
                             ><Icon name="delete" className="text-sm" /></button>
                           </div>
@@ -587,16 +619,6 @@ export default function FlowEditPage() {
                       ))}
                     </div>
                   )}
-                  <div className="flex items-center gap-2 mb-2">
-                    <button
-                      onClick={() => setNewSecretType('core')}
-                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${newSecretType === 'core' ? 'bg-primary text-on-primary border-primary' : 'bg-surface text-on-surface-variant border-outline'}`}
-                    >Core</button>
-                    <button
-                      onClick={() => setNewSecretType('cyberark')}
-                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${newSecretType === 'cyberark' ? 'bg-primary text-on-primary border-primary' : 'bg-surface text-on-surface-variant border-outline'}`}
-                    >CyberArk</button>
-                  </div>
                   <div className="flex gap-2 items-start">
                     <input
                       placeholder="Secret name"
@@ -605,25 +627,100 @@ export default function FlowEditPage() {
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                     />
                     <input
-                      placeholder={newSecretType === 'cyberark' ? 'Reference path' : 'Value'}
+                      placeholder="Value"
                       value={newSecretValue}
                       onChange={e => setNewSecretValue(e.target.value)}
-                      type={newSecretType === 'cyberark' ? 'text' : 'password'}
+                      type="password"
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                     />
                     <button
-                      onClick={() => {
-                        if (!newSecretName || (newSecretType === 'core' && !newSecretValue)) return;
-                        if (newSecretType === 'cyberark' && !newSecretValue) return;
-                        const tempId = `temp_${Date.now()}`;
-                        setFlowSecrets(prev => [...prev, { id: tempId, name: newSecretName.trim(), secretType: newSecretType, value: newSecretType === 'core' ? newSecretValue : undefined, referencePath: newSecretType === 'cyberark' ? newSecretValue : undefined }]);
-                        setNewSecretName('');
-                        setNewSecretValue('');
+                      onClick={async () => {
+                        if (!newSecretName || !newSecretValue) return;
+                        const res = await fetch(`/api/secrets`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ name: newSecretName, value: newSecretValue, scope: 'flow', scopeId: flow.id }),
+                        });
+                        if (res.ok) {
+                          const created = await res.json();
+                          setFlowSecrets(prev => [...prev, created]);
+                          setNewSecretName('');
+                          setNewSecretValue('');
+                        }
                       }}
                       className="m3-button text-xs shrink-0"
                     ><Icon name="add" className="text-xs" /></button>
                   </div>
                   <p className="mt-1 text-[10px] text-on-surface-variant">Secrets are encrypted at rest. Use {'{{secrets.core.flow:NAME}}'} in templates.</p>
+              </div>
+              )}
+
+              {/* ── Flow-level Env Vars ── */}
+              <div className="border-t border-outline-variant pt-4">
+                <span className="text-xs font-medium text-on-surface-variant block mb-2">Environment Variables</span>
+                <p className="text-[10px] text-on-surface-variant mb-2">Available as {'{{env.NAME}}'} in templates and {'$NAME'} in bash commands.</p>
+                {flowEnvVars.length > 0 && (
+                  <div className="space-y-1 mb-3">
+                    {flowEnvVars.map((ev, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-surface-container rounded px-2 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono text-on-surface">{ev.name}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ev.type === 'static' ? 'bg-primary-container text-primary' : ev.type === 'core_secret' ? 'bg-secondary-container text-secondary' : 'bg-tertiary-container text-tertiary'}`}>
+                            {ev.type === 'static' ? 'Static' : ev.type === 'core_secret' ? 'Secret ref' : 'CyberArk'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const newVal = prompt('Edit value:', ev.value);
+                              if (newVal !== null) {
+                                setFlowEnvVars(prev => prev.map((x, i) => i === idx ? { ...x, value: newVal } : x));
+                              }
+                            }}
+                            className="p-1 text-on-surface-variant hover:text-primary rounded text-xs"
+                          ><Icon name="edit" className="text-sm" /></button>
+                          <button
+                            onClick={() => setFlowEnvVars(prev => prev.filter((_, i) => i !== idx))}
+                            className="p-1 text-on-surface-variant hover:text-error rounded text-xs"
+                          ><Icon name="delete" className="text-sm" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 items-start">
+                  <input
+                    placeholder="Variable name"
+                    value={newEnvVarName}
+                    onChange={e => setNewEnvVarName(e.target.value)}
+                    className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                  />
+                  <select
+                    value={newEnvVarType}
+                    onChange={e => setNewEnvVarType(e.target.value as any)}
+                    className="text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                  >
+                    <option value="static">Static</option>
+                    <option value="core_secret">Secret ref</option>
+                    <option value="cyberark">CyberArk</option>
+                  </select>
+                  <input
+                    placeholder={newEnvVarType === 'core_secret' ? 'Secret name' : newEnvVarType === 'cyberark' ? 'CyberArk path' : 'Value'}
+                    value={newEnvVarValue}
+                    onChange={e => setNewEnvVarValue(e.target.value)}
+                    className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newEnvVarName || !newEnvVarValue) return;
+                      setFlowEnvVars(prev => [...prev, { name: newEnvVarName.trim(), type: newEnvVarType, value: newEnvVarValue.trim() }]);
+                      setNewEnvVarName('');
+                      setNewEnvVarValue('');
+                    }}
+                    className="m3-button text-xs shrink-0"
+                  ><Icon name="add" className="text-xs" /></button>
+                </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0">
@@ -635,6 +732,7 @@ export default function FlowEditPage() {
           </div>
         </div>
       )}
+      {revealSecretConfirm.dialog}
     </div>
   );
 }

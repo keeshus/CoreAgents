@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { vectorStores } from '../db/schema.js';
+import { vectorStores, groupMembers } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import neo4j from 'neo4j-driver';
@@ -9,8 +9,20 @@ import { registerStore, createQdrantStore, createNeo4jStore } from '../vector-st
 
 const router = Router();
 
+async function checkGroupAdmin(userId: string, groupId: string): Promise<boolean> {
+  const [member] = await db.select()
+    .from(groupMembers)
+    .where(and(
+      eq(groupMembers.user_id, userId),
+      eq(groupMembers.group_id, groupId),
+      eq(groupMembers.role, 'admin'),
+    ))
+    .limit(1);
+  return !!member;
+}
+
 // Initialize pgvector fallback
-registerStore('pgvector', createQdrantStore('http://qdrant-e2e:6333')); // placeholder, real one uses db
+registerStore('pgvector', createQdrantStore('http://qdrant-e2e:6333'));
 
 // Load persisted stores on startup
 (async () => {
@@ -35,6 +47,19 @@ router.get('/vector-stores/:id/collections', asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const [rs] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
   if (!rs) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const isAdmin = req.user?.permissions?.includes('admin');
+  if (!isAdmin && rs.group_id) {
+    const userGroups = await db.select({ groupId: groupMembers.group_id })
+      .from(groupMembers)
+      .where(eq(groupMembers.user_id, req.user!.userId));
+    const groupIds = userGroups.map(g => g.groupId);
+    if (!groupIds.includes(rs.group_id)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+  }
+
   try {
     if (rs.store_type === 'neo4j') {
       const driver = neo4j.driver(rs.url, neo4j.auth.basic('', rs.api_key || ''));
@@ -52,10 +77,27 @@ router.get('/vector-stores/:id/collections', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/vector-stores/:id/refresh — refresh and persist collections
-router.post('/vector-stores/:id/refresh', requirePermission('store:write'), asyncHandler(async (req, res) => {
+router.post('/vector-stores/:id/refresh', requirePermission('store:write', 'store:write_group'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const [rs] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
   if (!rs) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const isAdmin = req.user!.permissions?.includes('admin');
+  if (rs.group_id) {
+    if (!isAdmin) {
+      const isGroupAdmin = await checkGroupAdmin(req.user!.userId, rs.group_id);
+      if (!isGroupAdmin) {
+        res.status(403).json({ error: 'Only group admins can refresh group-scoped vector stores' });
+        return;
+      }
+    }
+  } else {
+    if (!isAdmin && !req.user!.permissions.includes('store:write')) {
+      res.status(403).json({ error: 'Insufficient permissions to refresh app-wide vector stores' });
+      return;
+    }
+  }
+
   let collections: string[] = [];
   try {
     if (rs.store_type === 'neo4j') {
@@ -75,22 +117,68 @@ router.post('/vector-stores/:id/refresh', requirePermission('store:write'), asyn
   res.json(updated);
 }));
 
-router.get('/vector-stores', asyncHandler(async (_req, res) => {
-  res.json(await db.select().from(vectorStores));
+router.get('/vector-stores', asyncHandler(async (req, res) => {
+  const isAdmin = req.user?.permissions?.includes('admin');
+  const conditions: any[] = [];
+
+  if (!isAdmin) {
+    const userGroups = await db.select({ groupId: groupMembers.group_id })
+      .from(groupMembers)
+      .where(eq(groupMembers.user_id, req.user!.userId));
+    const groupIds = userGroups.map(g => g.groupId);
+
+    if (groupIds.length > 0) {
+      conditions.push(
+        or(
+          isNull(vectorStores.group_id),
+          inArray(vectorStores.group_id, groupIds),
+        ),
+      );
+    } else {
+      conditions.push(isNull(vectorStores.group_id));
+    }
+  }
+
+  const result = conditions.length > 0
+    ? await db.select().from(vectorStores).where(and(...conditions))
+    : await db.select().from(vectorStores);
+
+  res.json(result);
 }));
 
 router.get('/vector-stores/:id', asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   const [row] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
   if (!row) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const isAdmin = req.user?.permissions?.includes('admin');
+  if (!isAdmin && row.group_id) {
+    const userGroups = await db.select({ groupId: groupMembers.group_id })
+      .from(groupMembers)
+      .where(eq(groupMembers.user_id, req.user!.userId));
+    const groupIds = userGroups.map(g => g.groupId);
+    if (!groupIds.includes(row.group_id)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+  }
+
   res.json(row);
 }));
 
-router.post('/vector-stores', requirePermission('store:write'), asyncHandler(async (req, res) => {
-  const { name, storeType = 'qdrant', url, apiKey } = req.body;
+router.post('/vector-stores', requirePermission('store:write', 'store:write_group'), asyncHandler(async (req, res) => {
+  const { name, storeType = 'qdrant', url, apiKey, groupId } = req.body;
   if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return; }
 
-  // Test connection
+  if (groupId) {
+    const isAdmin = req.user!.permissions?.includes('admin');
+    const isGroupAdmin = await checkGroupAdmin(req.user!.userId, groupId);
+    if (!isAdmin && !isGroupAdmin) {
+      res.status(403).json({ error: 'Only group admins can create group-scoped vector stores' });
+      return;
+    }
+  }
+
   try {
     const factory = storeType === 'neo4j' ? createNeo4jStore : createQdrantStore;
     const store = factory(url, apiKey || undefined);
@@ -101,40 +189,72 @@ router.post('/vector-stores', requirePermission('store:write'), asyncHandler(asy
 
   const [row] = await db.insert(vectorStores).values({
     name, store_type: storeType, url, api_key: apiKey || null,
+    group_id: groupId || null,
   }).returning();
   res.status(201).json(row);
 }));
 
-router.put('/vector-stores/:id', requirePermission('store:write'), asyncHandler(async (req, res) => {
+router.put('/vector-stores/:id', requirePermission('store:write', 'store:write_group'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
+
+  const [existing] = await db.select().from(vectorStores).where(eq(vectorStores.id, id)).limit(1);
+  if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const isAdmin = req.user!.permissions?.includes('admin');
+  if (existing.group_id) {
+    if (!isAdmin) {
+      const isGroupAdmin = await checkGroupAdmin(req.user!.userId, existing.group_id);
+      if (!isGroupAdmin) {
+        res.status(403).json({ error: 'Only group admins can modify group-scoped vector stores' });
+        return;
+      }
+    }
+  } else {
+    if (!isAdmin && !req.user!.permissions.includes('store:write')) {
+      res.status(403).json({ error: 'Insufficient permissions to modify app-wide vector stores' });
+      return;
+    }
+  }
+
   const data: Record<string, unknown> = { updated_at: new Date() };
   const { name, url, apiKey } = req.body;
   if (name !== undefined) data.name = name;
   if (url !== undefined) data.url = url;
   if (apiKey !== undefined) data.api_key = apiKey;
 
-  // Re-register if URL changed
   if (url) {
-    const [existing] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
-    if (existing) {
-      try {
-        const factory = existing.store_type === 'neo4j' ? createNeo4jStore : createQdrantStore;
-        registerStore(existing.name, factory(url, apiKey || undefined));
-      } catch {}
-    }
+    try {
+      const factory = existing.store_type === 'neo4j' ? createNeo4jStore : createQdrantStore;
+      registerStore(existing.name, factory(url, apiKey || undefined));
+    } catch {}
   }
 
   const [row] = await db.update(vectorStores).set(data).where(eq(vectorStores.id, id)).returning();
-  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(row);
 }));
 
-router.delete('/vector-stores/:id', requirePermission('store:write'), asyncHandler(async (req, res) => {
+router.delete('/vector-stores/:id', requirePermission('store:write', 'store:write_group'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
-  const [row] = await db.select().from(vectorStores).where(eq(vectorStores.id, id));
-  if (row) {
-    // Unregister (vector store registry doesn't have remove, but it's fine)
+
+  const [existing] = await db.select().from(vectorStores).where(eq(vectorStores.id, id)).limit(1);
+  if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const isAdmin = req.user!.permissions?.includes('admin');
+  if (existing.group_id) {
+    if (!isAdmin) {
+      const isGroupAdmin = await checkGroupAdmin(req.user!.userId, existing.group_id);
+      if (!isGroupAdmin) {
+        res.status(403).json({ error: 'Only group admins can delete group-scoped vector stores' });
+        return;
+      }
+    }
+  } else {
+    if (!isAdmin && !req.user!.permissions.includes('store:write')) {
+      res.status(403).json({ error: 'Insufficient permissions to delete app-wide vector stores' });
+      return;
+    }
   }
+
   await db.delete(vectorStores).where(eq(vectorStores.id, id));
   res.status(204).send();
 }));

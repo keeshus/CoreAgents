@@ -7,6 +7,7 @@ import { useConfirm } from '@/lib/useConfirm';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useAuth } from '@/lib/auth-context';
 
 const PROVIDER_STYLES: Record<string, string> = {
   anthropic: 'bg-primary-container text-primary',
@@ -39,6 +40,10 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function EndpointsPage() {
+  const { user, userGroups } = useAuth();
+  const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
+  const canAdmin = can('admin');
+
   const [endpoints, setEndpoints] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,17 +51,28 @@ export default function EndpointsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [defaultIdx, setDefaultIdx] = useState(-1);
 
   const [deleting, setDeleting] = useState<string | null>(null);
   const deleteConfirm = useConfirm({ title: 'Delete endpoint?', message: 'Are you sure you want to delete this endpoint? This cannot be undone.' });
   useAssistantContext({ pageKey: 'settings:endpoints', description: 'Managing LLM endpoints' });
 
+  const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [filterGroupId, setFilterGroupId] = useState<string | null>(null);
+  const [formGroupId, setFormGroupId] = useState('');
+
+  useEffect(() => {
+    if (canAdmin) {
+      api.groups.list().then(setGroups).catch(() => {});
+    } else {
+      setGroups(userGroups);
+    }
+  }, [canAdmin, userGroups]);
+
   const fetchEndpoints = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.llmEndpoints.list();
+      const data = await api.llmEndpoints.list(filterGroupId ? { groupId: filterGroupId } : undefined);
       setEndpoints(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load endpoints');
@@ -67,13 +83,13 @@ export default function EndpointsPage() {
 
   useEffect(() => {
     fetchEndpoints();
-  }, []);
+  }, [filterGroupId]);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
-    setDefaultIdx(-1);
     setShowForm(false);
+    setFormGroupId('');
   };
 
   const handleEdit = (ep: any) => {
@@ -85,9 +101,8 @@ export default function EndpointsPage() {
       defaultModel: ep.default_model,
       models: (ep.models || []).join(', '),
     });
-    const models = ep.models || [];
-    setDefaultIdx(models.indexOf(ep.default_model));
     setEditingId(ep.id);
+    setFormGroupId(ep.group_id || '');
     setShowForm(true);
   };
 
@@ -120,10 +135,6 @@ export default function EndpointsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || (!editingId && !form.apiKey)) {
-      setError('Name and API Key are required.');
-      return;
-    }
     setSaving(true);
     setError(null);
 
@@ -132,15 +143,13 @@ export default function EndpointsPage() {
       .map((m) => m.trim())
       .filter(Boolean);
 
-    const resolvedDefault = defaultIdx >= 0 && defaultIdx < modelsList.length ? modelsList[defaultIdx] : form.defaultModel;
-
     try {
       if (editingId) {
         const updateData: Record<string, unknown> = {
           name: form.name,
           providerType: form.providerType,
           baseUrl: form.baseUrl || null,
-          defaultModel: resolvedDefault,
+          defaultModel: form.defaultModel,
           models: modelsList,
         };
         if (form.apiKey) updateData.apiKey = form.apiKey;
@@ -155,8 +164,9 @@ export default function EndpointsPage() {
           providerType: form.providerType,
           baseUrl: form.baseUrl || null,
           apiKey: form.apiKey,
-          defaultModel: resolvedDefault,
+          defaultModel: form.defaultModel,
           models: modelsList,
+          groupId: formGroupId || null,
         });
         setEndpoints((prev) => [...prev, created]);
       }
@@ -167,6 +177,10 @@ export default function EndpointsPage() {
       setSaving(false);
     }
   };
+
+  const filteredEndpoints = filterGroupId
+    ? endpoints.filter((ep) => ep.group_id === filterGroupId || !ep.group_id)
+    : endpoints;
 
   return (
     <div className="min-h-screen bg-surface-container">
@@ -193,6 +207,27 @@ export default function EndpointsPage() {
               <Icon name="add" className="text-base" />
               Add Endpoint
             </button>
+          )}
+        </div>
+
+        {/* Group filter */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <button
+            onClick={() => setFilterGroupId(null)}
+            className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+              filterGroupId === null ? 'bg-primary text-on-primary shadow-m3-1' : 'bg-surface border border-outline text-on-surface-variant hover:bg-surface-container-high'
+            }`}
+          >
+            <Icon name="public" className="text-sm mr-1" /> App-wide
+          </button>
+          {groups.length > 0 && (
+            <SelectField
+              label="Group"
+              value={filterGroupId || ''}
+              onChange={(v) => setFilterGroupId(v || null)}
+              options={groups.map((g) => ({ value: g.id, label: g.name }))}
+              className="w-48"
+            />
           )}
         </div>
 
@@ -249,19 +284,18 @@ export default function EndpointsPage() {
                 value={form.apiKey}
                 onChange={(v) => setForm((f) => ({ ...f, apiKey: v }))}
                 helpText={editingId ? 'Leave blank to keep current' : undefined}
-                showPasswordToggle
               />
 
             <div className="col-span-2">
               <span className="text-xs font-medium text-on-surface-variant block mb-1">Models</span>
               <div className="space-y-1.5">
-                {(form.models ? form.models.split(',').map(s => s.trim()) : []).map((model, i) => (
-                  <div key={i} className={`flex items-center gap-1 p-2 rounded transition-colors ${defaultIdx === i ? 'bg-secondary-container ring-1 ring-primary' : ''}`}>
+                {(form.models ? form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '') : []).map((model, i) => (
+                  <div key={i} className={`flex items-center gap-1 p-2 rounded transition-colors ${form.defaultModel === model ? 'bg-secondary-container ring-1 ring-primary' : ''}`}>
                     <span
-                      onClick={() => setDefaultIdx(i)}
+                      onClick={() => setForm((f) => ({ ...f, defaultModel: model }))}
                       className="flex items-center cursor-pointer shrink-0 w-20 justify-center"
                     >
-                      {defaultIdx === i ? (
+                      {form.defaultModel === model ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary text-on-primary font-medium">Default</span>
                       ) : (
                         <span className="text-[10px] px-1.5 py-0.5 text-on-surface-variant">Set default</span>
@@ -271,7 +305,7 @@ export default function EndpointsPage() {
                       label="Model"
                       value={model}
                       onChange={(v) => {
-                        const list = form.models.split(',').map(s => s.trim());
+                        const list = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
                         list[i] = v;
                         setForm((f) => ({ ...f, models: list.join(', ') }));
                       }}
@@ -280,7 +314,7 @@ export default function EndpointsPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        const list = form.models.split(',').map(s => s.trim());
+                        const list = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
                         list.splice(i, 1);
                         setForm((f) => ({ ...f, models: list.join(', ') }));
                       }}
@@ -291,18 +325,25 @@ export default function EndpointsPage() {
                 ))}
                 <button
                   type="button"
-                  onClick={() => setForm((f) => {
-                    const newModels = f.models ? f.models + ', ' : ' ';
-                    const list = (newModels).split(',').map(s => s.trim());
-                    if (!editingId && defaultIdx < 0) setDefaultIdx(list.length - 1);
-                    return { ...f, models: newModels };
-                  })}
+                  onClick={() => setForm((f) => ({ ...f, models: f.models ? f.models + ', ' : ' ' }))}
                   className="text-[11px] text-primary hover:underline"
                 >+ Add model</button>
               </div>
               <p className="mt-1 text-[10px] text-on-surface-variant">Click "Set default" to mark a model as the default for this endpoint.</p>
             </div>
           </div>
+
+            {!editingId && groups.length > 0 && (
+              <SelectField
+                label="Scope"
+                value={formGroupId}
+                onChange={setFormGroupId}
+                options={[
+                  { value: '', label: 'App-wide' },
+                  ...groups.map((g) => ({ value: g.id, label: g.name })),
+                ]}
+              />
+            )}
 
             <div className="flex items-center gap-2 justify-end">
               <button
@@ -312,17 +353,13 @@ export default function EndpointsPage() {
               >
                 Cancel
               </button>
-              <Tooltip content={(!form.name || (!editingId && !form.apiKey)) ? 'Fill in all required fields' : ''}>
-                <span>
-                  <button
-                    type="submit"
-                    disabled={saving || !form.name || (!editingId && !form.apiKey)}
-                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
-                  </button>
-                </span>
-              </Tooltip>
+              <button
+                type="submit"
+                disabled={saving}
+                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
+              </button>
             </div>
           </form>
         )}
@@ -333,7 +370,7 @@ export default function EndpointsPage() {
         )}
 
         {/* Empty state */}
-        {!loading && !error && endpoints.length === 0 && (
+        {!loading && !error && filteredEndpoints.length === 0 && (
           <div className="text-center py-16 bg-surface rounded-lg border border-outline-variant">
             <Icon name="memory" className="text-4xl text-on-surface-variant mx-auto mb-3" />
             <p className="text-on-surface-variant font-medium">No endpoints configured</p>
@@ -344,9 +381,9 @@ export default function EndpointsPage() {
         )}
 
         {/* Endpoint list */}
-        {!loading && endpoints.length > 0 && (
+        {!loading && filteredEndpoints.length > 0 && (
           <div className="space-y-3">
-            {[...endpoints].sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : 0)).map((ep) => (
+            {[...filteredEndpoints].sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : 0)).map((ep) => (
               <div
                 key={ep.id}
                 className="bg-surface rounded-lg border border-outline-variant p-4 flex items-start gap-4"
@@ -367,6 +404,13 @@ export default function EndpointsPage() {
                     >
                       {PROVIDER_LABELS[ep.provider_type] || ep.provider_type}
                     </span>
+                    {ep.group_id ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-medium">
+                        {groups.find((g) => g.id === ep.group_id)?.name || 'Group'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-medium">App</span>
+                    )}
                   </div>
                   <p className="text-sm text-on-surface-variant mt-1">
                     Model: <span className="font-mono text-on-surface-variant">{ep.default_model}</span>

@@ -301,7 +301,7 @@ const openGroupManager = (u: User) => {
             <div className="space-y-3">
               <TextField label="Name" value={newName} onChange={setNewName} />
               <TextField label="Email" type="email" value={newEmail} onChange={setNewEmail} />
-              <TextField label="Password" type="password" value={newPassword} onChange={setNewPassword} helpText="Minimum 8 characters" showPasswordToggle />
+              <TextField label="Password" type="password" value={newPassword} onChange={setNewPassword} helpText="Minimum 8 characters" />
               <button onClick={handleCreate} disabled={creating} className="w-full m3-button disabled:opacity-50">
                 {creating ? 'Creating...' : 'Create User'}
               </button>

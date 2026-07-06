@@ -28,6 +28,27 @@ services:
       - qdrant_data:/qdrant/storage
     restart: always
 
+  valkey:
+    image: valkey/valkey:7-alpine
+    container_name: core-agents-valkey
+    ports:
+      - "6379:6379"
+    command: valkey-server --requirepass ${VALKEY_PASSWORD:-dev-valkey}
+    restart: always
+
+  sidecar:
+    build:
+      context: .
+      dockerfile: sidecar/Dockerfile
+    container_name: core-agents-sidecar
+    tmpfs: /var/flow-data
+<<<<<<< HEAD
+=======
+    ports:
+      - "4001:4001"
+>>>>>>> bca33d9 (feat: env var management UI — app, group, and flow level)
+    restart: unless-stopped
+
   backend:
     container_name: core-agents-backend
     build:
@@ -42,15 +63,24 @@ services:
       - PORT=3001
       - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - SIDECAR_URL=http://sidecar:4001
     restart: always
 
-  valkey:
-    image: valkey/valkey:7-alpine
-    container_name: core-agents-valkey
-    ports:
-      - "6379:6379"
-    command: valkey-server --requirepass ${VALKEY_PASSWORD:-dev-valkey}
-    restart: always
+  scheduler:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile
+    container_name: core-agents-scheduler
+    environment:
+      - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
+      - VALKEY_HOST=valkey
+      - VALKEY_PASSWORD=${VALKEY_PASSWORD:-dev-valkey}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+    restart: unless-stopped
 
   worker:
     container_name: core-agents-worker
@@ -61,8 +91,11 @@ services:
     environment:
       - VALKEY_HOST=valkey
       - VALKEY_PASSWORD=${VALKEY_PASSWORD:-dev-valkey}
+      - SIDECAR_URL=http://sidecar:4001
+      - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
     depends_on:
       - valkey
+      - sidecar
 
   frontend:
     container_name: core-agents-frontend

@@ -1,18 +1,54 @@
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { llmEndpoints } from '../db/schema.js';
+import { llmEndpoints, groupMembers } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 
 const router = Router();
 
+async function checkGroupAdmin(userId: string, groupId: string): Promise<boolean> {
+  const [member] = await db.select()
+    .from(groupMembers)
+    .where(and(
+      eq(groupMembers.user_id, userId),
+      eq(groupMembers.group_id, groupId),
+      eq(groupMembers.role, 'admin'),
+    ))
+    .limit(1);
+  return !!member;
+}
+
 // GET /api/llm-endpoints — list all endpoints
 router.get(
   '/',
   requirePermission('endpoint:read'),
-  asyncHandler(async (_req, res) => {
-    const result = await db.select().from(llmEndpoints);
+  asyncHandler(async (req, res) => {
+    const isAdmin = req.user!.permissions?.includes('admin');
+    const conditions: any[] = [];
+
+    if (!isAdmin) {
+      const userGroups = await db.select({ groupId: groupMembers.group_id })
+        .from(groupMembers)
+        .where(eq(groupMembers.user_id, req.user!.userId));
+      const groupIds = userGroups.map(g => g.groupId);
+
+      if (groupIds.length > 0) {
+        conditions.push(
+          or(
+            isNull(llmEndpoints.group_id),
+            inArray(llmEndpoints.group_id, groupIds),
+          ),
+        );
+      } else {
+        conditions.push(isNull(llmEndpoints.group_id));
+      }
+    }
+
+    const result = conditions.length > 0
+      ? await db.select().from(llmEndpoints).where(and(...conditions))
+      : await db.select().from(llmEndpoints);
+
     res.json(result.map(({ api_key, ...safe }: any) => safe));
   }),
 );
@@ -38,17 +74,29 @@ router.get(
       return;
     }
 
+    const isAdmin = req.user!.permissions?.includes('admin');
+    if (!isAdmin && result[0].group_id) {
+      const userGroups = await db.select({ groupId: groupMembers.group_id })
+        .from(groupMembers)
+        .where(eq(groupMembers.user_id, req.user!.userId));
+      const groupIds = userGroups.map(g => g.groupId);
+      if (!groupIds.includes(result[0].group_id)) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+    }
+
     const { api_key, ...safe } = result[0];
     res.json(safe);
   }),
 );
 
-// POST /api/llm-endpoints — create endpoint (admin only)
+// POST /api/llm-endpoints — create endpoint
 router.post(
   '/',
-  requirePermission('endpoint:write'),
+  requirePermission('endpoint:write', 'endpoint:write_group'),
   asyncHandler(async (req, res) => {
-    const { name, providerType, baseUrl, apiKey, defaultModel, models = [] } = req.body;
+    const { name, providerType, baseUrl, apiKey, defaultModel, models = [], groupId } = req.body;
 
     if (!name || !providerType || !apiKey || !defaultModel) {
       res.status(400).json({ error: 'name, providerType, apiKey, and defaultModel are required' });
@@ -61,6 +109,15 @@ router.post(
       return;
     }
 
+    if (groupId) {
+      const isAdmin = req.user!.permissions?.includes('admin');
+      const isGroupAdmin = await checkGroupAdmin(req.user!.userId, groupId);
+      if (!isAdmin && !isGroupAdmin) {
+        res.status(403).json({ error: 'Only group admins can create group-scoped endpoints' });
+        return;
+      }
+    }
+
     const result = await db
       .insert(llmEndpoints)
       .values({
@@ -70,6 +127,7 @@ router.post(
         api_key: apiKey,
         default_model: defaultModel,
         models,
+        group_id: groupId || null,
       })
       .returning();
 
@@ -77,13 +135,35 @@ router.post(
   }),
 );
 
-// PUT /api/llm-endpoints/:id — update endpoint (admin only)
+// PUT /api/llm-endpoints/:id — update endpoint
 router.put(
   '/:id',
-  requirePermission('endpoint:write'),
+  requirePermission('endpoint:write', 'endpoint:write_group'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
     const { name, providerType, baseUrl, apiKey, defaultModel, models, isDefault } = req.body;
+
+    const [existing] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, id)).limit(1);
+    if (!existing) {
+      res.status(404).json({ error: 'LLM endpoint not found' });
+      return;
+    }
+
+    const isAdmin = req.user!.permissions?.includes('admin');
+    if (existing.group_id) {
+      if (!isAdmin) {
+        const isGroupAdmin = await checkGroupAdmin(req.user!.userId, existing.group_id);
+        if (!isGroupAdmin) {
+          res.status(403).json({ error: 'Only group admins can modify group-scoped endpoints' });
+          return;
+        }
+      }
+    } else {
+      if (!isAdmin && !req.user!.permissions.includes('endpoint:write')) {
+        res.status(403).json({ error: 'Insufficient permissions to modify app-wide endpoints' });
+        return;
+      }
+    }
 
     const updateData: Record<string, unknown> = {
       updated_at: new Date(),
@@ -110,30 +190,40 @@ router.put(
     }
 
     const result = await db.update(llmEndpoints).set(updateData).where(eq(llmEndpoints.id, id)).returning();
-
-    if (result.length === 0) {
-      res.status(404).json({ error: 'LLM endpoint not found' });
-      return;
-    }
-
     res.json(result[0]);
   }),
 );
 
-// DELETE /api/llm-endpoints/:id — delete endpoint (admin only)
+// DELETE /api/llm-endpoints/:id — delete endpoint
 router.delete(
   '/:id',
-  requirePermission('endpoint:write'),
+  requirePermission('endpoint:write', 'endpoint:write_group'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
 
-    const result = await db.delete(llmEndpoints).where(eq(llmEndpoints.id, id)).returning();
-
-    if (result.length === 0) {
+    const [existing] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, id)).limit(1);
+    if (!existing) {
       res.status(404).json({ error: 'LLM endpoint not found' });
       return;
     }
 
+    const isAdmin = req.user!.permissions?.includes('admin');
+    if (existing.group_id) {
+      if (!isAdmin) {
+        const isGroupAdmin = await checkGroupAdmin(req.user!.userId, existing.group_id);
+        if (!isGroupAdmin) {
+          res.status(403).json({ error: 'Only group admins can delete group-scoped endpoints' });
+          return;
+        }
+      }
+    } else {
+      if (!isAdmin && !req.user!.permissions.includes('endpoint:write')) {
+        res.status(403).json({ error: 'Insufficient permissions to delete app-wide endpoints' });
+        return;
+      }
+    }
+
+    await db.delete(llmEndpoints).where(eq(llmEndpoints.id, id));
     res.status(204).send();
   }),
 );

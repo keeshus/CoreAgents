@@ -4,13 +4,17 @@
  */
 import { createExecutionWorker } from './queue.js';
 import { executeFlowWithPersistence } from './executor/runner.js';
+import { createSidecarClient, createReaper } from './sandbox/index.js';
 
 async function main() {
   console.log('Worker started, waiting for jobs...');
 
-  const { db } = await import('../../backend/src/db/connection.js');
-  const { executions, executionSteps, agentContexts, agentStore, groups } = await import('../../backend/src/db/schema.js');
+  const { getDb, executions, executionSteps, agentContexts, agentStore, groups } = await import('core-agents-shared');
+  const { db } = getDb();
   const { eq, and, inArray } = await import('drizzle-orm');
+
+  const sidecarClient = createSidecarClient();
+  const reaper = createReaper(sidecarClient, db, executions);
 
   const worker = createExecutionWorker(async (job) => {
     const { flow, input } = job;
@@ -46,12 +50,16 @@ async function main() {
     console.log(`Flow ${flow.id}: ${result.status} (exec ${execId})`);
   });
 
+  reaper.start();
+
   process.on('SIGTERM', () => {
     console.log('Worker: shutting down...');
+    reaper.stop();
     worker.close();
   });
   process.on('SIGINT', () => {
     console.log('Worker: shutting down...');
+    reaper.stop();
     worker.close();
   });
 }

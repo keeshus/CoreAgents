@@ -8,6 +8,7 @@ import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { logger } from '../utils/logger.js';
 import type { SSEEvent, FlowDefinition, ExecutionStep } from 'core-agents-shared';
+import { createSidecarClient, createSandboxManager } from '../../../worker/src/sandbox/index.js';
 
 const secretStore = new Map<string, string>();
 const router = Router();
@@ -48,14 +49,44 @@ router.get('/executions/pending', requirePermission('execution:approve'), asyncH
   res.json(filtered);
 }));
 
-// GET /api/executions — global list of all executions across all flows (admin only)
-router.get('/executions', requirePermission('admin'), asyncHandler(async (_req, res) => {
-  const result = await db
-    .select()
+// GET /api/executions — list executions with optional status filter (admin only)
+router.get('/executions', requirePermission('admin'), asyncHandler(async (req, res) => {
+  const status = req.query.status as string | undefined;
+  const limit = parseInt((req.query.limit as string) || '50');
+  const offset = parseInt((req.query.offset as string) || '0');
+  const conditions: any[] = [];
+  if (status) conditions.push(sql`${executions.status} = ${status}`);
+
+  const results = await db.select({
+    id: executions.id,
+    flow_id: executions.flow_id,
+    status: executions.status,
+    input: executions.input,
+    output: executions.output,
+    error: executions.error,
+    started_at: executions.started_at,
+    completed_at: executions.completed_at,
+    created_at: executions.created_at,
+    pending_hitls: executions.pending_hitls,
+  })
     .from(executions)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(executions.created_at))
-    .limit(100);
-  res.json(result);
+    .limit(limit)
+    .offset(offset);
+
+  // Enhance with flow names
+  const flowIds = [...new Set(results.map(r => r.flow_id))];
+  const flowMap: Record<string, string> = {};
+  if (flowIds.length > 0) {
+    const flowRows = await db.select({ id: flows.id, name: flows.name }).from(flows).where(inArray(flows.id, flowIds));
+    for (const f of flowRows) { flowMap[f.id] = f.name; }
+  }
+
+  res.json(results.map(r => ({
+    ...r,
+    flow_name: flowMap[r.flow_id] || 'Unknown',
+  })));
 }));
 
 // POST /api/executions/:executionId/cancel — cancel a running execution
@@ -75,6 +106,17 @@ router.post('/executions/:executionId/cancel', requirePermission('flow:edit'), a
     .set({ status: 'cancelled', completed_at: new Date() })
     .where(eq(executions.id, executionId));
 
+  res.json({ status: 'cancelled' });
+}));
+
+// POST /api/executions/:id/admin-cancel — force-cancel a stuck execution (admin only)
+router.post('/executions/:id/admin-cancel', requirePermission('admin'), asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  await db.update(executions).set({
+    status: 'cancelled',
+    error: 'Cancelled by admin',
+    completed_at: new Date(),
+  }).where(eq(executions.id, String(req.params.id)));
   res.json({ status: 'cancelled' });
 }));
 
@@ -158,6 +200,18 @@ router.post(
       timestamp: new Date().toISOString(),
     });
 
+    // Initialize sandbox for this execution
+    const sidecarClient = createSidecarClient();
+    const sandboxManager = createSandboxManager(sidecarClient);
+    const sandboxExecutionId = execId;
+
+    try {
+      await sandboxManager.setup(sandboxExecutionId);
+    } catch (err) {
+      console.error(`Sandbox setup failed for ${sandboxExecutionId}:`, err);
+      // Non-fatal
+    }
+
     // Build execution context: resolve LLM endpoints from DB ------
     const executionContext: import('../../../worker/src/executor/engine.js').ExecutionContext = {
       currentExecutionId: execId,
@@ -167,6 +221,7 @@ router.post(
           .from(llmEndpoints)
           .where(eq(llmEndpoints.id, endpointId));
         if (!endpoint) return null;
+        if (endpoint.group_id && endpoint.group_id !== flowGroupId) return null;
         return {
           providerType: endpoint.provider_type as 'anthropic' | 'openai' | 'litellm',
           apiKey: endpoint.api_key,
@@ -176,6 +231,7 @@ router.post(
       getMCPServer: async (serverId: string) => {
         const [server] = await db.select().from(mcpServers).where(eq(mcpServers.id, serverId));
         if (!server) return null;
+        if (server.group_id && server.group_id !== flowGroupId) return null;
         return {
           id: server.id,
           name: server.name,
@@ -187,11 +243,13 @@ router.post(
       getEmbeddingProvider: async (providerId: string) => {
         const [ep] = await db.select().from(embeddingProviders).where(eq(embeddingProviders.id, providerId));
         if (!ep) return null;
+        if (ep.group_id && ep.group_id !== flowGroupId) return null;
         return { providerType: ep.provider_type, apiKey: ep.api_key, baseUrl: ep.base_url, model: ep.model };
       },
       getVectorStore: async (storeId: string) => {
         const [vs] = await db.select().from(vectorStores).where(eq(vectorStores.id, storeId));
         if (!vs) return null;
+        if (vs.group_id && vs.group_id !== flowGroupId) return null;
         return { name: vs.name, url: vs.url, apiKey: vs.api_key };
       },
       getFlow: async (flowId: string, ancestry?: string[]) => {
@@ -254,28 +312,9 @@ router.post(
         const [secret] = await db.select().from(secretsTable).where(
           and(eq(secretsTable.name, secretName), eq(secretsTable.scope, scope))
         ).limit(1);
-        if (!secret) return null;
-        // CyberArk reference — resolve live from the vault
-        if (secret.secret_type === 'cyberark' && secret.reference_path) {
-          const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
-          const { secretVaults: vaultsTable } = await import('../db/schema.js');
-          const [vault] = await db.select().from(vaultsTable).where(eq(vaultsTable.is_connected, true)).limit(1);
-          if (!vault) return null;
-          const keyParts = vault.api_key.split(':');
-          const { decrypt } = await import('../utils/encryption.js');
-          const apiKey = await decrypt(keyParts[0], keyParts[1], keyParts[2], parseInt(keyParts[3]));
-          return conjurGetSecret({
-            baseUrl: vault.base_url,
-            account: vault.account,
-            login: vault.login,
-            apiKey,
-            caCert: vault.ca_cert || undefined,
-            selfHosted: vault.self_hosted,
-          }, secret.reference_path);
-        }
-        // Core secret — decrypt from the DB
+        if (!secret || !secret.encrypted_value || !secret.encryption_iv || !secret.encryption_tag) return null;
         const { decrypt } = await import('../utils/encryption.js');
-        return decrypt(secret.encrypted_value!, secret.encryption_iv!, secret.encryption_tag!, secret.key_version);
+        return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
       },
       getCyberArkSecret: async (variableId: string) => {
         const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
@@ -313,6 +352,8 @@ router.post(
           created_at: new Date(),
         }).catch(() => {});
       },
+      sandboxExecutionId,
+      sandboxEnv: (input as any)?.__env || {},
     };
 
     // Map Drizzle row (snake_case) to FlowDefinition (camelCase) BEFORE building context
@@ -346,6 +387,7 @@ router.post(
       activeExecutors.delete(execId);
     });
 
+    let skipTeardown = false;
     try {
       const result = await executor.execute(
         flowDef,
@@ -442,6 +484,7 @@ router.post(
 
       // Handle HITL pause — save partial outputs and await approval
       if (err instanceof HitlPauseError) {
+        skipTeardown = true;
         activeExecutors.delete(execId);
         const hitlCfg = (flowDef.nodes || []).find((n: any) => n.id === err.nodeId)?.data?.config || {};
         if (!isDebug) {
@@ -494,6 +537,12 @@ router.post(
         data: { error },
         timestamp: new Date().toISOString(),
       });
+    } finally {
+      if (!skipTeardown) {
+        sandboxManager.teardown(sandboxExecutionId).catch(err => {
+          console.error(`Sandbox teardown failed for ${sandboxExecutionId}:`, err);
+        });
+      }
     }
 
     res.end();
@@ -654,21 +703,25 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
     getEndpoint: async (endpointId: string) => {
       const [ep] = await db.select().from(llmEndpoints).where(eq(llmEndpoints.id, endpointId));
       if (!ep) return null;
+      if (ep.group_id && ep.group_id !== flowDef?.groupId) return null;
       return { providerType: ep.provider_type as 'anthropic' | 'openai' | 'litellm', apiKey: ep.api_key, baseUrl: ep.base_url };
     },
     getMCPServer: async (serverId: string) => {
       const [server] = await db.select().from(mcpServers).where(eq(mcpServers.id, serverId));
       if (!server) return null;
+      if (server.group_id && server.group_id !== flowDef?.groupId) return null;
       return { id: server.id, name: server.name, url: server.url, tools: server.tools as any[], enabled: server.enabled };
     },
     getEmbeddingProvider: async (providerId: string) => {
       const [ep] = await db.select().from(embeddingProviders).where(eq(embeddingProviders.id, providerId));
       if (!ep) return null;
+      if (ep.group_id && ep.group_id !== flowDef?.groupId) return null;
       return { providerType: ep.provider_type, apiKey: ep.api_key, baseUrl: ep.base_url, model: ep.model };
     },
     getVectorStore: async (storeId: string) => {
       const [vs] = await db.select().from(vectorStores).where(eq(vectorStores.id, storeId));
       if (!vs) return null;
+      if (vs.group_id && vs.group_id !== flowDef?.groupId) return null;
       return { name: vs.name, url: vs.url, apiKey: vs.api_key };
     },
     getFlow: async (flowId: string, ancestry?: string[]) => {
@@ -734,22 +787,9 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       const [secret] = await db.select().from(secretsTable).where(
         and(eq(secretsTable.name, secretName), eq(secretsTable.scope, scope))
       ).limit(1);
-      if (!secret) return null;
-      if (secret.secret_type === 'cyberark' && secret.reference_path) {
-        const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
-        const { secretVaults: vaultsTable } = await import('../db/schema.js');
-        const [vault] = await db.select().from(vaultsTable).where(eq(vaultsTable.is_connected, true)).limit(1);
-        if (!vault) return null;
-        const keyParts = vault.api_key.split(':');
-        const { decrypt } = await import('../utils/encryption.js');
-        const apiKey = await decrypt(keyParts[0], keyParts[1], keyParts[2], parseInt(keyParts[3]));
-        return conjurGetSecret({
-          baseUrl: vault.base_url, account: vault.account, login: vault.login,
-          apiKey, caCert: vault.ca_cert || undefined, selfHosted: vault.self_hosted,
-        }, secret.reference_path);
-      }
+      if (!secret || !secret.encrypted_value || !secret.encryption_iv || !secret.encryption_tag) return null;
       const { decrypt } = await import('../utils/encryption.js');
-      return decrypt(secret.encrypted_value!, secret.encryption_iv!, secret.encryption_tag!, secret.key_version);
+      return decrypt(secret.encrypted_value, secret.encryption_iv, secret.encryption_tag, secret.key_version);
     },
     getCyberArkSecret: async (variableId: string) => {
       const { getSecret: conjurGetSecret } = await import('../services/cyberark.js');
@@ -787,6 +827,8 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
     },
     flowNodes: flowDef.nodes as any,
     flowEdges: flowDef.edges as any,
+    sandboxExecutionId: executionId,
+    sandboxEnv: (exec.input as any)?.__env || {},
   };
 
   const executor = new FlowExecutor();

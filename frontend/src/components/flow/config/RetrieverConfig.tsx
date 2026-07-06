@@ -14,9 +14,10 @@ interface RetrieverConfigProps {
     minScore?: number;
   };
   onChange: (config: any) => void;
+  flow?: { group_id?: string };
 }
 
-export function RetrieverConfig({ config, onChange }: RetrieverConfigProps) {
+export function RetrieverConfig({ config, onChange, flow }: RetrieverConfigProps) {
   const [embeddingProviders, setEmbeddingProviders] = useState<any[]>([]);
   const [vectorStores, setVectorStores] = useState<any[]>([]);
 
@@ -24,6 +25,14 @@ export function RetrieverConfig({ config, onChange }: RetrieverConfigProps) {
     fetch(`${API_URL}/embedding-providers`).then(r => r.json()).then(data => setEmbeddingProviders(Array.isArray(data) ? data : [])).catch(() => {});
     fetch(`${API_URL}/vector-stores`).then(r => r.json()).then(data => setVectorStores(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
+
+  const filteredEmbeddingProviders = flow?.group_id
+    ? embeddingProviders.filter((ep: any) => !ep.group_id || ep.group_id === flow.group_id)
+    : embeddingProviders;
+
+  const filteredVectorStores = flow?.group_id
+    ? vectorStores.filter((vs: any) => !vs.group_id || vs.group_id === flow.group_id)
+    : vectorStores;
 
   return (
     <div className="space-y-3">
@@ -33,7 +42,7 @@ export function RetrieverConfig({ config, onChange }: RetrieverConfigProps) {
         onChange={(v) => onChange({ embeddingProviderId: v })}
         options={[
           { value: '', label: 'Select provider...' },
-          ...embeddingProviders.map((ep: any) => ({ value: ep.id, label: `${ep.name} (${ep.model})` })),
+          ...filteredEmbeddingProviders.map((ep: any) => ({ value: ep.id, label: `${ep.name} (${ep.model})` })),
         ]}
       />
 
@@ -43,7 +52,7 @@ export function RetrieverConfig({ config, onChange }: RetrieverConfigProps) {
         onChange={(v) => onChange({ vectorStoreId: v })}
         options={[
           { value: '', label: 'Select store...' },
-          ...vectorStores.map((vs: any) => ({ value: vs.id, label: `${vs.name} (${vs.url})` })),
+          ...filteredVectorStores.map((vs: any) => ({ value: vs.id, label: `${vs.name} (${vs.url})` })),
         ]}
       />
 

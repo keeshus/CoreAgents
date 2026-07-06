@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
+import { SelectField } from '@/components/ui/SelectField';
 import { api } from '@/lib/api-client';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useAuth } from '@/lib/auth-context';
 
 interface FormState {
   name: string;
@@ -20,6 +22,10 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function MCPServersPage() {
+  const { user, userGroups } = useAuth();
+  const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
+  const canAdmin = can('admin');
+
   const [servers, setServers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,11 +39,23 @@ export default function MCPServersPage() {
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [filterGroupId, setFilterGroupId] = useState<string | null>(null);
+  const [formGroupId, setFormGroupId] = useState('');
+
+  useEffect(() => {
+    if (canAdmin) {
+      api.groups.list().then(setGroups).catch(() => {});
+    } else {
+      setGroups(userGroups);
+    }
+  }, [canAdmin, userGroups]);
+
   const fetchServers = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.mcpServers.list();
+      const data = await api.mcpServers.list(filterGroupId ? { groupId: filterGroupId } : undefined);
       setServers(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load MCP servers');
@@ -48,12 +66,13 @@ export default function MCPServersPage() {
 
   useEffect(() => {
     fetchServers();
-  }, []);
+  }, [filterGroupId]);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
     setShowForm(false);
+    setFormGroupId('');
   };
 
   const handleEdit = (srv: any) => {
@@ -63,6 +82,7 @@ export default function MCPServersPage() {
       enabled: srv.enabled,
     });
     setEditingId(srv.id);
+    setFormGroupId(srv.group_id || '');
     setShowForm(true);
   };
 
@@ -95,10 +115,6 @@ export default function MCPServersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.url) {
-      setError('Name and URL are required.');
-      return;
-    }
     setSaving(true);
     setError(null);
 
@@ -116,6 +132,7 @@ export default function MCPServersPage() {
           name: form.name,
           url: form.url,
           enabled: form.enabled,
+          groupId: formGroupId || null,
         });
         setServers((prev) => [...prev, created]);
       }
@@ -130,6 +147,10 @@ export default function MCPServersPage() {
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };
+
+  const filteredServers = filterGroupId
+    ? servers.filter((s) => s.group_id === filterGroupId || !s.group_id)
+    : servers;
 
   return (
     <div className="min-h-screen bg-surface-container">
@@ -153,6 +174,27 @@ export default function MCPServersPage() {
               <Icon name="add" className="text-base" />
               Add Server
             </button>
+          )}
+        </div>
+
+        {/* Group filter */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <button
+            onClick={() => setFilterGroupId(null)}
+            className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
+              filterGroupId === null ? 'bg-primary text-on-primary shadow-m3-1' : 'bg-surface border border-outline text-on-surface-variant hover:bg-surface-container-high'
+            }`}
+          >
+            <Icon name="public" className="text-sm mr-1" /> App-wide
+          </button>
+          {groups.length > 0 && (
+            <SelectField
+              label="Group"
+              value={filterGroupId || ''}
+              onChange={(v) => setFilterGroupId(v || null)}
+              options={groups.map((g) => ({ value: g.id, label: g.name }))}
+              className="w-48"
+            />
           )}
         </div>
 
@@ -196,6 +238,18 @@ export default function MCPServersPage() {
               <span className="text-sm font-medium text-on-surface-variant">Enabled</span>
             </label>
 
+            {!editingId && groups.length > 0 && (
+              <SelectField
+                label="Scope"
+                value={formGroupId}
+                onChange={setFormGroupId}
+                options={[
+                  { value: '', label: 'App-wide' },
+                  ...groups.map((g) => ({ value: g.id, label: g.name })),
+                ]}
+              />
+            )}
+
             <div className="flex items-center gap-2 justify-end">
               <button
                 type="button"
@@ -204,17 +258,13 @@ export default function MCPServersPage() {
               >
                 Cancel
               </button>
-              <Tooltip content={(!form.name || !form.url) ? 'Fill in all required fields' : ''}>
-                <span>
-                  <button
-                    type="submit"
-                    disabled={saving || !form.name || !form.url}
-                    className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {saving ? 'Saving...' : editingId ? 'Update Server' : 'Create Server'}
-                  </button>
-                </span>
-              </Tooltip>
+              <button
+                type="submit"
+                disabled={saving}
+                className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : editingId ? 'Update Server' : 'Create Server'}
+              </button>
             </div>
           </form>
         )}
@@ -227,7 +277,7 @@ export default function MCPServersPage() {
         )}
 
         {/* Empty state */}
-        {!loading && !error && servers.length === 0 && (
+        {!loading && !error && filteredServers.length === 0 && (
           <div className="text-center py-16 bg-surface rounded-lg border border-outline-variant">
             <Icon name="dns" className="text-4xl text-on-surface-variant mx-auto mb-3" />
             <p className="text-on-surface-variant font-medium">No MCP servers configured</p>
@@ -238,9 +288,9 @@ export default function MCPServersPage() {
         )}
 
         {/* Server list */}
-        {!loading && servers.length > 0 && (
+        {!loading && filteredServers.length > 0 && (
           <div className="space-y-2">
-            {servers.map((srv) => (
+            {filteredServers.map((srv) => (
               <div key={srv.id} className="bg-surface rounded-lg border border-outline-variant">
                 {/* Server header row */}
                 <div className="p-4 flex items-start gap-4">
@@ -259,6 +309,13 @@ export default function MCPServersPage() {
                       >
                         {srv.enabled ? 'Enabled' : 'Disabled'}
                       </span>
+                      {srv.group_id ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-medium">
+                          {groups.find((g) => g.id === srv.group_id)?.name || 'Group'}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-medium">App</span>
+                      )}
                     </div>
                     <p className="text-sm text-on-surface-variant mt-1 font-mono text-ellipsis overflow-hidden">
                       {srv.url}
