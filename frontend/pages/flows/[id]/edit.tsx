@@ -366,6 +366,7 @@ export default function FlowEditPage() {
   const [inheritedSecrets, setInheritedSecrets] = useState<Array<{ name: string; scope: string; groupName?: string }>>([]);
   const [inheritedEnvVars, setInheritedEnvVars] = useState<Array<{ name: string; value: string; scope: string }>>([]);
   const [availableSecrets, setAvailableSecrets] = useState<Array<{ value: string; label: string }>>([]);
+  const [availableCyberArks, setAvailableCyberArks] = useState<Array<{ value: string; label: string }>>([]);
 
   const loadInheritedData = useCallback(async (groupId: string | null) => {
     const secrets: Array<{ name: string; scope: string; groupName?: string }> = [];
@@ -401,27 +402,30 @@ export default function FlowEditPage() {
     setInheritedEnvVars(envVars);
   }, [groups]);
 
-  // Fetch available secrets for the core_secret dropdown in env vars
+  // Fetch available secrets for the core_secret and cyberark dropdowns in env vars
   useEffect(() => {
     const fetchSecrets = async () => {
-      const results: Array<{ value: string; label: string }> = [];
-      try {
-        const appSec = await fetch('/api/secrets?scope=app', { credentials: 'include' }).then(r => r.ok ? r.json() : []);
-        if (Array.isArray(appSec)) appSec.forEach((s: any) => results.push({ value: `${s.name}`, label: `${s.name} (app)` }));
-      } catch {}
-      if (flow?.group_id) {
+      const coreResults: Array<{ value: string; label: string }> = [];
+      const cyberResults: Array<{ value: string; label: string }> = [];
+      const scopes = [{ url: '/api/secrets?scope=app', label: 'app' }];
+      if (flow?.group_id) scopes.push({ url: `/api/secrets?scope=group&scopeId=${flow.group_id}`, label: 'group' });
+      if (flow?.id && flow.id !== 'new') scopes.push({ url: `/api/secrets?scope=flow&scopeId=${flow.id}`, label: 'flow' });
+      for (const scope of scopes) {
         try {
-          const grpSec = await fetch(`/api/secrets?scope=group&scopeId=${flow.group_id}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
-          if (Array.isArray(grpSec)) grpSec.forEach((s: any) => results.push({ value: s.name, label: `${s.name} (group)` }));
+          const data = await fetch(scope.url, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
+          if (Array.isArray(data)) {
+            data.forEach((s: any) => {
+              if (s.secretType === 'cyberark') {
+                cyberResults.push({ value: s.referencePath || s.name, label: `${s.referencePath || s.name} (${scope.label})` });
+              } else {
+                coreResults.push({ value: s.name, label: `${s.name} (${scope.label})` });
+              }
+            });
+          }
         } catch {}
       }
-      if (flow?.id && flow.id !== 'new') {
-        try {
-          const flowSec = await fetch(`/api/secrets?scope=flow&scopeId=${flow.id}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
-          if (Array.isArray(flowSec)) flowSec.forEach((s: any) => results.push({ value: s.name, label: `${s.name} (flow)` }));
-        } catch {}
-      }
-      setAvailableSecrets(results);
+      setAvailableSecrets(coreResults);
+      setAvailableCyberArks(cyberResults);
     };
     fetchSecrets();
   }, [flow?.id, flow?.group_id]);
@@ -779,7 +783,7 @@ export default function FlowEditPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono text-on-surface">{ev.name}</span>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ev.type === 'static' ? 'bg-primary-container text-primary' : ev.type === 'core_secret' ? 'bg-secondary-container text-secondary' : 'bg-tertiary-container text-tertiary'}`}>
-                            {ev.type === 'static' ? 'Static' : ev.type === 'core_secret' ? 'Secret ref' : 'CyberArk'}
+                            {ev.type === 'static' ? 'Static' : ev.type === 'core_secret' ? 'Core Secret' : 'CyberArk'}
                           </span>
                         </div>
                         <div className="flex items-center gap-1">
@@ -820,7 +824,7 @@ export default function FlowEditPage() {
                     className="text-xs border border-outline rounded px-2 py-1.5 bg-surface"
                   >
                     <option value="static">Static</option>
-                    <option value="core_secret">Secret ref</option>
+                    <option value="core_secret">Core Secret</option>
                     <option value="cyberark">CyberArk</option>
                   </select>
                   {newEnvVarType === 'core_secret' ? (
@@ -835,12 +839,16 @@ export default function FlowEditPage() {
                       ))}
                     </select>
                   ) : newEnvVarType === 'cyberark' ? (
-                    <input
-                      placeholder="CyberArk path"
+                    <select
                       value={newEnvVarValue}
                       onChange={e => setNewEnvVarValue(e.target.value)}
                       className="flex-1 text-xs border border-outline rounded px-2 py-1.5 bg-surface"
-                    />
+                    >
+                      <option value="">— Select a CyberArk secret —</option>
+                      {availableCyberArks.map(s => (
+                        <option key={s.value + s.label} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
                   ) : (
                     <input
                       placeholder="Value"
