@@ -7,6 +7,7 @@ CREATE TABLE "agent_contexts" (
 	"title" text NOT NULL,
 	"description" text DEFAULT '' NOT NULL,
 	"content" text DEFAULT '' NOT NULL,
+	"group_id" uuid,
 	"created_by" uuid,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
@@ -17,6 +18,12 @@ CREATE TABLE "agent_store" (
 	"value" jsonb DEFAULT 'null' NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "app_env_vars" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"env_vars" jsonb DEFAULT '[]' NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "chat_messages" (
@@ -52,6 +59,7 @@ CREATE TABLE "embedding_providers" (
 	"base_url" text,
 	"api_key" text NOT NULL,
 	"model" text DEFAULT 'text-embedding-ada-002' NOT NULL,
+	"group_id" uuid,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -131,6 +139,7 @@ CREATE TABLE "flows" (
 	"group_id" uuid,
 	"is_subflow" boolean DEFAULT false NOT NULL,
 	"flow_context" text DEFAULT '' NOT NULL,
+	"env_vars" jsonb DEFAULT '[]',
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -146,8 +155,9 @@ CREATE TABLE "group_members" (
 CREATE TABLE "group_vault_config" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"group_id" uuid NOT NULL,
-	"vault_id" uuid NOT NULL,
+	"vault_id" uuid,
 	"enabled" boolean DEFAULT true NOT NULL,
+	"env_vars" jsonb DEFAULT '[]',
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "group_vault_config_group_id_unique" UNIQUE("group_id")
@@ -172,8 +182,18 @@ CREATE TABLE "llm_endpoints" (
 	"default_model" text NOT NULL,
 	"models" jsonb DEFAULT '[]' NOT NULL,
 	"is_default" boolean DEFAULT false NOT NULL,
+	"group_id" uuid,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "logs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"level" text DEFAULT 'info' NOT NULL,
+	"component" text DEFAULT 'app' NOT NULL,
+	"message" text NOT NULL,
+	"metadata" jsonb DEFAULT '{}',
+	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "mcp_servers" (
@@ -182,6 +202,7 @@ CREATE TABLE "mcp_servers" (
 	"url" text NOT NULL,
 	"tools" jsonb DEFAULT '[]' NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
+	"group_id" uuid,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -226,9 +247,11 @@ CREATE TABLE "secrets" (
 	"name" text NOT NULL,
 	"scope" text DEFAULT 'app' NOT NULL,
 	"scope_id" uuid,
-	"encrypted_value" text NOT NULL,
-	"encryption_iv" text NOT NULL,
-	"encryption_tag" text NOT NULL,
+	"secret_type" text DEFAULT 'core' NOT NULL,
+	"reference_path" text,
+	"encrypted_value" text,
+	"encryption_iv" text,
+	"encryption_tag" text,
 	"key_version" integer DEFAULT 1 NOT NULL,
 	"created_by" uuid,
 	"expires_at" timestamp,
@@ -288,11 +311,13 @@ CREATE TABLE "vector_stores" (
 	"url" text NOT NULL,
 	"api_key" text,
 	"collections" jsonb DEFAULT '[]',
+	"group_id" uuid,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "agent_contexts" ADD CONSTRAINT "agent_contexts_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "agent_contexts" ADD CONSTRAINT "agent_contexts_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chat_messages" ADD CONSTRAINT "chat_messages_session_id_chat_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."chat_sessions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chat_sessions" ADD CONSTRAINT "chat_sessions_flow_id_flows_id_fk" FOREIGN KEY ("flow_id") REFERENCES "public"."flows"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "embeddings" ADD CONSTRAINT "embeddings_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -304,8 +329,12 @@ ALTER TABLE "flows" ADD CONSTRAINT "flows_created_by_users_id_fk" FOREIGN KEY ("
 ALTER TABLE "flows" ADD CONSTRAINT "flows_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "group_members" ADD CONSTRAINT "group_members_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "group_members" ADD CONSTRAINT "group_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "group_vault_config" ADD CONSTRAINT "group_vault_config_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "group_vault_config" ADD CONSTRAINT "group_vault_config_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "group_vault_config" ADD CONSTRAINT "group_vault_config_vault_id_secret_vaults_id_fk" FOREIGN KEY ("vault_id") REFERENCES "public"."secret_vaults"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "llm_endpoints" ADD CONSTRAINT "llm_endpoints_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "embedding_providers" ADD CONSTRAINT "embedding_providers_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "vector_stores" ADD CONSTRAINT "vector_stores_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "secret_access_log" ADD CONSTRAINT "secret_access_log_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "secrets" ADD CONSTRAINT "secrets_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "user_assignments" ADD CONSTRAINT "user_assignments_execution_id_executions_id_fk" FOREIGN KEY ("execution_id") REFERENCES "public"."executions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

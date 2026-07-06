@@ -354,7 +354,7 @@ router.post(
         let vaultId: string | undefined;
         if (flowGroupId) {
           const [gvc] = await db.select({ vaultId: gvcTable.vault_id }).from(gvcTable).where(eq(gvcTable.group_id, flowGroupId)).limit(1);
-          if (gvc) vaultId = gvc.vaultId;
+          if (gvc && gvc.vaultId) vaultId = gvc.vaultId;
         }
         const vaultCondition = vaultId ? eq(vaultsTable.id, vaultId) : eq(vaultsTable.is_connected, true);
         const [vault] = await db.select().from(vaultsTable).where(vaultCondition).limit(1);
@@ -851,7 +851,7 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       let vaultId: string | undefined;
       if (flowDef?.groupId) {
         const [gvc] = await db.select({ vaultId: gvcTable.vault_id }).from(gvcTable).where(eq(gvcTable.group_id, flowDef.groupId)).limit(1);
-        if (gvc) vaultId = gvc.vaultId;
+        if (gvc && gvc.vaultId) vaultId = gvc.vaultId;
       }
       const vaultCondition = vaultId ? eq(vaultsTable.id, vaultId) : eq(vaultsTable.is_connected, true);
       const [vault] = await db.select().from(vaultsTable).where(vaultCondition).limit(1);

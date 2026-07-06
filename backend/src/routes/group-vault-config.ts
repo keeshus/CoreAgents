@@ -41,6 +41,10 @@ router.get('/:groupId', asyncHandler(async (req, res) => {
     return;
   }
 
+  if (!config.vault_id) {
+    res.json({ groupId: config.group_id, vaultId: null, vaultName: null, enabled: config.enabled });
+    return;
+  }
   const [vault] = await db.select({ name: secretVaults.name }).from(secretVaults).where(eq(secretVaults.id, config.vault_id));
   res.json({
     id: config.id,
