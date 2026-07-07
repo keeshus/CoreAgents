@@ -12,7 +12,11 @@ import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
 import { randomUUID } from 'node:crypto';
 import { BASH_SANDBOX_SYSTEM_PROMPT, BASH_TOOL_DEFINITION } from '../tools/bash.js';
 
-const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
+const slugify = (s: string) =>
+  s.toLowerCase()
+    .replace(/[\s.]+/g, '_')
+    .replace(/[^a-z0-9_-]/g, '')
+    .slice(0, 64);
 
 export class HitlPauseError extends Error {
   public nodeId: string;
@@ -667,6 +671,7 @@ export class FlowExecutor {
             }
 
             if (mcpNode.data?.type === 'flow-tool') {
+              if (!context.getFlow) continue;
               const ftConfig = (mcpNode.data as any).config || {};
               const flowIds: string[] = ftConfig.flowIds || [];
               for (const flowId of flowIds) {
@@ -865,15 +870,11 @@ export class FlowExecutor {
                   const flowIds: string[] = ftConfig.flowIds || [];
                   const selectedFlows: Array<{ id: string; name: string }> = ftConfig.selectedFlows || [];
                   // Find the flow whose slugified name matches the tool name
-                  const calledName = tc.name.slice(5); // strip "flow_"
+                  const calledName = tc.name.slice(5);
                   const match = selectedFlows.find(f => slugify(f.name) === calledName);
-                  const matchId = match?.id || flowIds.find(fid => {
-                    // Try to match by ID if we can't find by name
-                    return false;
-                  });
-                  if (match?.id) {
+                  if (match?.id && context.getFlow) {
                     try {
-                      const flowDef = await context.getFlow!(match.id);
+                      const flowDef = await context.getFlow(match.id);
                       if (flowDef) {
                         const subExecutor = new SubFlowExecutor(
                           this.abortController,
@@ -881,9 +882,10 @@ export class FlowExecutor {
                           '',
                           [],
                         );
+                        const subInput: Record<string, unknown> = tc.input ?? {};
                         const subResult = await subExecutor.execute(
                           flowDef,
-                          tc.input as Record<string, unknown>,
+                          subInput,
                           onEvent,
                           context,
                         );

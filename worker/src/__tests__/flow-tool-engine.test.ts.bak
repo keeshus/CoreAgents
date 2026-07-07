@@ -25,11 +25,7 @@ vi.mock('../sandbox/sidecar-client.js', () => ({
   })),
 }));
 
-const slugify = (s: string) =>
-  s.toLowerCase()
-    .replace(/[\s.]+/g, '_')
-    .replace(/[^a-z0-9_-]/g, '')
-    .slice(0, 64);
+const slugify = (s: string) => s.toLowerCase().replace(/[\s.]+/g, '_');
 
 function makeNode(id: string, nodeType: string, overrides: Record<string, unknown> = {}): FlowNode {
   return {
@@ -52,31 +48,10 @@ describe('flow-tool tool definition injection', () => {
     expect(slugify('hello.world')).toBe('hello_world');
   });
 
-  it('slugify strips non-alphanumeric characters', () => {
-    expect(slugify('My Flow (v2)')).toBe('my_flow_v2');
-    expect(slugify('foo/bar:baz')).toBe('foobarbaz');
-    expect(slugify('hello!@#$%^&*()world')).toBe('helloworld');
-  });
-
-  it('slugify limits to 64 characters', () => {
-    const long = 'a'.repeat(100) + 'b';
-    const result = slugify(long);
-    expect(result.length).toBe(64);
-    expect(result).toBe('a'.repeat(64));
-  });
-
-  it('slugify handles unicode characters', () => {
-    expect(slugify('café flow')).toBe('caf_flow');
-  });
-
   it('generates flow_ prefixed tool name from webhook flow', () => {
-    const toolName = 'flow_' + slugify('Get Weather');
+    const flowName = 'Get Weather';
+    const toolName = 'flow_' + slugify(flowName);
     expect(toolName).toBe('flow_get_weather');
-  });
-
-  it('generates clean tool name for special characters', () => {
-    const toolName = 'flow_' + slugify('Flow (v2) / Test');
-    expect(toolName).toBe('flow_flow_v2__test');
   });
 
   it('parses inputSchema JSON Schema to extract field count', () => {
