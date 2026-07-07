@@ -414,3 +414,93 @@ test.describe('Document endpoints', () => {
     expect(Array.isArray(cols)).toBe(true);
   });
 });
+
+// ─── Remaining admin/niche endpoints ────────────────────────────
+
+test.describe('Admin and niche endpoints', () => {
+  test('POST /api/roles/seed seeds default roles', async ({ request }) => {
+    const res = await request.post(`${API_URL}/roles/seed`);
+    // May return 200 (created) or 409 (already exist) — either is valid
+    expect([200, 409]).toContain(res.status());
+  });
+
+  test('POST /api/llm/chat (Co-Pilot API) responds', async ({ request }) => {
+    const res = await request.post(`${API_URL}/llm/chat`, {
+      data: { message: 'hello', flowId: '00000000-0000-0000-0000-000000000000' },
+    });
+    // May return 404 (flow not found) — validates the route exists and handles auth
+    expect([400, 404, 200]).toContain(res.status());
+  });
+
+  test('GET /api/secrets/audit-log returns audit data', async ({ request }) => {
+    const res = await request.get(`${API_URL}/secrets/audit-log`);
+    expect(res.ok()).toBe(true);
+    const data = await res.json();
+    expect(Array.isArray(data)).toBe(true);
+  });
+
+  test('POST /api/secrets/rotate-key rotates encryption key', async ({ request }) => {
+    const res = await request.post(`${API_URL}/secrets/rotate-key`);
+    expect(res.ok()).toBe(true);
+  });
+
+  test('POST /api/secrets/re-encrypt re-encrypts secrets', async ({ request }) => {
+    const res = await request.post(`${API_URL}/secrets/re-encrypt`);
+    expect(res.ok()).toBe(true);
+  });
+
+  test('POST /api/executions/:id/admin-cancel cancels execution as admin', async ({ request }) => {
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('AdminCancel'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Wait', buttons: [{ label: 'Go', value: 'go' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await flowRes.json();
+
+    const { executeUntilPaused } = await import('./helpers/stream');
+    const { executionId } = await executeUntilPaused(flow.id, { message: 'cancel' }, cookie);
+
+    const cancelRes = await fetch(`${API_URL}/executions/${executionId}/admin-cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
+    });
+    expect(cancelRes.ok).toBe(true);
+
+    const exec = await pollExecution(request, executionId, 15000);
+    expect(exec.status).toBe('cancelled');
+
+    await deleteFlow(request, flow.id);
+  });
+
+  test('chat session messages SSE endpoint returns events', async ({ page, request }) => {
+    // Create a chat flow and session
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('ChatMsgTest'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await flowRes.json();
+
+    // Create a session
+    const sessionRes = await request.post(`${API_URL}/chat/${flow.id}/sessions`, { data: { title: 'Msg Test' } });
+    const { id: sessionId } = await sessionRes.json();
+
+    // The SSE endpoint should accept the connection
+    const sseRes = await page.request.post(`${API_URL}/chat/sessions/${sessionId}/messages`, {
+      data: { message: 'hello' },
+    });
+    expect(sseRes.ok()).toBe(true);
+
+    await deleteFlow(request, flow.id);
+  });
+});
