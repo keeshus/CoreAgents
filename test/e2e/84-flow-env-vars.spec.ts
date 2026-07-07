@@ -249,4 +249,155 @@ test.describe('Flow env vars and secret types', () => {
     expect(outputStr).toContain('sup3r-s3cr3t-db-pass!');
     expect(outputStr).not.toContain('{{env.DB_PASS}}');
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Inherited Secrets & Env Vars in Flow Settings ────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('inherited secrets and env vars appear in Flow Settings modal', async ({ page, request }) => {
+    // Create an app-level secret and env var
+    const secRes = await request.post(`${API_URL}/secrets`, { data: { name: 'app-db-password', value: 'app-secret-val', scope: 'app' } });
+    expect(secRes.status()).toBe(201);
+    const appSecret = await secRes.json();
+    cleanupSecretIds.push(appSecret.id);
+
+    await request.put(`${API_URL}/env-vars`, { data: { envVars: [{ name: 'APP_VAR', value: 'app-val', type: 'static' }] } });
+
+    // Create a group and add group-level items
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Inherited-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    await request.put(`${API_URL}/env-vars/groups/${group.id}`, { data: { envVars: [{ name: 'GROUP_VAR', value: 'group-val', type: 'static' }] } });
+
+    // Create a flow in the group
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: { name: uniqueFlowName('Inherited-Test'), group_id: group.id },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    // Open Flow Settings modal
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+    // Inherited Secrets section should show the app-level secret
+    await expect(page.getByText('Inherited Secrets')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('app-db-password')).toBeVisible({ timeout: 5000 });
+
+    // Inherited Environment Variables section should show app and group vars
+    await expect(page.getByText('Inherited Environment Variables')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('APP_VAR').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('GROUP_VAR').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Core Secret dropdown in Flow Settings env vars ──────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('core_secret dropdown shows available secrets in Flow Settings', async ({ page, request }) => {
+    const secRes = await request.post(`${API_URL}/secrets`, { data: { name: 'MY_API_SECRET', value: 'sk-abc', scope: 'app' } });
+    expect(secRes.status()).toBe(201);
+    const secret = await secRes.json();
+    cleanupSecretIds.push(secret.id);
+
+    const flowRes = await request.post(`${API_URL}/flows`, { data: { name: uniqueFlowName('CoreSecret-Dropdown') } });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+    // Scroll to env vars section and switch type to Core Secret
+    await page.getByText('Environment Variables', { exact: true }).click();
+    await page.locator('select').filter({ hasText: 'Static' }).selectOption('core_secret');
+
+    // The Core Secret dropdown should contain our secret as an option
+    const coreSelect = page.locator('select').nth(1);
+    await expect(coreSelect).toContainText('MY_API_SECRET');
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── CyberArk dropdown in Flow Settings env vars ─────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('cyberark dropdown shows select element in Flow Settings', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `CyberArk-Dropdown-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: { name: uniqueFlowName('CyberArk-Dropdown'), group_id: group.id },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+    // Switch to CyberArk type
+    await page.getByText('Environment Variables', { exact: true }).click();
+    await page.locator('select').filter({ hasText: 'Static' }).selectOption('cyberark');
+
+    // A select element with the CyberArk placeholder should be visible
+    const cyberSelect = page.locator('select').nth(1);
+    await expect(cyberSelect).toBeVisible({ timeout: 5000 });
+    await expect(cyberSelect).toContainText('Select a CyberArk secret');
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Secret type toggle in Flow Settings modal ───────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('secret type toggle switches between Core and CyberArk in Flow Settings', async ({ page, request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, { data: { name: uniqueFlowName('Secret-Type-Toggle') } });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    // Open Flow Settings
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+    // Scroll to Flow Secrets section
+    await expect(page.getByText('Flow Secrets')).toBeVisible({ timeout: 5000 });
+
+    // The Core/CyberArk toggle buttons should be visible
+    const coreBtn = page.getByRole('button', { name: 'Core' });
+    const cyberBtn = page.getByRole('button', { name: 'CyberArk' });
+    await expect(coreBtn).toBeVisible();
+    await expect(cyberBtn).toBeVisible();
+
+    // Core should be selected by default
+    await expect(coreBtn).toHaveClass(/bg-primary/);
+
+    // Click CyberArk — should show reference path input instead of password
+    await cyberBtn.click();
+    await page.waitForTimeout(300);
+    await expect(cyberBtn).toHaveClass(/bg-primary/);
+    await expect(page.getByPlaceholder('Reference path')).toBeVisible();
+
+    // Click Core again — should show value input
+    await coreBtn.click();
+    await page.waitForTimeout(300);
+    await expect(coreBtn).toHaveClass(/bg-primary/);
+    await expect(page.getByTestId('flow-secret-value')).toBeVisible();
+  });
 });

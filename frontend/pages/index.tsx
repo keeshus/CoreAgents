@@ -578,8 +578,9 @@ export default function FlowsListPage() {
                   />
                 )}
                 <div>
-                  <label className="text-xs font-medium text-on-surface-variant block mb-1">Content</label>
+                  <label htmlFor="context-content" className="text-xs font-medium text-on-surface-variant block mb-1">Content</label>
                   <textarea
+                    id="context-content"
                     value={contextContent}
                     onChange={e => setContextContent(e.target.value)}
                     placeholder="You are an AI assistant working for Acme Corp. Our brand voice is professional yet approachable..."

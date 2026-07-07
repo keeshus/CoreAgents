@@ -299,4 +299,58 @@ const cleanupFlowIds: string[] = [];
     expect(outputStr).toContain('Respond to');                         // Layer 5: Node system prompt
     expect(outputStr).toContain('---');                                // Separators between layers
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Agent Contexts: Group filter on settings page ───────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('agent contexts group filter filters contexts by group', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `AC-Filter-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    const ctxRes = await request.post(`${API_URL}/agent-contexts`, {
+      data: { title: 'Group-Scoped', content: 'Only for this group.', group_id: group.id },
+    });
+    expect(ctxRes.status()).toBe(201);
+    const ctx = await ctxRes.json();
+    cleanupContextIds.push(ctx.id);
+
+    await page.goto('/');
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: 'Agent Contexts' }).click();
+    await page.waitForTimeout(500);
+    await expect(page.getByText('Group-Scoped').first()).toBeVisible({ timeout: 5000 });
+
+    await page.getByText('All items').first().click();
+    await page.getByText(group.name).first().click();
+    await page.waitForTimeout(500);
+    await expect(page.getByText('Group-Scoped').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('agent contexts form group selector assigns context to group', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `AC-Form-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    await page.goto('/');
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: 'Agent Contexts' }).click();
+    await page.waitForTimeout(500);
+    await page.getByRole('button', { name: 'New Context' }).click();
+    await page.waitForTimeout(500);
+    await expect(page.getByText('Group').first()).toBeVisible({ timeout: 5000 });
+
+    await page.getByText('App-wide').first().click();
+    await page.getByText(group.name).first().click();
+    await page.waitForTimeout(300);
+    await page.getByLabel('Title').fill('Group-Assigned');
+    await page.locator('textarea').first().fill('Group content.');
+    await page.locator('button.m3-button').filter({ hasText: 'Create' }).click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByText('Group-Assigned').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
+  });
 });

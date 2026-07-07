@@ -362,4 +362,44 @@ test.describe('Secrets management', () => {
     await expect(page.getByText('Secrets').first()).toBeVisible();
     await expect(page.getByText('Secret Vaults').first()).toBeVisible();
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Vault creation: "Bind to group (required)" selector ─────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('vault creation form shows Bind to group (required) selector', async ({ page, request }) => {
+    // Create a group
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Bind-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    await page.goto('/settings/secret-vaults');
+    await page.waitForTimeout(1000);
+
+    // Click "Add Vault"
+    await page.getByRole('button', { name: 'Add Vault' }).click();
+    await page.waitForTimeout(500);
+
+    // The "Bind to group (required)" selector should be visible
+    await expect(page.getByText('Bind to group (required)')).toBeVisible({ timeout: 5000 });
+
+    // The Create button should be disabled until a group is selected
+    const createBtn = page.getByRole('button', { name: 'Create Vault' });
+    await expect(createBtn).toBeDisabled();
+
+    // Select the group in the form (SearchableSelect shows "Select..." when no group selected)
+    await page.getByText('Select...').first().click();
+    await page.getByText(group.name).first().click();
+    await page.waitForTimeout(300);
+
+    // Fill in required fields
+    await page.getByLabel('Name').fill('Test Vault');
+    await page.getByLabel('URL').fill('http://mock-cyberark-e2e:3005');
+    await page.getByLabel('Login').fill('host/myapp');
+    await page.getByLabel('API Key').fill('myapp-api-key-456');
+
+    // Now Create Vault should be enabled
+    await expect(createBtn).toBeEnabled();
+  });
 });

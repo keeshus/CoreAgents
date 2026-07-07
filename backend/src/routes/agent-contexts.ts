@@ -65,7 +65,21 @@ router.post(
         created_by: req.user?.userId,
       })
       .returning();
-    res.status(201).json(row);
+    // Fetch the created context with group_name for the response
+    const [result] = await db.select({
+      id: agentContexts.id,
+      title: agentContexts.title,
+      description: agentContexts.description,
+      content: agentContexts.content,
+      group_id: agentContexts.group_id,
+      group_name: groups.name,
+      created_by: agentContexts.created_by,
+      created_at: agentContexts.created_at,
+      updated_at: agentContexts.updated_at,
+    }).from(agentContexts)
+      .leftJoin(groups, eq(agentContexts.group_id, groups.id))
+      .where(eq(agentContexts.id, row.id));
+    res.status(201).json(result);
   }),
 );
 
@@ -86,7 +100,20 @@ router.put(
       res.status(404).json({ error: 'Agent context not found' });
       return;
     }
-    res.json(row);
+    const [result] = await db.select({
+      id: agentContexts.id,
+      title: agentContexts.title,
+      description: agentContexts.description,
+      content: agentContexts.content,
+      group_id: agentContexts.group_id,
+      group_name: groups.name,
+      created_by: agentContexts.created_by,
+      created_at: agentContexts.created_at,
+      updated_at: agentContexts.updated_at,
+    }).from(agentContexts)
+      .leftJoin(groups, eq(agentContexts.group_id, groups.id))
+      .where(eq(agentContexts.id, row.id));
+    res.json(result);
   }),
 );
 
