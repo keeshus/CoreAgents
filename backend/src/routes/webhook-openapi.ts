@@ -43,8 +43,21 @@ async function authenticateWebhookRequest(req: any, flowId: string): Promise<{ s
     }
   }
 
-  const noCredsProvided = !authHeader && !providedSecret;
-  if (noCredsProvided) {
+  // If no credentials provided, check if the flow requires auth
+  if (!authHeader && !providedSecret) {
+    // If the flow has no webhookSecret configured and no API key required, allow
+    const [flow] = await db.select().from(flows).where(eq(flows.id, flowId)).limit(1);
+    if (flow) {
+      const nodes = (flow.nodes || []) as any[];
+      const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger');
+      const configuredSecret = triggerNode?.data?.config?.webhookSecret;
+      if (!configuredSecret) {
+        const [anyKey] = await db.select({ id: apiKeys.id }).from(apiKeys).where(eq(apiKeys.flow_id, flowId)).limit(1);
+        if (!anyKey) {
+          return null; // No auth configured on this flow — allow
+        }
+      }
+    }
     return { status: 401, message: 'Authentication required. Provide an API key (Authorization: Bearer wh_...) or a webhook secret (?secret=...).' };
   }
 
@@ -67,28 +80,48 @@ async function authenticateWebhookRequest(req: any, flowId: string): Promise<{ s
 
 // ── POST /api/webhook/:slug — Named Webhook Execution ──────────
 
+async function resolveWebhookFlow(slugOrId: string): Promise<{ flowId: string; slug: string } | null> {
+  // Try slug lookup first
+  const [deployment] = await db.select()
+    .from(apiDeployments)
+    .where(eq(apiDeployments.path_slug, slugOrId)).limit(1);
+  if (deployment) return { flowId: deployment.flow_id, slug: deployment.path_slug };
+
+  // Fallback: try as a raw flow UUID (must be valid UUID format)
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)) {
+    try {
+      const [flow] = await db.select().from(flows).where(eq(flows.id, slugOrId)).limit(1);
+      if (flow) {
+        const [dep] = await db.select()
+          .from(apiDeployments)
+          .where(eq(apiDeployments.flow_id, flow.id)).limit(1);
+        return { flowId: flow.id, slug: dep?.path_slug || flow.id };
+      }
+    } catch { /* ignore db errors */ }
+  }
+
+  return null;
+}
+
 router.post(
   '/webhook/:slug',
   asyncHandler(async (req: any, res: any) => {
-    const slug = req.params.slug;
+    const slugOrId = req.params.slug;
 
-    const [deployment] = await db.select()
-      .from(apiDeployments)
-      .where(eq(apiDeployments.path_slug, slug)).limit(1);
-
-    if (!deployment) {
+    const resolved = await resolveWebhookFlow(slugOrId);
+    if (!resolved) {
       res.status(404).json({ error: 'Webhook endpoint not found' });
       return;
     }
 
-    const authError = await authenticateWebhookRequest(req, deployment.flow_id);
+    const authError = await authenticateWebhookRequest(req, resolved.flowId);
     if (authError) {
       res.status(authError.status).json({ error: authError.message });
       return;
     }
 
     // Load flow
-    const [flow] = await db.select().from(flows).where(eq(flows.id, deployment.flow_id)).limit(1);
+    const [flow] = await db.select().from(flows).where(eq(flows.id, resolved.flowId)).limit(1);
     if (!flow) {
       res.status(404).json({ error: 'Flow not found' });
       return;
@@ -121,7 +154,7 @@ router.post(
 
     // Create execution record and enqueue
     const [exec] = await db.insert(executions).values({
-      flow_id: deployment.flow_id,
+      flow_id: resolved.flowId,
       status: 'pending',
       input,
       started_at: new Date(),
@@ -142,7 +175,7 @@ router.post(
     res.status(202).json({
       status: 'queued',
       executionId: exec.id,
-      pollingUrl: `${baseUrl}/api/webhook/${slug}/executions/${exec.id}`,
+      pollingUrl: `${baseUrl}/api/webhook/${resolved.slug}/executions/${exec.id}`,
     });
   }),
 );

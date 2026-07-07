@@ -72,11 +72,12 @@ app.get(
   }),
 );
 
+// Webhook OpenAPI endpoints (public — authenticated by API key or webhook secret)
+// Must be mounted before webhookRouter to take precedence for slug-based routes
+app.use('/api', webhookOpenapiRouter);
+
 // Webhook (public — authenticated by secret, not JWT)
 app.use('/api', webhookRouter);
-
-// Webhook OpenAPI endpoints (public — authenticated by API key or webhook secret)
-app.use('/api', webhookOpenapiRouter);
 
 // Public auth routes (no authentication required)
 app.use('/api/auth', authRouter);
