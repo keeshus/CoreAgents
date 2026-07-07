@@ -115,7 +115,7 @@ router.put(
           summary: summary !== undefined ? summary : existing.summary,
           updated_at: new Date(),
         })
-        .where(eq(apiDeployments.flow_id, flowId)).limit(1)
+        .where(eq(apiDeployments.flow_id, flowId))
         .returning();
       res.json({ pathSlug: updated.path_slug, rateLimit: updated.rate_limit, summary: updated.summary });
     } else {
