@@ -127,4 +127,25 @@ test.describe('Env Vars settings page', () => {
 
     await expect(page.getByText('GROUP_VAR').first()).toBeVisible({ timeout: 5000 });
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── CyberArk hidden when no group selected ──────────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('CyberArk type is hidden when no group is selected', async ({ page }) => {
+    await page.goto('/settings/env-vars');
+    await page.waitForTimeout(1000);
+
+    // Open add form
+    await page.getByRole('button', { name: /Add/i }).first().click();
+    await page.waitForTimeout(500);
+
+    // Open the type dropdown — CyberArk should NOT be an option
+    await page.locator('[role="combobox"]').filter({ hasText: 'Static' }).click();
+    await page.waitForTimeout(300);
+
+    // Check that Core Secret is available but CyberArk is not
+    await expect(page.getByRole('option', { name: 'Core Secret' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('option', { name: 'CyberArk' })).not.toBeVisible({ timeout: 3000 });
+  });
 });

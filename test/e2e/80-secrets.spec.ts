@@ -402,4 +402,24 @@ test.describe('Secrets management', () => {
     // Now Create Vault should be enabled
     await expect(createBtn).toBeEnabled();
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Secrets page group filter ───────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('secrets page group filter works', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Sec-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    await page.goto('/settings/secrets');
+    await page.waitForTimeout(1000);
+    await expect(page.getByText('Filter by group')).toBeVisible({ timeout: 5000 });
+
+    await page.getByText('All items').first().click();
+    await page.getByText(group.name).first().click();
+    await page.waitForTimeout(500);
+    await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
+  });
 });
