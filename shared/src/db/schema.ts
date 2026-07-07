@@ -387,3 +387,26 @@ export const userAssignments = pgTable('user_assignments', {
   created_at: timestamp('created_at').notNull().defaultNow(),
   decided_at: timestamp('decided_at'),
 });
+
+export const chatApiDeployments = pgTable('chat_api_deployments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flow_id: uuid('flow_id').notNull().unique().references(() => flows.id),
+  enabled: boolean('enabled').notNull().default(false),
+  model_name: text('model_name').notNull(),
+  rate_limit: integer('rate_limit').notNull().default(0),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const chatApiKeys = pgTable('chat_api_keys', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flow_id: uuid('flow_id').notNull().references(() => flows.id),
+  label: text('label').notNull().default('Default'),
+  key_hash: text('key_hash').notNull(),
+  key_prefix: text('key_prefix').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  last_used_at: timestamp('last_used_at'),
+  created_by: uuid('created_by').references(() => users.id),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  expires_at: timestamp('expires_at'),
+});

@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { getNodeFields } from '@/components/flow/config/InputPreview';
+import { ChatApiSettings } from '@/components/flow/ChatApiSettings';
 
 export default function FlowEditPage() {
   const router = useRouter();
@@ -882,6 +883,12 @@ export default function FlowEditPage() {
                   ><Icon name="add" className="text-xs" /></button>
                 </div>
               </div>
+              {flow?.id && flow.id !== 'new' && isChatFlow && (
+                <ChatApiSettings
+                  flowId={flow.id}
+                  isChatFlow={isChatFlow}
+                />
+              )}
             </div>
           </div>
         </div>

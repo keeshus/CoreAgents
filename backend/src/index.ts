@@ -30,6 +30,8 @@ import envVarsRouter from './routes/env-vars.js';
 import groupVaultConfigRouter from './routes/group-vault-config.js';
 import webhookOpenapiRouter from './routes/webhook-openapi.js';
 import webhookApiKeysRouter from './routes/webhook-api-keys.js';
+import openaiChatRouter from './routes/openai-chat.js';
+import chatApiKeysRouter from './routes/chat-api-keys.js';
 import { authenticate } from './middleware/auth.js';
 import { asyncHandler } from './utils/async-handler.js';
 import { logger } from './utils/logger.js';
@@ -79,6 +81,9 @@ app.use('/api', webhookOpenapiRouter);
 // Webhook (public — authenticated by secret, not JWT)
 app.use('/api', webhookRouter);
 
+// OpenAI-compatible chat endpoint (public — authenticated by API key)
+app.use('/', openaiChatRouter);
+
 // Public auth routes (no authentication required)
 app.use('/api/auth', authRouter);
 
@@ -105,6 +110,7 @@ app.use('/api/secret-vaults', authenticate, secretVaultsRouter);
 app.use('/api/group-vault-config', authenticate, groupVaultConfigRouter);
 app.use('/api/env-vars', authenticate, envVarsRouter);
 app.use('/api', authenticate, webhookApiKeysRouter); // Handles /api/flows/:flowId/keys/* and /api/flows/:flowId/deployment
+app.use('/api', authenticate, chatApiKeysRouter); // Handles /api/flows/:flowId/chat-api/*
 
 // Global error handler (Express 5)
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
