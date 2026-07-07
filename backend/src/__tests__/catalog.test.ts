@@ -18,6 +18,7 @@ const catalog: CatalogEntry[] = [
   { type: 'trigger', label: 'Trigger', category: 'input', description: '', defaultConfig: { triggerType: 'manual' }, inputs: 0, outputs: 1 },
   { type: 'llm-agent', label: 'LLM Agent', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'mcp-tool', label: 'MCP Tool', category: 'tools', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
+  { type: 'flow-tool', label: 'Flow Tool', category: 'tools', description: '', defaultConfig: { flowIds: [], selectedFlows: [] }, inputs: 0, outputs: 0 },
   { type: 'retriever', label: 'Retriever', category: 'tools', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'branch', label: 'Condition', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 2 },
   { type: 'code', label: 'Code', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
@@ -33,6 +34,7 @@ describe('Node Catalog', () => {
     expect(types).toContain('trigger');
     expect(types).toContain('llm-agent');
     expect(types).toContain('mcp-tool');
+    expect(types).toContain('flow-tool');
     expect(types).toContain('retriever');
     expect(types).toContain('branch');
     expect(types).toContain('code');
@@ -40,6 +42,16 @@ describe('Node Catalog', () => {
     expect(types).toContain('subflow');
     expect(types).toContain('hitl');
     expect(types).toContain('output');
+  });
+
+  it('includes flow-tool entry with correct config', () => {
+    const ft = catalog.find(e => e.type === 'flow-tool');
+    expect(ft).toBeDefined();
+    expect(ft!.category).toBe('tools');
+    expect(ft!.inputs).toBe(0);
+    expect(ft!.outputs).toBe(0);
+    expect(ft!.defaultConfig).toHaveProperty('flowIds', []);
+    expect(ft!.defaultConfig).toHaveProperty('selectedFlows', []);
   });
 
   it('includes subflow entry with correct config', () => {

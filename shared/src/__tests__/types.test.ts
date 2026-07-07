@@ -15,11 +15,12 @@ describe('nodeTypeSchema', () => {
 });
 
 describe('NODE_TYPES', () => {
-  it('contains all 10 node types', () => {
-    expect(NODE_TYPES).toHaveLength(10);
+  it('contains all 11 node types', () => {
+    expect(NODE_TYPES).toHaveLength(11);
     expect(NODE_TYPES).toContain('trigger');
     expect(NODE_TYPES).toContain('llm-agent');
     expect(NODE_TYPES).toContain('mcp-tool');
+    expect(NODE_TYPES).toContain('flow-tool');
     expect(NODE_TYPES).toContain('retriever');
     expect(NODE_TYPES).toContain('branch');
     expect(NODE_TYPES).toContain('code');
@@ -31,5 +32,9 @@ describe('NODE_TYPES', () => {
 
   it('includes subflow node type', () => {
     expect(NODE_TYPES).toContain('subflow');
+  });
+
+  it('includes flow-tool node type', () => {
+    expect(NODE_TYPES).toContain('flow-tool');
   });
 });
