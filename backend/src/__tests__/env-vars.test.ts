@@ -215,14 +215,19 @@ describe('env-vars routes', () => {
       const envVars = [{ key: 'G_VAR', value: 'v', type: 'static' }];
       req.params = { groupId: 'group-1' };
       req.body = { envVars };
+
+      // Admin bypasses membership check, but route still calls db.select for groupVaultConfig
+      const selectChain = mockChain();
+      selectChain.limit.mockResolvedValue([{ env_vars: envVars, group_id: 'group-1', enabled: true }]);
+      db.select.mockReturnValueOnce(selectChain);
+
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ env_vars: envVars }]);
       db.update.mockReturnValue(updateChain);
 
       await getHandler(router, 'put', '/groups/:groupId')(req, res);
 
-      // Admin bypasses membership check, so db.select should NOT be called for members
-      expect(db.select).not.toHaveBeenCalled();
+      expect(db.select).toHaveBeenCalledTimes(1);
       expect(db.update).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(envVars);
     });
