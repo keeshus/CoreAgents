@@ -244,6 +244,40 @@ describe('webhook-api-keys routes', () => {
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith({ pathSlug: 'my-cool-flow', rateLimit: 0, summary: '' });
     });
+
+    it('updates only provided fields (partial update with existing record)', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { rateLimit: 20 }; // only rateLimit provided, no pathSlug or name
+
+      const selectChain = mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old summary' }]);
+      db.select.mockReturnValue(selectChain);
+      const updateChain = mockChain();
+      updateChain.returning.mockResolvedValue([{ path_slug: 'flow-1', rate_limit: 20, summary: 'Old summary' }]);
+      db.update.mockReturnValue(updateChain);
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(db.update).toHaveBeenCalledTimes(1);
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({ pathSlug: 'flow-1', rateLimit: 20, summary: 'Old summary' });
+    });
+
+    it('falls back to flowId for slug when neither pathSlug nor name is provided (new deployment)', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = {}; // no pathSlug, no name
+
+      const selectChain = mockChain([]);
+      db.select.mockReturnValue(selectChain);
+      const insertChain = mockChain();
+      insertChain.returning.mockResolvedValue([{ path_slug: 'flow-1', rate_limit: 0, summary: '' }]);
+      db.insert.mockReturnValue(insertChain);
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(db.insert).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith({ pathSlug: 'flow-1', rateLimit: 0, summary: '' });
+    });
   });
 
   describe('generateSlug helper', () => {

@@ -251,6 +251,105 @@ describe('webhook-openapi routes', () => {
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({ error: 'Invalid webhook secret' });
     });
+
+    it('returns 401 with invalid API key (hash does not match)', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { authorization: 'Bearer wh_badkey' };
+      req.body = { amount: 100, currency: 'USD' };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const keyChain = mockChain([]); // no key record matches this hash
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid API key' });
+    });
+
+    it('returns 400 when input has missing required fields', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { authorization: 'Bearer wh_testkey' };
+      req.body = {}; // missing both amount and currency
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const keyChain = mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]);
+      const flowChain = mockChain([makeWebhookFlow()]);
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(flowChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Input validation failed',
+          details: expect.arrayContaining([
+            expect.stringContaining('Missing required field'),
+          ]),
+        }),
+      );
+    });
+
+    it('skips schema validation and proceeds when inputSchema is invalid JSON', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { authorization: 'Bearer wh_testkey' };
+      req.body = { amount: 100 };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const keyChain = mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]);
+      const flowChain = mockChain([makeWebhookFlow({
+        nodes: [{
+          id: 'trigger-1', type: 'trigger',
+          data: {
+            type: 'trigger',
+            config: {
+              triggerType: 'webhook',
+              inputSchema: 'not-valid-json{{{',
+            },
+          },
+        }],
+      })]);
+      const execChain = mockChain();
+      execChain.returning.mockResolvedValue([{ id: 'exec-1' }]);
+
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(flowChain);
+      db.insert.mockReturnValue(execChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      // Schema parse error is caught and validation skipped; execution proceeds
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'queued', executionId: 'exec-1' }),
+      );
+    });
+
+    it('returns 404 when deployment exists but flow is not found', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { authorization: 'Bearer wh_testkey' };
+      req.body = { amount: 100 };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const keyChain = mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]);
+      const flowChain = mockChain([]); // no flow record
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(flowChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Flow not found' });
+    });
   });
 
   describe('GET /webhook/:slug/executions/:executionId', () => {
@@ -358,6 +457,47 @@ describe('webhook-openapi routes', () => {
       }));
     });
 
+    it('returns minimal response for running execution', async () => {
+      req.params = { slug: 'my-flow', executionId: 'exec-1' };
+      req.headers = { authorization: 'Bearer wh_testkey' };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const keyChain = mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]);
+      const execChain = mockChain([{
+        id: 'exec-1', flow_id: 'flow-1', status: 'running', input: {},
+        output: null, error: null,
+        started_at: new Date(), completed_at: null, created_at: new Date(),
+      }]);
+
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(execChain);
+
+      const next = vi.fn(); getHandler(router, 'get', '/webhook/:slug/executions/:executionId')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      const call = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(call.status).toBe('running');
+      expect(call.output).toBeUndefined();
+      expect(call.error).toBeUndefined();
+      expect(call.completedAt).toBeUndefined();
+    });
+
+    it('returns 401 when no auth credentials provided', async () => {
+      req.params = { slug: 'my-flow', executionId: 'exec-1' };
+      // No authorization header, no secret
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      db.select.mockReturnValueOnce(deployChain);
+
+      const next = vi.fn(); getHandler(router, 'get', '/webhook/:slug/executions/:executionId')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('Authentication required') }),
+      );
+    });
+
     it('returns minimal response for pending execution', async () => {
       req.params = { slug: 'my-flow', executionId: 'exec-1' };
       req.headers = { authorization: 'Bearer wh_testkey' };
@@ -445,6 +585,27 @@ describe('webhook-openapi routes', () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Webhook endpoint not found' });
+    });
+
+    it('caps limit to 50 when request exceeds maximum', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { authorization: 'Bearer wh_testkey' };
+      req.query = { limit: '100' };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const keyChain = mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]);
+      const execChain = mockChain();
+      execChain.orderBy.mockReturnValue(execChain);
+      execChain.limit.mockResolvedValue([]);
+
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(execChain);
+
+      const next = vi.fn(); getHandler(router, 'get', '/webhook/:slug/executions')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(execChain.limit).toHaveBeenCalledWith(50);
     });
   });
 
