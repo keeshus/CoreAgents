@@ -28,6 +28,8 @@ import secretsRouter from './routes/secrets.js';
 import secretVaultsRouter from './routes/secret-vaults.js';
 import envVarsRouter from './routes/env-vars.js';
 import groupVaultConfigRouter from './routes/group-vault-config.js';
+import webhookOpenapiRouter from './routes/webhook-openapi.js';
+import webhookApiKeysRouter from './routes/webhook-api-keys.js';
 import { authenticate } from './middleware/auth.js';
 import { asyncHandler } from './utils/async-handler.js';
 import { logger } from './utils/logger.js';
@@ -73,6 +75,9 @@ app.get(
 // Webhook (public — authenticated by secret, not JWT)
 app.use('/api', webhookRouter);
 
+// Webhook OpenAPI endpoints (public — authenticated by API key or webhook secret)
+app.use('/api', webhookOpenapiRouter);
+
 // Public auth routes (no authentication required)
 app.use('/api/auth', authRouter);
 
@@ -98,6 +103,7 @@ app.use('/api/secrets', authenticate, secretsRouter);
 app.use('/api/secret-vaults', authenticate, secretVaultsRouter);
 app.use('/api/group-vault-config', authenticate, groupVaultConfigRouter);
 app.use('/api/env-vars', authenticate, envVarsRouter);
+app.use('/api', authenticate, webhookApiKeysRouter); // Handles /api/flows/:flowId/keys/* and /api/flows/:flowId/deployment
 
 // Global error handler (Express 5)
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

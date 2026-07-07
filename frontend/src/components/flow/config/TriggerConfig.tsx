@@ -1,5 +1,9 @@
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
+import { Icon } from '@/components/ui/Icon';
+import { useAuth } from '@/lib/auth-context';
+import { API_URL } from '@/lib/api-client';
+import { useState, useCallback } from 'react';
 
 interface TriggerConfigProps {
   config: any;
@@ -8,7 +12,56 @@ interface TriggerConfigProps {
 }
 
 export function TriggerConfig({ config, onChange, flowId }: TriggerConfigProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.permissions?.includes('admin') ?? false;
   const triggerType = config.triggerType || 'manual';
+  const [personalKey, setPersonalKey] = useState<string | null>(null);
+  const [personalKeyPrefix, setPersonalKeyPrefix] = useState<string>(
+    config.personalApiKeyPrefix || ''
+  );
+  const [keyCreatedAt, setKeyCreatedAt] = useState<string>(
+    config.personalApiKeyCreatedAt || ''
+  );
+  const [loading, setLoading] = useState(false);
+
+  const handleRenew = useCallback(async () => {
+    if (!flowId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/flows/${flowId}/keys/renew`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to renew key');
+      const data = await res.json();
+      setPersonalKey(data.rawKey);
+      setPersonalKeyPrefix(data.prefix);
+      setKeyCreatedAt(data.createdAt);
+    } catch (err) {
+      console.error('Failed to renew API key:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [flowId]);
+
+  const handleRevoke = useCallback(async () => {
+    if (!flowId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/flows/${flowId}/keys/revoke`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to revoke key');
+      setPersonalKey(null);
+      setPersonalKeyPrefix('');
+      setKeyCreatedAt('');
+    } catch (err) {
+      console.error('Failed to revoke API key:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [flowId]);
 
   if (triggerType === 'subflow') {
     return (
@@ -42,6 +95,9 @@ export function TriggerConfig({ config, onChange, flowId }: TriggerConfigProps) 
     );
   }
 
+  const pathSlug = config.pathSlug || '';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
+
   return (
     <div className="space-y-3">
       <SelectField
@@ -58,19 +114,92 @@ export function TriggerConfig({ config, onChange, flowId }: TriggerConfigProps) 
 
       {triggerType === 'webhook' && (
         <>
-          <TextField
-            label="Webhook Secret"
-            value={config.webhookSecret || ''}
-            onChange={(v) => onChange({ webhookSecret: v })}
-            helpText="Pass as ?secret=... in the webhook URL"
-          />
+          {isAdmin && (
+            <TextField
+              label="Webhook Secret"
+              value={config.webhookSecret || ''}
+              onChange={(v) => onChange({ webhookSecret: v })}
+              helpText="Pass as ?secret=... in the webhook URL. Only admins can set this."
+            />
+          )}
+
+          <div className="bg-surface-container rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-on-surface-variant">Your Personal API Key</p>
+
+            {personalKey ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-surface rounded px-2 py-1.5 border border-outline font-mono break-all">
+                    {personalKey}
+                  </code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(personalKey)}
+                    className="p-1.5 rounded hover:bg-surface-container-high text-on-surface-variant"
+                    title="Copy key"
+                  >
+                    <Icon name="content_copy" className="text-sm" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-warning">
+                  This key is shown once. Copy it now. If you lose it, renew to generate a new one.
+                </p>
+              </div>
+            ) : personalKeyPrefix ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <code className="text-xs bg-surface rounded px-2 py-1.5 border border-outline font-mono">
+                    {personalKeyPrefix}...
+                  </code>
+                  <span className="text-[10px] text-on-surface-variant">
+                    Created {keyCreatedAt ? new Date(keyCreatedAt).toLocaleDateString() : ''}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-on-surface-variant">
+                No personal API key yet. Save the flow to auto-generate one.
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleRenew}
+                disabled={loading}
+                className="text-xs px-2 py-1 rounded bg-primary-container text-primary hover:bg-primary-container/80 disabled:opacity-50"
+              >
+                {loading ? '...' : 'Renew Key'}
+              </button>
+              {personalKeyPrefix && (
+                <button
+                  onClick={handleRevoke}
+                  disabled={loading}
+                  className="text-xs px-2 py-1 rounded bg-error-container text-error hover:bg-error-container/80 disabled:opacity-50"
+                >
+                  Revoke Key
+                </button>
+              )}
+            </div>
+
+            <p className="text-[10px] text-on-surface-variant">
+              Personal to you. Used with <code className="text-[10px] font-mono">Authorization: Bearer wh_...</code>.
+              Sharing it allows others to act on your behalf.
+            </p>
+          </div>
+
           <div className="bg-surface-container rounded p-2">
             <p className="text-[10px] font-medium text-on-surface-variant mb-1">Webhook URL</p>
             <code className="text-[10px] text-on-surface-variant break-all">
-              {process.env.NEXT_PUBLIC_API_URL || '/api'}/webhook/
-              {flowId}
+              {baseUrl}/webhook/
+              {pathSlug || flowId}
               {config.webhookSecret ? '?secret=••••••••' : ''}
             </code>
+            {pathSlug && (
+              <p className="text-[10px] text-on-surface-variant mt-1">
+                OpenAPI spec: <a href={`${baseUrl}/openapi.json`} target="_blank" rel="noopener noreferrer" className="text-primary underline">{baseUrl}/openapi.json</a>
+                {' · '}
+                <a href={`${baseUrl}/docs`} target="_blank" rel="noopener noreferrer" className="text-primary underline">Swagger UI</a>
+              </p>
+            )}
           </div>
         </>
       )}

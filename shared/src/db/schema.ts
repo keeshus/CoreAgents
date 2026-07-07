@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -349,6 +350,29 @@ export const secretAccessLog = pgTable('secret_access_log', {
   metadata: jsonb('metadata').default('{}'),
   created_at: timestamp('created_at').notNull().defaultNow(),
 });
+
+export const apiDeployments = pgTable('api_deployments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flow_id: uuid('flow_id').notNull().unique().references(() => flows.id, { onDelete: 'cascade' }),
+  path_slug: text('path_slug').notNull().unique(),
+  rate_limit: integer('rate_limit').notNull().default(0),
+  summary: text('summary').notNull().default(''),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+  updated_at: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const apiKeys = pgTable('api_keys', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  flow_id: uuid('flow_id').notNull().references(() => flows.id, { onDelete: 'cascade' }),
+  user_id: uuid('user_id').notNull().references(() => users.id),
+  key_hash: text('key_hash').notNull(),
+  key_prefix: text('key_prefix').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  last_used_at: timestamp('last_used_at'),
+  created_at: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  uniqFlowUser: uniqueIndex('api_keys_flow_user_idx').on(table.flow_id, table.user_id),
+}));
 
 export const userAssignments = pgTable('user_assignments', {
   id: uuid('id').primaryKey().defaultRandom(),
