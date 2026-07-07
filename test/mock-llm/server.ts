@@ -89,14 +89,24 @@ const server = http.createServer(async (req, res) => {
     const { model, messages, stream, response_format, tools } = params;
 
     // Check for MOCK_TOOL_CALL directive in system prompt
+    // Only trigger on first call — if conversation already has tool results, return text instead
     let toolToCall: string | null = null;
     let toolArgs: string = '{}';
+    let hasToolResults = false;
     for (const msg of messages || []) {
-      if (msg.role === 'system' && typeof msg.content === 'string') {
-        const match = msg.content.match(/MOCK_TOOL_CALL:\s*(\S+)(?:\s+({.+}))?/);
-        if (match) {
-          toolToCall = match[1];
-          if (match[2]) toolArgs = match[2];
+      if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('Tool result for')) {
+        hasToolResults = true;
+        break;
+      }
+    }
+    if (!hasToolResults) {
+      for (const msg of messages || []) {
+        if (msg.role === 'system' && typeof msg.content === 'string') {
+          const match = msg.content.match(/MOCK_TOOL_CALL:\s*(\S+)(?:\s+({.+}))?/);
+          if (match) {
+            toolToCall = match[1];
+            if (match[2]) toolArgs = match[2];
+          }
         }
       }
     }
