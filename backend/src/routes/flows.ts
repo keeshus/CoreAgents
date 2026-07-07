@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { eq, and, asc, desc, sql, inArray, isNull, or } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions, userAssignments, users, groups, groupMembers } from '../db/schema.js';
+import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions, userAssignments, users, groups, groupMembers, apiDeployments, apiKeys } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { FlowExecutor } from '../../../worker/src/executor/engine.js';
 import { topologicalSort } from '../../../worker/src/executor/dag.js';
+import { generateApiKey, generateSlug } from './webhook-api-keys.js';
 
 const router = Router();
 
@@ -127,7 +128,29 @@ router.get(
       return;
     }
 
-    res.json(result[0]);
+    // Attach personal API key info and path slug to trigger node for webhook flows
+    const flowData = result[0];
+    const nodes = (flowData.nodes || []) as any[];
+    const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'webhook');
+    if (triggerNode && req.user) {
+      const [apiKey] = await db.select({ keyPrefix: apiKeys.key_prefix, createdAt: apiKeys.created_at })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.flow_id, id), eq(apiKeys.user_id, req.user.userId)));
+      const [deployment] = await db.select({ pathSlug: apiDeployments.path_slug })
+        .from(apiDeployments)
+        .where(eq(apiDeployments.flow_id, id));
+
+      triggerNode.data.config = {
+        ...triggerNode.data.config,
+        ...(apiKey ? {
+          personalApiKeyPrefix: apiKey.keyPrefix,
+          personalApiKeyCreatedAt: apiKey.createdAt?.toISOString(),
+        } : {}),
+        ...(deployment ? { pathSlug: deployment.pathSlug } : {}),
+      };
+    }
+
+    res.json(flowData);
   }),
 );
 
@@ -168,7 +191,38 @@ router.post(
       })
       .returning();
 
-    res.status(201).json(result[0]);
+    const createdFlow = result[0];
+
+    // ── Webhook auto-deployment hook on create ────────────────
+    const flowNodes = (createdFlow.nodes || []) as any[];
+    const whTrigger = flowNodes.find((n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'webhook');
+    let personalApiKey: { rawKey: string; prefix: string } | null = null;
+
+    if (whTrigger && req.user) {
+      const slug = generateSlug(createdFlow.name);
+      await db.insert(apiDeployments).values({
+        flow_id: createdFlow.id,
+        path_slug: slug,
+        rate_limit: 0,
+        summary: '',
+      }).onConflictDoNothing({ target: apiDeployments.flow_id });
+
+      const { raw, hash, prefix } = generateApiKey();
+      await db.insert(apiKeys).values({
+        flow_id: createdFlow.id,
+        user_id: req.user.userId,
+        key_hash: hash,
+        key_prefix: prefix,
+      }).onConflictDoNothing({ target: [apiKeys.flow_id, apiKeys.user_id] });
+      personalApiKey = { rawKey: raw, prefix };
+    }
+
+    const response: any = createdFlow;
+    if (personalApiKey) {
+      response.personalApiKey = personalApiKey;
+    }
+
+    res.status(201).json(response);
   }),
 );
 
@@ -212,7 +266,47 @@ router.put(
       return;
     }
 
-    res.json(result[0]);
+    // ── Webhook auto-deployment hook ──────────────────────────
+    const updatedFlow = result[0];
+    const flowNodes = (updatedFlow.nodes || []) as any[];
+    const whTrigger = flowNodes.find((n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'webhook');
+    let personalApiKey: { rawKey: string; prefix: string } | null = null;
+
+    if (whTrigger && req.user) {
+      const slug = generateSlug(updatedFlow.name);
+      await db.insert(apiDeployments).values({
+        flow_id: id,
+        path_slug: slug,
+        rate_limit: 0,
+        summary: '',
+      }).onConflictDoUpdate({
+        target: apiDeployments.flow_id,
+        set: { updated_at: new Date() },
+      });
+
+      // Auto-create personal API key if user doesn't have one
+      const [existingKey] = await db.select({ id: apiKeys.id })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.flow_id, id), eq(apiKeys.user_id, req.user.userId)));
+
+      if (!existingKey) {
+        const { raw, hash, prefix } = generateApiKey();
+        await db.insert(apiKeys).values({
+          flow_id: id,
+          user_id: req.user.userId,
+          key_hash: hash,
+          key_prefix: prefix,
+        });
+        personalApiKey = { rawKey: raw, prefix };
+      }
+    }
+
+    const response: any = updatedFlow;
+    if (personalApiKey) {
+      response.personalApiKey = personalApiKey;
+    }
+
+    res.json(response);
   }),
 );
 

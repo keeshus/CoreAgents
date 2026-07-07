@@ -215,14 +215,18 @@ describe('env-vars routes', () => {
       const envVars = [{ key: 'G_VAR', value: 'v', type: 'static' }];
       req.params = { groupId: 'group-1' };
       req.body = { envVars };
+      const selectChain = mockChain();
+      selectChain.limit.mockResolvedValue([{ group_id: 'group-1', env_vars: envVars }]);
+      db.select.mockReturnValue(selectChain);
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ env_vars: envVars }]);
       db.update.mockReturnValue(updateChain);
 
       await getHandler(router, 'put', '/groups/:groupId')(req, res);
 
-      // Admin bypasses membership check, so db.select should NOT be called for members
-      expect(db.select).not.toHaveBeenCalled();
+      // Admin bypasses membership check, but db.select is still called
+      // to check for an existing groupVaultConfig row
+      expect(db.select).toHaveBeenCalledTimes(1);
       expect(db.update).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(envVars);
     });

@@ -35,6 +35,8 @@ export default function FlowEditPage() {
   const revealSecretConfirm = useConfirm({ title: 'Reveal secret?', message: 'Reveal the value of this secret? It will be visible on screen for 10 seconds.', variant: 'default' });
   const [revealedSecrets, setRevealedSecrets] = useState<Record<string, { value: string; expiresAt: number }>>({});
   const [now, setNow] = useState(Date.now());
+  const [personalApiKey, setPersonalApiKey] = useState<string | null>(null);
+  const [showKeyModal, setShowKeyModal] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -242,10 +244,18 @@ export default function FlowEditPage() {
       const isSubflow = triggerNode?.data?.config?.triggerType === 'subflow';
       const created = await api.flows.create({ ...flow, ...updates, is_subflow: isSubflow });
       setFlow(created);
+      if (created.personalApiKey?.rawKey) {
+        setPersonalApiKey(created.personalApiKey.rawKey);
+        setShowKeyModal(true);
+      }
       router.replace(`/flows/${created.id}/edit`);
     } else {
       const updated = await api.flows.update(flow.id, { ...flow, ...updates });
       setFlow(updated);
+      if (updated.personalApiKey?.rawKey) {
+        setPersonalApiKey(updated.personalApiKey.rawKey);
+        setShowKeyModal(true);
+      }
     }
   }, [flow, router, nodes]);
 
@@ -877,6 +887,34 @@ export default function FlowEditPage() {
         </div>
       )}
       {revealSecretConfirm.dialog}
+
+      {/* Personal API Key creation modal */}
+      {showKeyModal && personalApiKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-surface rounded-xl shadow-m3-4 p-6 max-w-md w-full mx-4 space-y-4">
+            <h3 className="m3-title-small text-on-surface">Personal API Key Created</h3>
+            <p className="m3-body-small text-on-surface-variant">
+              This key is shown once. Copy it now. If you lose it, you can renew it in the trigger settings.
+            </p>
+            <div className="flex items-center gap-2 bg-surface-container rounded-lg p-3">
+              <code className="flex-1 text-xs font-mono break-all">{personalApiKey}</code>
+              <button
+                onClick={() => { navigator.clipboard.writeText(personalApiKey); }}
+                className="m3-button-tonal text-xs px-3 py-1.5"
+              >
+                <Icon name="content_copy" className="text-sm" />
+                Copy
+              </button>
+            </div>
+            <button
+              onClick={() => { setShowKeyModal(false); setPersonalApiKey(null); }}
+              className="m3-button w-full"
+            >
+              I&apos;ve copied my key
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -396,6 +396,13 @@ export default function FlowsListPage() {
                                     </Tooltip>
                                   )
                                 )}
+                                {isWebhook && (
+                                  <Tooltip content="OpenAPI docs for this webhook">
+                                    <a href="/api/docs" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-secondary-container rounded transition-colors">
+                                      <Icon name="api" className="text-sm" /> API
+                                    </a>
+                                  </Tooltip>
+                                )}
                                 {can('execution:approve') && !isChat && !isWebhook && (
                                   <Tooltip content="Executions">
                                     <Link href={`/flows/${flow.id}/executions`} className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant hover:text-success hover:bg-secondary-container rounded transition-colors">

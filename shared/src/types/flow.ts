@@ -39,6 +39,8 @@ export interface TriggerNodeData extends BaseNodeData {
     cronExpression?: string;
     inputSchema?: string;
     inputMessage?: string;
+    personalApiKeyPrefix?: string;
+    personalApiKeyCreatedAt?: string;
   };
 }
 
