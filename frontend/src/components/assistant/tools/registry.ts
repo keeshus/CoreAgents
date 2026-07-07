@@ -1509,6 +1509,7 @@ export function getToolGroupNames(pageKey: string, nodeType?: string): string[] 
   const groups: string[] = ['navigation'];
 
   if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'read-resources', 'agent-contexts-crud', 'groups-crud', 'webhook-api-crud', 'chat-api-crud');
+  else if (pageKey === 'settings') groups.push('endpoint-crud', 'mcp-crud', 'embedding-crud', 'store-crud', 'knowledge-crud', 'user-crud', 'admin-crud', 'secret-crud', 'vault-crud', 'env-vars-crud', 'groups-crud', 'global-context-crud', 'sso-crud', 'executions');
   else if (pageKey === 'settings:endpoints') groups.push('endpoint-crud');
   else if (pageKey === 'settings:mcp-servers') groups.push('mcp-crud');
   else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud', 'knowledge-crud');

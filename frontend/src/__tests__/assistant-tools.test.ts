@@ -26,13 +26,25 @@ function filterTools(toolNames: string[], userPerms: string[]): string[] {
 
 function getToolGroupNames(pageKey: string): string[] {
   const groups: string[] = ['navigation'];
-  if (pageKey?.startsWith('flow:')) groups.push('flow-editor');
+  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'read-resources', 'agent-contexts-crud', 'groups-crud', 'webhook-api-crud', 'chat-api-crud');
+  else if (pageKey === 'settings') groups.push('endpoint-crud', 'mcp-crud', 'embedding-crud', 'store-crud', 'knowledge-crud', 'user-crud', 'admin-crud', 'secret-crud', 'vault-crud', 'env-vars-crud', 'groups-crud', 'global-context-crud', 'sso-crud', 'executions');
   else if (pageKey === 'settings:endpoints') groups.push('endpoint-crud');
   else if (pageKey === 'settings:mcp-servers') groups.push('mcp-crud');
-  else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud');
-  else if (pageKey === 'settings:users') groups.push('user-crud');
+  else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud', 'knowledge-crud');
+  else if (pageKey === 'settings:users') groups.push('user-crud', 'admin-crud');
+  else if (pageKey === 'settings:secrets') groups.push('secret-crud', 'group-vault-config');
+  else if (pageKey === 'settings:secret-vaults') groups.push('vault-crud');
+  else if (pageKey === 'settings:groups') groups.push('group-vault-config', 'group-context-crud', 'groups-crud', 'agent-contexts-crud');
+  else if (pageKey === 'settings:global-context') groups.push('global-context-crud');
+  else if (pageKey === 'settings:sso') groups.push('sso-crud');
+  else if (pageKey === 'settings:env-vars') groups.push('env-vars-crud');
+  else if (pageKey === 'settings:executions') groups.push('executions');
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
+  else if (pageKey === 'profile') groups.push('profile-crud');
+  else if (pageKey === 'flows-list' || pageKey === 'flows') groups.push('flows-list', 'groups-crud', 'agent-contexts-crud');
+  else if (pageKey?.startsWith('chat:')) groups.push('chat-sessions-crud');
+  else if (pageKey?.startsWith('chat-sessions:')) groups.push('chat-sessions-crud');
   return groups;
 }
 
@@ -42,11 +54,9 @@ function getPageCapabilities(pageKey: string): string {
   if (pageKey.startsWith('flow:')) return 'flow editor canvas';
   if (pageKey === 'flows-list') return 'flow list';
   if (pageKey === 'approvals') return 'pending approvals';
-  if (pageKey === 'settings:endpoints') return 'LLM endpoints config';
-  if (pageKey === 'settings:mcp-servers') return 'MCP servers config';
-  if (pageKey === 'settings:knowledge') return 'knowledge bases config';
-  if (pageKey === 'settings:users') return 'user management';
+  if (pageKey === 'settings' || pageKey.startsWith('settings:')) return 'settings';
   if (pageKey === 'profile') return 'profile editing';
+  if (pageKey.startsWith('chat:') || pageKey.startsWith('chat-sessions:')) return 'chat sessions';
   return '';
 }
 
