@@ -562,4 +562,263 @@ test.describe('Co-Pilot tools', () => {
     const ctx = await res.json();
     expect((await request.delete(`${API_URL}/agent-contexts/${ctx.id}`)).ok()).toBe(true);
   });
+
+  // ─── Execution & Flow Control ──────────────────────────────────
+  test('execute_flow — runs a flow', async ({ request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CPExec'),
+      nodes: [{ id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } }],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await flowRes.json();
+    const res = await request.post(`${API_URL}/flows/${flow.id}/execute`, { data: { input: { message: 'test' }, _debug: true } });
+    expect(res.ok()).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('cancel_execution — cancels execution', async ({ request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CPCancel'), nodes: [
+      { id: 't1', type: 'trigger', data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+      { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Wait', buttons: [{ label: 'Go', value: 'go' }] } } },
+      { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+    ], edges: [
+      { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+      { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+    ] });
+    const flow = await flowRes.json();
+    const { executeUntilPaused } = await import('./helpers/stream');
+    const cookie = (await import('./helpers/auth')).getAuthCookie() || undefined;
+    const { executionId } = await executeUntilPaused(flow.id, { message: 'cancel' }, cookie);
+    expect((await fetch(`${API_URL}/executions/${executionId}/cancel`, { method: 'POST', headers: { Cookie: cookie || '' } })).ok).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('create_flow + delete_flow — creates and deletes', async ({ request }) => {
+    const createRes = await request.post(`${API_URL}/flows`, { data: { name: uniqueFlowName('CPCreate') } });
+    expect(createRes.ok()).toBe(true);
+    const flow = await createRes.json();
+    expect((await request.delete(`${API_URL}/flows/${flow.id}`)).ok()).toBe(true);
+  });
+
+  test('get_flow_by_id — returns flow', async ({ request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CPGet') });
+    const flow = await flowRes.json();
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.ok()).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('validate_flow — validates flow structure', async ({ request }) => {
+    const res = await request.post(`${API_URL}/flows/validate`, { data: { nodes: [], edges: [] } });
+    expect(res.ok()).toBe(true);
+  });
+
+  // ─── LLM Endpoints (additional) ───────────────────────────────
+  test('update_endpoint — updates endpoint', async ({ request }) => {
+    const epRes = await request.post(`${API_URL}/llm-endpoints`, { data: { name: 'CP UpdEP', providerType: 'openai', apiKey: 'sk-test', defaultModel: 'gpt-4' } });
+    const ep = await epRes.json();
+    expect((await request.put(`${API_URL}/llm-endpoints/${ep.id}`, { data: { name: 'CP UpdEP New' } })).ok()).toBe(true);
+    await request.delete(`${API_URL}/llm-endpoints/${ep.id}`);
+  });
+
+  test('get_endpoint — returns single endpoint', async ({ request }) => {
+    const epRes = await request.post(`${API_URL}/llm-endpoints`, { data: { name: 'CP GetEP', providerType: 'openai', apiKey: 'sk-test', defaultModel: 'gpt-4' } });
+    const ep = await epRes.json();
+    expect((await request.get(`${API_URL}/llm-endpoints/${ep.id}`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/llm-endpoints/${ep.id}`);
+  });
+
+  test('get_default_endpoint — returns default', async ({ request }) => {
+    const res = await request.get(`${API_URL}/llm-endpoints/default`);
+    expect([200, 404]).toContain(res.status());
+  });
+
+  // ─── MCP (additional) ─────────────────────────────────────────
+  test('update_mcp_server + get_mcp_server', async ({ request }) => {
+    const res = await request.post(`${API_URL}/mcp-servers`, { data: { name: 'CP UpdMCP', url: 'http://e2e-test.local/sse' } });
+    const srv = await res.json();
+    expect((await request.put(`${API_URL}/mcp-servers/${srv.id}`, { data: { name: 'CP UpdMCP New' } })).ok()).toBe(true);
+    expect((await request.get(`${API_URL}/mcp-servers/${srv.id}`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/mcp-servers/${srv.id}`);
+  });
+
+  // ─── Embedding Providers (additional) ─────────────────────────
+  test('update_embedding_provider + get_embedding_provider', async ({ request }) => {
+    const res = await request.post(`${API_URL}/embedding-providers`, { data: { name: 'CP UpdEmb', providerType: 'openai', apiKey: 'sk-test' } });
+    const ep = await res.json();
+    expect((await request.put(`${API_URL}/embedding-providers/${ep.id}`, { data: { name: 'CP UpdEmb New' } })).ok()).toBe(true);
+    expect((await request.get(`${API_URL}/embedding-providers/${ep.id}`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/embedding-providers/${ep.id}`);
+  });
+
+  // ─── Vector Stores (additional) ───────────────────────────────
+  test('update_vector_store + get_vector_store', async ({ request }) => {
+    const res = await request.post(`${API_URL}/vector-stores`, { data: { name: 'CP UpdVS', storeType: 'qdrant', url: 'http://qdrant-e2e:6333' } });
+    const vs = await res.json();
+    expect((await request.put(`${API_URL}/vector-stores/${vs.id}`, { data: { name: 'CP UpdVS New' } })).ok()).toBe(true);
+    expect((await request.get(`${API_URL}/vector-stores/${vs.id}`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/vector-stores/${vs.id}`);
+  });
+
+  test('list_collections + refresh_collections', async ({ request }) => {
+    const res = await request.post(`${API_URL}/vector-stores`, { data: { name: 'CP ColVS', storeType: 'qdrant', url: 'http://qdrant-e2e:6333' } });
+    const vs = await res.json();
+    expect((await request.get(`${API_URL}/vector-stores/${vs.id}/collections`)).ok()).toBe(true);
+    expect((await request.post(`${API_URL}/vector-stores/${vs.id}/refresh`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/vector-stores/${vs.id}`);
+  });
+
+  // ─── Knowledge ────────────────────────────────────────────────
+  test('list_knowledge_collections', async ({ request }) => {
+    expect((await request.get(`${API_URL}/knowledge/collections`)).ok()).toBe(true);
+  });
+
+  test('get_knowledge_collection — returns collection', async ({ request }) => {
+    const res = await request.post(`${API_URL}/knowledge/upload`, { data: { name: 'CP KDoc', content: 'test content', collectionName: 'cp-col' } });
+    const doc = await res.json();
+    expect((await request.get(`${API_URL}/knowledge/collections/cp-col`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/documents/${doc.id}`);
+  });
+
+  test('upload_knowledge_document — uploads to collection', async ({ request }) => {
+    const res = await request.post(`${API_URL}/knowledge/upload`, { data: { name: 'CP UpDoc', content: 'knowledge upload test', collectionName: 'cp-upload' } });
+    expect(res.ok()).toBe(true);
+    const doc = await res.json();
+    await request.delete(`${API_URL}/documents/${doc.id}`);
+  });
+
+  test('delete_knowledge_collection + delete_knowledge_document', async ({ request }) => {
+    const res = await request.post(`${API_URL}/knowledge/upload`, { data: { name: 'CP DelDoc', content: 'to delete', collectionName: 'cp-del-col' } });
+    const doc = await res.json();
+    expect((await request.delete(`${API_URL}/knowledge/documents/${doc.id}`)).ok()).toBe(true);
+    expect((await request.delete(`${API_URL}/knowledge/collections/cp-del-col`)).ok()).toBe(true);
+  });
+
+  // ─── Environment Variables ─────────────────────────────────────
+  test('list_env_vars + update_env_vars', async ({ request }) => {
+    expect((await request.get(`${API_URL}/env-vars`)).ok()).toBe(true);
+    expect((await request.put(`${API_URL}/env-vars`, { data: { envVars: [] } })).ok()).toBe(true);
+  });
+
+  test('get_group_env_vars + set_group_env_vars', async ({ request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `CP-EnvGrp-${Date.now()}` } });
+    const grp = await gRes.json();
+    expect((await request.put(`${API_URL}/env-vars/groups/${grp.id}`, { data: { envVars: [] } })).ok()).toBe(true);
+    expect((await request.get(`${API_URL}/env-vars/groups/${grp.id}`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/groups/${grp.id}`);
+  });
+
+  // ─── Admin ─────────────────────────────────────────────────────
+  test('list_roles — returns roles', async ({ request }) => {
+    const res = await request.get(`${API_URL}/roles`);
+    expect(res.ok()).toBe(true);
+    const roles = await res.json();
+    expect(roles.some((r: any) => r.name === 'admin')).toBe(true);
+  });
+
+  test('seed_roles — seeds default roles', async ({ request }) => {
+    expect([200, 409]).toContain((await request.post(`${API_URL}/roles/seed`)).status());
+  });
+
+  test('set_user_groups + update_group_member_role', async ({ request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `CP-AdminGrp-${Date.now()}` } });
+    const grp = await gRes.json();
+    const users = await (await request.get(`${API_URL}/users`)).json();
+    const target = users[0];
+    expect((await request.put(`${API_URL}/users/${target.id}/groups`, { data: { groupIds: [grp.id] } })).ok()).toBe(true);
+    expect((await request.put(`${API_URL}/groups/${grp.id}/members/${target.id}/role`, { data: { role: 'admin' } })).ok()).toBe(true);
+    await request.delete(`${API_URL}/groups/${grp.id}`);
+  });
+
+  // ─── Profile / Auth ───────────────────────────────────────────
+  test('change_password + get_auth_config + get_setup_status + get_my_profile', async ({ request }) => {
+    expect((await request.get(`${API_URL}/auth/config`)).ok()).toBe(true);
+    expect((await request.get(`${API_URL}/auth/setup-status`)).ok()).toBe(true);
+    const profileRes = await request.get(`${API_URL}/auth/profile`);
+    expect(profileRes.ok()).toBe(true);
+    const profile = await profileRes.json();
+    expect(profile.email).toBe('e2e@test.local');
+    expect((await request.put(`${API_URL}/auth/password`, { data: { currentPassword: 'Test1234!', newPassword: 'NewCP5678!' } })).ok()).toBe(true);
+    expect((await request.put(`${API_URL}/auth/password`, { data: { currentPassword: 'NewCP5678!', newPassword: 'Test1234!' } })).ok()).toBe(true);
+  });
+
+  // ─── Assignments ──────────────────────────────────────────────
+  test('list_assignments + decide_assignment — via HITL flow', async ({ request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CPAssign'), nodes: [
+      { id: 't1', type: 'trigger', data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+      { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Go', buttons: [{ label: 'Go', value: 'go' }] } } },
+      { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+    ], edges: [
+      { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+      { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+    ] });
+    const flow = await flowRes.json();
+    const { executeUntilPaused, pollExecution } = await import('./helpers/stream');
+    const cookie = (await import('./helpers/auth')).getAuthCookie() || undefined;
+    const { executionId } = await executeUntilPaused(flow.id, { message: 'test' }, cookie);
+    expect((await fetch(`${API_URL}/executions/${executionId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' }, body: JSON.stringify({ decision: 'go' }) })).ok).toBe(true);
+    await pollExecution(request, executionId, 30000);
+    await deleteFlow(request, flow.id);
+  });
+
+  // ─── Chat Sessions ────────────────────────────────────────────
+  test('list_chat_sessions + create_chat_session + delete_chat_session', async ({ request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CPChat'),
+      nodes: [{ id: 't1', type: 'trigger', data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } }],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await flowRes.json();
+    const listRes = await request.get(`${API_URL}/chat/${flow.id}/sessions`);
+    expect(listRes.ok()).toBe(true);
+    const createRes = await request.post(`${API_URL}/chat/${flow.id}/sessions`, { data: { title: 'CP Session' } });
+    expect(createRes.ok()).toBe(true);
+    const session = await createRes.json();
+    expect((await request.delete(`${API_URL}/chat/sessions/${session.id}`)).ok()).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  // ─── Chat API ─────────────────────────────────────────────────
+  test('chat_api_deployment + keys CRUD', async ({ request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CPChatAPI'),
+      nodes: [{ id: 't1', type: 'trigger', data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } }],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await flowRes.json();
+    expect((await request.get(`${API_URL}/flows/${flow.id}/chat-api/deployment`)).ok()).toBe(true);
+    expect((await request.put(`${API_URL}/flows/${flow.id}/chat-api/deployment`, { data: { enabled: true, model_name: 'test-model' } })).ok()).toBe(true);
+    expect((await request.get(`${API_URL}/flows/${flow.id}/chat-api/keys`)).ok()).toBe(true);
+    const keyRes = await request.post(`${API_URL}/flows/${flow.id}/chat-api/keys`, { data: { label: 'CP Key' } });
+    expect(keyRes.ok()).toBe(true);
+    const key = await keyRes.json();
+    expect((await request.delete(`${API_URL}/flows/${flow.id}/chat-api/keys/${key.id}`)).ok()).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  // ─── Webhook API ──────────────────────────────────────────────
+  test('webhook_deployment + keys CRUD', async ({ request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CPWebhook'),
+      nodes: [{ id: 't1', type: 'trigger', data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } }],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await flowRes.json();
+    expect((await request.get(`${API_URL}/flows/${flow.id}/deployment`)).ok()).toBe(true);
+    expect((await request.put(`${API_URL}/flows/${flow.id}/deployment`, { data: { pathSlug: 'cp-webhook', rateLimit: 5, summary: 'CP test' } })).ok()).toBe(true);
+    const renewRes = await request.post(`${API_URL}/flows/${flow.id}/keys/renew`);
+    expect(renewRes.ok()).toBe(true);
+    expect((await request.delete(`${API_URL}/flows/${flow.id}/keys/revoke`)).ok()).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  // ─── Secrets (additional) ─────────────────────────────────────
+  test('reveal_secret + get_secret_audit_log + re_encrypt_secrets', async ({ request }) => {
+    const secRes = await request.post(`${API_URL}/secrets`, { data: { name: 'CP Reveal', value: 'secret-val', scope: 'app' } });
+    const sec = await secRes.json();
+    expect((await request.post(`${API_URL}/secrets/${sec.id}/reveal`)).ok()).toBe(true);
+    expect((await request.get(`${API_URL}/secrets/audit-log`)).ok()).toBe(true);
+    expect((await request.post(`${API_URL}/secrets/re-encrypt`)).ok()).toBe(true);
+    await request.delete(`${API_URL}/secrets/${sec.id}`);
+  });
 });

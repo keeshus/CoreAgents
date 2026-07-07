@@ -1082,19 +1082,417 @@ const updateSSOConfig: AssistantTool = {
   async execute({ provider, clientId, clientSecret, issuer, groupClaim, adminGroupMapping, editorGroupMapping, enabled }) { return apiFetch('/admin/sso-config', { method: 'PUT', body: JSON.stringify({ provider, clientId, clientSecret, issuer, groupClaim, adminGroupMapping: adminGroupMapping?.split(',').map((s: string) => s.trim()).filter(Boolean), editorGroupMapping: editorGroupMapping?.split(',').map((s: string) => s.trim()).filter(Boolean), enabled }) }); },
 };
 
+// ── Execution & Flow Control ────────────────────────────────────
+
+const executeFlow: AssistantTool = {
+  name: 'execute_flow',
+  description: 'Execute/run a flow with optional input payload and debug mode.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string', description: 'Flow ID to execute' }, input: { type: 'object', description: 'Optional input payload' }, debug: { type: 'boolean', description: 'Enable debug mode (default true)' } }, required: ['flowId'] },
+  async execute({ flowId, input, debug }) { return apiFetch(`/flows/${flowId}/execute`, { method: 'POST', body: JSON.stringify({ input, _debug: debug !== false }) }); },
+};
+
+const cancelExecution: AssistantTool = {
+  name: 'cancel_execution',
+  description: 'Cancel a running or awaiting execution by ID.',
+  inputSchema: { type: 'object', properties: { executionId: { type: 'string', description: 'Execution ID to cancel' } }, required: ['executionId'] },
+  async execute({ executionId }) { return apiFetch(`/executions/${executionId}/cancel`, { method: 'POST' }); },
+};
+
+const createFlow: AssistantTool = {
+  name: 'create_flow',
+  description: 'Create a new blank flow with a name and optional group assignment.',
+  inputSchema: { type: 'object', properties: { name: { type: 'string' }, description: { type: 'string' }, groupId: { type: 'string', description: 'Optional group ID to assign the flow to' } }, required: ['name'] },
+  async execute({ name, description, groupId }) { return apiFetch('/flows', { method: 'POST', body: JSON.stringify({ name, description, group_id: groupId }) }); },
+};
+
+const deleteFlowTool: AssistantTool = {
+  name: 'delete_flow',
+  description: 'Delete a flow and all its data (executions, chats) by ID.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string', description: 'Flow ID to delete' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/flows/${flowId}`, { method: 'DELETE' }); },
+};
+
+const getFlowById: AssistantTool = {
+  name: 'get_flow_by_id',
+  description: 'Get a single flow full definition by ID.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string', description: 'Flow ID' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/flows/${flowId}`); },
+};
+
+const validateFlow: AssistantTool = {
+  name: 'validate_flow',
+  description: 'Validate a flow definition for structural errors.',
+  inputSchema: { type: 'object', properties: { nodes: { type: 'array', description: 'Array of flow nodes' }, edges: { type: 'array', description: 'Array of flow edges' } }, required: ['nodes', 'edges'] },
+  async execute({ nodes, edges }) { return apiFetch('/flows/validate', { method: 'POST', body: JSON.stringify({ nodes, edges }) }); },
+};
+
+// ── LLM Endpoints (additional) ──────────────────────────────────
+
+const updateEndpoint: AssistantTool = {
+  name: 'update_endpoint',
+  description: 'Update an existing LLM endpoint settings.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Endpoint ID' }, name: { type: 'string' }, providerType: { type: 'string' }, apiKey: { type: 'string' }, defaultModel: { type: 'string' }, baseUrl: { type: 'string' }, isDefault: { type: 'boolean' } }, required: ['id'] },
+  async execute({ id, name, providerType, apiKey, defaultModel, baseUrl, isDefault }) { return apiFetch(`/llm-endpoints/${id}`, { method: 'PUT', body: JSON.stringify({ name, providerType, apiKey, defaultModel, baseUrl, isDefault }) }); },
+};
+
+const getEndpoint: AssistantTool = {
+  name: 'get_endpoint',
+  description: 'Get a single LLM endpoint by ID.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  async execute({ id }) { return apiFetch(`/llm-endpoints/${id}`); },
+};
+
+const getDefaultEndpoint: AssistantTool = {
+  name: 'get_default_endpoint',
+  description: 'Get the default LLM endpoint used by the system.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/llm-endpoints/default'); },
+};
+
+// ── MCP Servers (additional) ────────────────────────────────────
+
+const updateMcpServer: AssistantTool = {
+  name: 'update_mcp_server',
+  description: 'Update an MCP server name, URL, or enabled status.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'MCP server ID' }, name: { type: 'string' }, url: { type: 'string' }, enabled: { type: 'boolean' } }, required: ['id'] },
+  async execute({ id, name, url, enabled }) { return apiFetch(`/mcp-servers/${id}`, { method: 'PUT', body: JSON.stringify({ name, url, enabled }) }); },
+};
+
+const getMcpServer: AssistantTool = {
+  name: 'get_mcp_server',
+  description: 'Get a single MCP server by ID.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  async execute({ id }) { return apiFetch(`/mcp-servers/${id}`); },
+};
+
+// ── Embedding Providers (additional) ────────────────────────────
+
+const updateEmbeddingProvider: AssistantTool = {
+  name: 'update_embedding_provider',
+  description: 'Update an embedding provider settings.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, providerType: { type: 'string' }, apiKey: { type: 'string' }, model: { type: 'string' } }, required: ['id'] },
+  async execute({ id, name, providerType, apiKey, model }) { return apiFetch(`/embedding-providers/${id}`, { method: 'PUT', body: JSON.stringify({ name, providerType, apiKey, model }) }); },
+};
+
+const getEmbeddingProvider: AssistantTool = {
+  name: 'get_embedding_provider',
+  description: 'Get a single embedding provider by ID.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  async execute({ id }) { return apiFetch(`/embedding-providers/${id}`); },
+};
+
+// ── Vector Stores (additional) ──────────────────────────────────
+
+const updateVectorStore: AssistantTool = {
+  name: 'update_vector_store',
+  description: 'Update a vector store name, URL, or API key.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' }, apiKey: { type: 'string' } }, required: ['id'] },
+  async execute({ id, name, url, apiKey }) { return apiFetch(`/vector-stores/${id}`, { method: 'PUT', body: JSON.stringify({ name, url, apiKey }) }); },
+};
+
+const getVectorStore: AssistantTool = {
+  name: 'get_vector_store',
+  description: 'Get a single vector store by ID.',
+  inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  async execute({ id }) { return apiFetch(`/vector-stores/${id}`); },
+};
+
+const listCollections: AssistantTool = {
+  name: 'list_collections',
+  description: 'List collections in a vector store.',
+  inputSchema: { type: 'object', properties: { vectorStoreId: { type: 'string' } }, required: ['vectorStoreId'] },
+  async execute({ vectorStoreId }) { return apiFetch(`/vector-stores/${vectorStoreId}/collections`); },
+};
+
+const refreshCollections: AssistantTool = {
+  name: 'refresh_collections',
+  description: 'Refresh and persist the collection list for a vector store.',
+  inputSchema: { type: 'object', properties: { vectorStoreId: { type: 'string' } }, required: ['vectorStoreId'] },
+  async execute({ vectorStoreId }) { return apiFetch(`/vector-stores/${vectorStoreId}/refresh`, { method: 'POST' }); },
+};
+
+// ── Knowledge / Documents ───────────────────────────────────────
+
+const listKnowledgeCollections: AssistantTool = {
+  name: 'list_knowledge_collections',
+  description: 'List all knowledge collections with document counts.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/knowledge/collections'); },
+};
+
+const getKnowledgeCollection: AssistantTool = {
+  name: 'get_knowledge_collection',
+  description: 'Get documents in a specific knowledge collection.',
+  inputSchema: { type: 'object', properties: { collectionName: { type: 'string' } }, required: ['collectionName'] },
+  async execute({ collectionName }) { return apiFetch(`/knowledge/collections/${encodeURIComponent(collectionName as string)}`); },
+};
+
+const uploadKnowledgeDocument: AssistantTool = {
+  name: 'upload_knowledge_document',
+  description: 'Upload a document to a knowledge collection for RAG (vector search). The content is chunked and embedded.',
+  inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'Document name' }, content: { type: 'string', description: 'Full text content' }, collectionName: { type: 'string', description: 'Collection name (default: "default")' } }, required: ['name', 'content'] },
+  async execute({ name, content, collectionName }) { return apiFetch('/knowledge/upload', { method: 'POST', body: JSON.stringify({ name, content, collectionName }) }); },
+};
+
+const deleteKnowledgeCollection: AssistantTool = {
+  name: 'delete_knowledge_collection',
+  description: 'Delete an entire knowledge collection and all its embeddings.',
+  inputSchema: { type: 'object', properties: { collectionName: { type: 'string' } }, required: ['collectionName'] },
+  async execute({ collectionName }) { return apiFetch(`/knowledge/collections/${encodeURIComponent(collectionName as string)}`, { method: 'DELETE' }); },
+};
+
+const deleteKnowledgeDocument: AssistantTool = {
+  name: 'delete_knowledge_document',
+  description: 'Delete a single document from a knowledge collection.',
+  inputSchema: { type: 'object', properties: { documentId: { type: 'string' } }, required: ['documentId'] },
+  async execute({ documentId }) { return apiFetch(`/knowledge/documents/${documentId}`, { method: 'DELETE' }); },
+};
+
+// ── Environment Variables ────────────────────────────────────────
+
+const listEnvVars: AssistantTool = {
+  name: 'list_env_vars',
+  description: 'List all app-level environment variables.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/env-vars'); },
+};
+
+const updateEnvVars: AssistantTool = {
+  name: 'update_env_vars',
+  description: 'Update the app-level environment variable list.',
+  inputSchema: { type: 'object', properties: { envVars: { type: 'array', description: 'Array of env var objects with name, value, type fields' } }, required: ['envVars'] },
+  async execute({ envVars }) { return apiFetch('/env-vars', { method: 'PUT', body: JSON.stringify({ env_vars: envVars }) }); },
+};
+
+const getGroupEnvVars: AssistantTool = {
+  name: 'get_group_env_vars',
+  description: 'Get environment variables for a specific group.',
+  inputSchema: { type: 'object', properties: { groupId: { type: 'string' } }, required: ['groupId'] },
+  async execute({ groupId }) { return apiFetch(`/env-vars/groups/${groupId}`); },
+};
+
+const setGroupEnvVars: AssistantTool = {
+  name: 'set_group_env_vars',
+  description: 'Set environment variables for a specific group.',
+  inputSchema: { type: 'object', properties: { groupId: { type: 'string' }, envVars: { type: 'array' } }, required: ['groupId', 'envVars'] },
+  async execute({ groupId, envVars }) { return apiFetch(`/env-vars/groups/${groupId}`, { method: 'PUT', body: JSON.stringify({ env_vars: envVars }) }); },
+};
+
+// ── Admin / Roles ───────────────────────────────────────────────
+
+const listRoles: AssistantTool = {
+  name: 'list_roles',
+  description: 'List all roles in the system (admin, editor, reader, group_admin).',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/roles'); },
+};
+
+const seedRoles: AssistantTool = {
+  name: 'seed_roles',
+  description: 'Seed the default system roles if they do not exist yet.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/roles/seed', { method: 'POST' }); },
+};
+
+const setUserGroupsTool: AssistantTool = {
+  name: 'set_user_groups',
+  description: 'Set the group memberships for a user (replaces all current group memberships).',
+  inputSchema: { type: 'object', properties: { userId: { type: 'string' }, groupIds: { type: 'array', items: { type: 'string' } } }, required: ['userId', 'groupIds'] },
+  async execute({ userId, groupIds }) { return apiFetch(`/users/${userId}/groups`, { method: 'PUT', body: JSON.stringify({ groupIds }) }); },
+};
+
+const updateGroupMemberRoleTool: AssistantTool = {
+  name: 'update_group_member_role',
+  description: "Update a member's role within a group (member or admin).",
+  inputSchema: { type: 'object', properties: { groupId: { type: 'string' }, userId: { type: 'string' }, role: { type: 'string', enum: ['member', 'admin'] } }, required: ['groupId', 'userId', 'role'] },
+  async execute({ groupId, userId, role }) { return apiFetch(`/groups/${groupId}/members/${userId}/role`, { method: 'PUT', body: JSON.stringify({ role }) }); },
+};
+
+// ── Profile & Auth (additional) ─────────────────────────────────
+
+const changePassword: AssistantTool = {
+  name: 'change_password',
+  description: 'Change your password (local accounts only). Requires current and new password.',
+  inputSchema: { type: 'object', properties: { currentPassword: { type: 'string' }, newPassword: { type: 'string', description: 'Minimum 8 characters' } }, required: ['currentPassword', 'newPassword'] },
+  async execute({ currentPassword, newPassword }) { return apiFetch('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }); },
+};
+
+const getAuthConfig: AssistantTool = {
+  name: 'get_auth_config',
+  description: 'Get available authentication methods (local/SSO) and whether setup is required.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/auth/config'); },
+};
+
+const getSetupStatus: AssistantTool = {
+  name: 'get_setup_status',
+  description: 'Check if first-time setup is needed (no admin users exist).',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/auth/setup-status'); },
+};
+
+const getMyProfile: AssistantTool = {
+  name: 'get_my_profile',
+  description: 'Get your full user profile including role and permissions.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/auth/profile'); },
+};
+
+// ── Assignments ─────────────────────────────────────────────────
+
+const listAssignments: AssistantTool = {
+  name: 'list_assignments',
+  description: 'List assignments for the current user, optionally filtered by status.',
+  inputSchema: { type: 'object', properties: { status: { type: 'string', description: 'Filter by status (e.g. "pending")' } } },
+  async execute({ status }) { return apiFetch(`/assignments${status ? `?status=${status}` : ''}`); },
+};
+
+const decideAssignment: AssistantTool = {
+  name: 'decide_assignment',
+  description: 'Approve or reject a specific assignment by ID.',
+  inputSchema: { type: 'object', properties: { assignmentId: { type: 'string' }, decision: { type: 'string', enum: ['approved', 'rejected'] }, feedback: { type: 'string', description: 'Optional feedback text' } }, required: ['assignmentId', 'decision'] },
+  async execute({ assignmentId, decision, feedback }) { return apiFetch(`/assignments/${assignmentId}/decide`, { method: 'POST', body: JSON.stringify({ status: decision, feedback }) }); },
+};
+
+// ── Chat Sessions ───────────────────────────────────────────────
+
+const listChatSessions: AssistantTool = {
+  name: 'list_chat_sessions',
+  description: 'List chat sessions for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/chat/${flowId}/sessions`); },
+};
+
+const createChatSession: AssistantTool = {
+  name: 'create_chat_session',
+  description: 'Create a new chat session for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' }, title: { type: 'string', description: 'Session title' } }, required: ['flowId'] },
+  async execute({ flowId, title }) { return apiFetch(`/chat/${flowId}/sessions`, { method: 'POST', body: JSON.stringify({ title }) }); },
+};
+
+const deleteChatSession: AssistantTool = {
+  name: 'delete_chat_session',
+  description: 'Delete a chat session by ID.',
+  inputSchema: { type: 'object', properties: { sessionId: { type: 'string' } }, required: ['sessionId'] },
+  async execute({ sessionId }) { return apiFetch(`/chat/sessions/${sessionId}`, { method: 'DELETE' }); },
+};
+
+const sendChatMessage: AssistantTool = {
+  name: 'send_chat_message',
+  description: 'Send a message in a chat session and get the AI response via SSE.',
+  inputSchema: { type: 'object', properties: { sessionId: { type: 'string' }, message: { type: 'string' } }, required: ['sessionId', 'message'] },
+  async execute({ sessionId, message }) { return apiFetch(`/chat/sessions/${sessionId}/messages`, { method: 'POST', body: JSON.stringify({ message }) }); },
+};
+
+// ── Chat API (OpenAI-compatible deployment) ─────────────────────
+
+const getChatApiDeployment: AssistantTool = {
+  name: 'get_chat_api_deployment',
+  description: 'Get the Chat API (OpenAI-compatible) deployment configuration for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/flows/${flowId}/chat-api/deployment`); },
+};
+
+const updateChatApiDeployment: AssistantTool = {
+  name: 'update_chat_api_deployment',
+  description: 'Enable/disable or update the Chat API deployment for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' }, enabled: { type: 'boolean' }, modelName: { type: 'string', description: 'Model name clients must send' }, rateLimit: { type: 'number' } }, required: ['flowId'] },
+  async execute({ flowId, enabled, modelName, rateLimit }) { return apiFetch(`/flows/${flowId}/chat-api/deployment`, { method: 'PUT', body: JSON.stringify({ enabled, model_name: modelName, rate_limit: rateLimit }) }); },
+};
+
+const listChatApiKeys: AssistantTool = {
+  name: 'list_chat_api_keys',
+  description: 'List Chat API keys for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/flows/${flowId}/chat-api/keys`); },
+};
+
+const createChatApiKey: AssistantTool = {
+  name: 'create_chat_api_key',
+  description: 'Create a new Chat API key for a flow. Returns the raw key once.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' }, label: { type: 'string', description: 'Optional label for the key' } }, required: ['flowId'] },
+  async execute({ flowId, label }) { return apiFetch(`/flows/${flowId}/chat-api/keys`, { method: 'POST', body: JSON.stringify({ label }) }); },
+};
+
+const deleteChatApiKey: AssistantTool = {
+  name: 'delete_chat_api_key',
+  description: 'Delete a Chat API key by ID.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' }, keyId: { type: 'string' } }, required: ['flowId', 'keyId'] },
+  async execute({ flowId, keyId }) { return apiFetch(`/flows/${flowId}/chat-api/keys/${keyId}`, { method: 'DELETE' }); },
+};
+
+// ── Webhook API Keys / Deployment ───────────────────────────────
+
+const getWebhookDeployment: AssistantTool = {
+  name: 'get_webhook_deployment',
+  description: 'Get the webhook deployment config (path slug, rate limit, summary) for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/flows/${flowId}/deployment`); },
+};
+
+const updateWebhookDeployment: AssistantTool = {
+  name: 'update_webhook_deployment',
+  description: 'Update webhook deployment config (path slug, rate limit, summary) for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' }, pathSlug: { type: 'string' }, rateLimit: { type: 'number' }, summary: { type: 'string' } }, required: ['flowId'] },
+  async execute({ flowId, pathSlug, rateLimit, summary }) { return apiFetch(`/flows/${flowId}/deployment`, { method: 'PUT', body: JSON.stringify({ pathSlug, rateLimit, summary }) }); },
+};
+
+const renewWebhookApiKey: AssistantTool = {
+  name: 'renew_webhook_api_key',
+  description: 'Renew/generate a personal webhook API key for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/flows/${flowId}/keys/renew`, { method: 'POST' }); },
+};
+
+const revokeWebhookApiKey: AssistantTool = {
+  name: 'revoke_webhook_api_key',
+  description: 'Revoke/disable a personal webhook API key for a flow.',
+  inputSchema: { type: 'object', properties: { flowId: { type: 'string' } }, required: ['flowId'] },
+  async execute({ flowId }) { return apiFetch(`/flows/${flowId}/keys/revoke`, { method: 'DELETE' }); },
+};
+
+// ── Secrets (additional) ────────────────────────────────────────
+
+const revealSecret: AssistantTool = {
+  name: 'reveal_secret',
+  description: 'Reveal a secret value (audit-logged, rate-limited).',
+  inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'Secret ID' } }, required: ['id'] },
+  async execute({ id }) { return apiFetch(`/secrets/${id}/reveal`, { method: 'POST' }); },
+};
+
+const getSecretAuditLog: AssistantTool = {
+  name: 'get_secret_audit_log',
+  description: 'Get the secret access audit log.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/secrets/audit-log'); },
+};
+
+const reEncryptSecrets: AssistantTool = {
+  name: 're_encrypt_secrets',
+  description: 'Re-encrypt all secrets with the current encryption key.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() { return apiFetch('/secrets/re-encrypt', { method: 'POST' }); },
+};
+
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo],
   'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows],
-  'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint],
-  'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools],
-  'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider],
-  'store-crud': [listVectorStores, createVectorStore, deleteVectorStore],
+  'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint, updateEndpoint, getEndpoint, getDefaultEndpoint],
+  'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools, updateMcpServer, getMcpServer],
+  'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider, updateEmbeddingProvider, getEmbeddingProvider],
+  'store-crud': [listVectorStores, createVectorStore, deleteVectorStore, updateVectorStore, getVectorStore, listCollections, refreshCollections],
   'user-crud': [listUsers, createUser, deleteUser, updateUserRole],
-  'profile-crud': [updateProfile],
-  'flows-list': [listFlows, searchFlows],
-  'approvals': [getPendingApprovals, approveExecution, rejectExecution],
-  'executions': [listExecutions, getExecutionDetails, deleteExecution],
-  'secret-crud': [listSecrets, createSecret, updateSecret, deleteSecret, rotateKey],
+  'profile-crud': [updateProfile, getMyProfile, changePassword, getAuthConfig, getSetupStatus],
+  'flows-list': [listFlows, searchFlows, createFlow, deleteFlowTool, getFlowById, validateFlow, executeFlow],
+  'approvals': [getPendingApprovals, approveExecution, rejectExecution, listAssignments, decideAssignment],
+  'executions': [listExecutions, getExecutionDetails, deleteExecution, cancelExecution],
+  'secret-crud': [listSecrets, createSecret, updateSecret, deleteSecret, rotateKey, revealSecret, getSecretAuditLog, reEncryptSecrets],
+  'knowledge-crud': [listKnowledgeCollections, getKnowledgeCollection, uploadKnowledgeDocument, deleteKnowledgeCollection, deleteKnowledgeDocument],
+  'env-vars-crud': [listEnvVars, updateEnvVars, getGroupEnvVars, setGroupEnvVars],
+  'admin-crud': [listRoles, seedRoles, setUserGroupsTool, updateGroupMemberRoleTool],
+  'chat-sessions-crud': [listChatSessions, createChatSession, deleteChatSession, sendChatMessage],
+  'chat-api-crud': [getChatApiDeployment, updateChatApiDeployment, listChatApiKeys, createChatApiKey, deleteChatApiKey],
+  'webhook-api-crud': [getWebhookDeployment, updateWebhookDeployment, renewWebhookApiKey, revokeWebhookApiKey],
   'group-vault-config': [listGroups, getGroupVault, setGroupVault],
   'global-context-crud': [getGlobalContext, updateGlobalContext],
   'sso-crud': [getSSOConfig, updateSSOConfig],
@@ -1110,22 +1508,24 @@ export const toolGroups: Record<string, AssistantTool[]> = {
 export function getToolGroupNames(pageKey: string, nodeType?: string): string[] {
   const groups: string[] = ['navigation'];
 
-  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'read-resources', 'agent-contexts-crud', 'groups-crud');
+  if (pageKey?.startsWith('flow:')) groups.push('flow-editor', 'read-resources', 'agent-contexts-crud', 'groups-crud', 'webhook-api-crud', 'chat-api-crud');
   else if (pageKey === 'settings:endpoints') groups.push('endpoint-crud');
   else if (pageKey === 'settings:mcp-servers') groups.push('mcp-crud');
-  else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud');
-  else if (pageKey === 'settings:users') groups.push('user-crud');
+  else if (pageKey === 'settings:knowledge') groups.push('embedding-crud', 'store-crud', 'knowledge-crud');
+  else if (pageKey === 'settings:users') groups.push('user-crud', 'admin-crud');
   else if (pageKey === 'settings:secrets') groups.push('secret-crud', 'group-vault-config');
   else if (pageKey === 'settings:secret-vaults') groups.push('vault-crud');
   else if (pageKey === 'settings:groups') groups.push('group-vault-config', 'group-context-crud', 'groups-crud', 'agent-contexts-crud');
   else if (pageKey === 'settings:global-context') groups.push('global-context-crud');
   else if (pageKey === 'settings:sso') groups.push('sso-crud');
+  else if (pageKey === 'settings:env-vars') groups.push('env-vars-crud');
+  else if (pageKey === 'settings:executions') groups.push('executions');
   else if (pageKey === 'approvals') groups.push('approvals');
   else if (pageKey?.startsWith('executions:')) groups.push('executions');
   else if (pageKey === 'profile') groups.push('profile-crud');
-  else if (pageKey === 'flows-list') groups.push('flows-list', 'groups-crud', 'agent-contexts-crud');
-  else if (pageKey?.startsWith('chat:')) groups.push('chat');
-  else if (pageKey?.startsWith('chat-sessions:')) groups.push('chat');
+  else if (pageKey === 'flows-list' || pageKey === 'flows') groups.push('flows-list', 'groups-crud', 'agent-contexts-crud');
+  else if (pageKey?.startsWith('chat:')) groups.push('chat-sessions-crud');
+  else if (pageKey?.startsWith('chat-sessions:')) groups.push('chat-sessions-crud');
 
   return groups;
 }
