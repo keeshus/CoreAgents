@@ -99,7 +99,7 @@ app.use('/api', authenticate, chatRouter);       // Handles /api/chat/*
 app.use('/api', authenticate, knowledgeRouter); // Handles /api/knowledge/*
 app.use('/api', authenticate, embeddingProvidersRouter); // Handles /api/embedding-providers/*
 app.use('/api', authenticate, vectorStoresRouter); // Handles /api/vector-stores/*
-app.use('/api', authenticate, assignmentsRouter); // Handles /api/assignments/*
+app.use('/api/assignments', authenticate, assignmentsRouter); // Handles /api/assignments/*
 app.use('/api', authenticate, adminRouter); // Handles /api/users/* and /api/roles/*
 app.use('/api/agent-contexts', authenticate, agentContextsRouter);
 app.use('/api/groups', authenticate, groupsRouter);
