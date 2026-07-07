@@ -43,7 +43,7 @@ async function authenticateApiKey(req: Request, res: Response, next: NextFunctio
   }
 
   const keyHash = hashApiKey(token);
-  const [keyRecord] = await db.select().from(chatApiKeys).where(eq(chatApiKeys.key_hash, keyHash));
+  const [keyRecord] = await db.select().from(chatApiKeys).where(eq(chatApiKeys.key_hash, keyHash)).limit(1);
   if (!keyRecord || !keyRecord.enabled) {
     res.status(401).json({ error: 'Invalid or disabled API key' });
     return;
