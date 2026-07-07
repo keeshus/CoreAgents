@@ -51,10 +51,32 @@ test.describe('Advanced multi-node flows', () => {
 
   // ─── Debug: full flow with feedback loop ──────────────────────────
 
-  test('debug: LLM, code, branch, feedback HITL loop, subflow, second HITL, output', async ({ page, request }) => {
+  async function createWebhookToolFlow(request: any): Promise<any> {
+    const res = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('FlowTool-Webhook'),
+        nodes: [
+          { id: 'w1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook', inputSchema: '{"query":"string"}' } } },
+          { id: 'w2', type: 'code', position: { x: 250, y: 0 }, data: { label: 'Lookup', type: 'code', config: { code: 'return { result: `Looked up: ${input.query || "nothing"}` };' } } },
+          { id: 'w3', type: 'output', position: { x: 500, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Lookup.result'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 'w1', target: 'w2' },
+          { id: 'e2', source: 'w2', target: 'w3' },
+        ],
+      },
+    });
+    expect(res.ok()).toBe(true);
+    const flow = await res.json();
+    createdFlowIds.push(flow.id);
+    return flow;
+  }
+
+  test('debug: LLM, code, branch, feedback HITL loop, subflow, second HITL, output, Flow Tool', async ({ page, request }) => {
     test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
 
     const subflow = await createEnrichSubflow(request);
+    const webhookFlow = await createWebhookToolFlow(request);
 
     const flowDef = {
       name: uniqueFlowName('Adv-Feedback'),
@@ -67,6 +89,7 @@ test.describe('Advanced multi-node flows', () => {
         { id: 'p2', type: 'subflow', position: { x: 1000, y: 150 }, data: { label: 'Enricher', type: 'subflow', config: { subflowId: subflow.id, subflowName: subflow.name, inputMapping: { data: '{{input.Trigger.message}}', score: '{{input.analyzer.confidence}}' } } } },
         { id: 'h2', type: 'hitl', position: { x: 1200, y: 150 }, data: { label: 'Final', type: 'hitl', config: { prompt: 'Final approval?', buttons: [{ label: 'Approve', value: 'approved' }] } } },
         { id: 'o1', type: 'output', position: { x: 1000, y: -300 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Prep.decision', 'Enricher.enriched'] } } },
+        { id: 'ft1', type: 'flow-tool', position: { x: 50, y: 200 }, data: { label: 'Flow Tool', type: 'flow-tool', config: { flowIds: [webhookFlow.id], selectedFlows: [{ id: webhookFlow.id, name: webhookFlow.name }] } } },
       ],
       edges: [
         { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
@@ -78,6 +101,7 @@ test.describe('Advanced multi-node flows', () => {
         { id: 'e7', source: 'p2', sourceHandle: 'output-0', target: 'h2', targetHandle: 'input-0' },
         { id: 'e8', source: 'h2', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
         { id: 'e9', source: 'b1', sourceHandle: 'output-1', target: 'o1', targetHandle: 'input-0' },
+        { id: 'e10', source: 'ft1', sourceHandle: 'tool-output', target: 'l1', targetHandle: 'tool-input' },
       ],
     };
 
@@ -97,6 +121,7 @@ test.describe('Advanced multi-node flows', () => {
     expect(stepIds).toContain('l1');
     expect(stepIds).toContain('c1');
     expect(stepIds).toContain('b1');
+    expect(stepIds).not.toContain('ft1');
   });
 
   // ─── HITL output routing: approve → forward path ─────────────────

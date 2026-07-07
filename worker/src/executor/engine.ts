@@ -149,8 +149,8 @@ export class FlowExecutor {
         }
       }
 
-      // Skip MCP Tool / Retriever nodes — they only run when called by an LLM Agent
-      if (node.data.type === 'mcp-tool' || node.data.type === 'retriever') {
+      // Skip MCP Tool / Retriever / Flow Tool nodes — they only run when called by an LLM Agent
+      if (node.data.type === 'mcp-tool' || node.data.type === 'retriever' || node.data.type === 'flow-tool') {
         // Only skip if this node is connected to an LLM Agent's tool-input
         const outgoingEdges = flow.edges.filter(e => e.source === node.id);
         const isToolProvider = outgoingEdges.some(e => e.sourceHandle === 'tool-output' || e.targetHandle?.startsWith('tool-input'));
