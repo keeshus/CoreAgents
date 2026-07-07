@@ -635,33 +635,63 @@ export class FlowExecutor {
 
           for (const edge of toolEdges) {
             const mcpNode = context.flowNodes?.find((n: any) => n.id === edge.source);
-            if (!mcpNode || mcpNode.data?.type !== 'mcp-tool') continue;
-            const mcpConfig = (mcpNode.data as any).config || {};
-            if (!mcpConfig.serverId) continue;
+            if (!mcpNode) continue;
 
-            try {
-              const server = await context.getMCPServer!(mcpConfig.serverId);
-              if (server) {
-                const serverTools = server.tools || [];
-                const selected: string[] = mcpConfig.toolNames?.length
-                  ? mcpConfig.toolNames
-                  : mcpConfig.toolName
-                    ? mcpConfig.toolName === '*' ? serverTools.map((t: any) => t.name) : [mcpConfig.toolName]
-                    : [];
-                // Empty selection = all tools pass through
-                const toolList = selected.length > 0 ? selected : serverTools.map((t: any) => t.name);
-                for (const toolName of toolList) {
-                  const tool = serverTools.find((t: any) => t.name === toolName);
-                  if (tool) {
-                    toolDefs.push({
-                      name: tool.name,
-                      description: tool.description || '',
-                      input_schema: tool.inputSchema || {},
-                    });
+            if (mcpNode.data?.type === 'mcp-tool') {
+              const mcpConfig = (mcpNode.data as any).config || {};
+              if (!mcpConfig.serverId) continue;
+
+              try {
+                const server = await context.getMCPServer!(mcpConfig.serverId);
+                if (server) {
+                  const serverTools = server.tools || [];
+                  const selected: string[] = mcpConfig.toolNames?.length
+                    ? mcpConfig.toolNames
+                    : mcpConfig.toolName
+                      ? mcpConfig.toolName === '*' ? serverTools.map((t: any) => t.name) : [mcpConfig.toolName]
+                      : [];
+                  // Empty selection = all tools pass through
+                  const toolList = selected.length > 0 ? selected : serverTools.map((t: any) => t.name);
+                  for (const toolName of toolList) {
+                    const tool = serverTools.find((t: any) => t.name === toolName);
+                    if (tool) {
+                      toolDefs.push({
+                        name: tool.name,
+                        description: tool.description || '',
+                        input_schema: tool.inputSchema || {},
+                      });
+                    }
                   }
                 }
+              } catch { /* skip unavailable servers */ }
+            }
+
+            if (mcpNode.data?.type === 'flow-tool') {
+              const ftConfig = (mcpNode.data as any).config || {};
+              const flowIds: string[] = ftConfig.flowIds || [];
+              for (const flowId of flowIds) {
+                try {
+                  const flowDef = await context.getFlow!(flowId);
+                  if (!flowDef) continue;
+                  const triggerNode = flowDef.nodes?.find((n: any) => n.data?.type === 'trigger');
+                  const triggerConfig = (triggerNode?.data?.config || {}) as any;
+                  if (triggerConfig.triggerType !== 'webhook') continue;
+                  let inputSchema: Record<string, unknown> = {};
+                  try {
+                    const raw = triggerConfig.inputSchema;
+                    if (raw) {
+                      inputSchema = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    }
+                  } catch { /* ignore parse errors */ }
+                  const toolName = 'flow_' + slugify(flowDef.name);
+                  toolDefs.push({
+                    name: toolName,
+                    description: flowDef.description || '',
+                    input_schema: inputSchema,
+                  });
+                } catch { /* skip unavailable flows */ }
               }
-            } catch { /* skip unavailable servers */ }
+            }
           }
         }
 
@@ -822,6 +852,49 @@ export class FlowExecutor {
                     toolResult = JSON.stringify(await mcpHub.callTool(server.id, tc.name, tc.input));
                   }
                   break;
+                }
+              }
+
+              // Handle flow-tool calls (tool name starts with "flow_")
+              if (toolResult === 'Tool not found' && tc.name.startsWith('flow_')) {
+                // Find the matching flow-tool node
+                for (const edge of toolEdges) {
+                  const ftNode = context.flowNodes?.find((n: any) => n.id === edge.source);
+                  if (!ftNode || ftNode.data?.type !== 'flow-tool') continue;
+                  const ftConfig = (ftNode.data as any).config || {};
+                  const flowIds: string[] = ftConfig.flowIds || [];
+                  const selectedFlows: Array<{ id: string; name: string }> = ftConfig.selectedFlows || [];
+                  // Find the flow whose slugified name matches the tool name
+                  const calledName = tc.name.slice(5); // strip "flow_"
+                  const match = selectedFlows.find(f => slugify(f.name) === calledName);
+                  const matchId = match?.id || flowIds.find(fid => {
+                    // Try to match by ID if we can't find by name
+                    return false;
+                  });
+                  if (match?.id) {
+                    try {
+                      const flowDef = await context.getFlow!(match.id);
+                      if (flowDef) {
+                        const subExecutor = new SubFlowExecutor(
+                          this.abortController,
+                          0,
+                          '',
+                          [],
+                        );
+                        const subResult = await subExecutor.execute(
+                          flowDef,
+                          tc.input as Record<string, unknown>,
+                          onEvent,
+                          context,
+                        );
+                        const hasOutputNode = flowDef.nodes?.some((n: any) => n.data?.type === 'output');
+                        toolResult = JSON.stringify(hasOutputNode ? subResult.output : { status: 'completed' });
+                      }
+                    } catch (err) {
+                      toolResult = JSON.stringify({ status: 'failed', error: err instanceof Error ? err.message : String(err) });
+                    }
+                    break;
+                  }
                 }
               }
 

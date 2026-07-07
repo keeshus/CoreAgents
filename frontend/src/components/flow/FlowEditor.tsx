@@ -20,6 +20,7 @@ import '@xyflow/react/dist/style.css';
 import { TriggerNode } from './nodes/TriggerNode';
 import { LLMAgentNode } from './nodes/LLMAgentNode';
 import { MCPToolNode } from './nodes/MCPToolNode';
+import { FlowToolNode } from './nodes/FlowToolNode';
 import { RetrieverNode } from './nodes/RetrieverNode';
 import { BranchNode } from './nodes/BranchNode';
 import { CodeNode } from './nodes/CodeNode';
@@ -35,6 +36,7 @@ const nodeTypes = {
   trigger: TriggerNode,
   'llm-agent': LLMAgentNode,
   'mcp-tool': MCPToolNode,
+  'flow-tool': FlowToolNode,
   retriever: RetrieverNode,
   branch: BranchNode,
   code: CodeNode,

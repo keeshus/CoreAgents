@@ -6,6 +6,7 @@ export const NODE_TYPES = [
   'trigger',
   'llm-agent',
   'mcp-tool',
+  'flow-tool',
   'retriever',
   'branch',
   'code',
@@ -62,6 +63,14 @@ export interface MCPToolNodeData extends BaseNodeData {
     serverId: string;
     toolName: string;
     parameters: Record<string, unknown>;
+  };
+}
+
+export interface FlowToolNodeData extends BaseNodeData {
+  type: 'flow-tool';
+  config: {
+    flowIds: string[];
+    selectedFlows?: Array<{ id: string; name: string; groupId?: string | null }>;
   };
 }
 
@@ -134,6 +143,7 @@ export type NodeData =
   | TriggerNodeData
   | LLMAgentNodeData
   | MCPToolNodeData
+  | FlowToolNodeData
   | RetrieverNodeData
   | BranchNodeData
   | CodeNodeData

@@ -6,6 +6,7 @@ import { SelectField } from '@/components/ui/SelectField';
 import { getUpstreamNodeIds, getNodeFields } from '@/components/flow/config/InputPreview';
 import { LLMAgentConfig } from '@/components/flow/config/LLMAgentConfig';
 import { MCPToolConfig } from '@/components/flow/config/MCPToolConfig';
+import { FlowToolConfig } from '@/components/flow/config/FlowToolConfig';
 import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
 import { TemplateAutocomplete } from '@/components/flow/config/TemplateAutocomplete';
 import { HITLNodeConfig } from '@/components/flow/config/HITLNodeConfig';
@@ -17,6 +18,7 @@ const NODE_LABELS: Record<string, string> = {
   trigger: 'Trigger',
   'llm-agent': 'LLM Agent',
   'mcp-tool': 'MCP Tool',
+  'flow-tool': 'Flow Tool',
   retriever: 'Retriever',
   branch: 'Condition',
   code: 'Code',
@@ -263,6 +265,10 @@ export function NodeConfigModal({
 
           {node.data.type === 'mcp-tool' && (
             <MCPToolConfig config={node.data.config} onChange={onConfigChange} flow={flow} />
+          )}
+
+          {node.data.type === 'flow-tool' && (
+            <FlowToolConfig config={node.data.config} onChange={onConfigChange} />
           )}
 
           {node.data.type === 'branch' && (

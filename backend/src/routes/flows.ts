@@ -17,6 +17,8 @@ router.get(
     const offset = parseInt(req.query.offset as string) || 0;
     const search = (req.query.search as string) || '';
     const isSubflow = req.query.is_subflow as string | undefined;
+    const triggerType = req.query.trigger_type as string | undefined;
+    const groupIdFilter = req.query.group_id as string | undefined;
     const sortBy = (req.query.sort as string) === 'created_at' ? flows.created_at : flows.updated_at;
     const orderDir = (req.query.order as string) === 'asc' ? asc : desc;
     const conditions: ReturnType<typeof sql>[] = [];
@@ -27,6 +29,12 @@ router.get(
       conditions.push(eq(flows.is_subflow, true));
     } else if (isSubflow === 'false') {
       conditions.push(eq(flows.is_subflow, false));
+    }
+    if (triggerType === 'webhook') {
+      conditions.push(sql`${flows.nodes}::jsonb @> '[{"data":{"config":{"triggerType":"webhook"}}}]'::jsonb`);
+    }
+    if (groupIdFilter) {
+      conditions.push(eq(flows.group_id, groupIdFilter));
     }
 
     // Apply group-based filtering for non-admin users

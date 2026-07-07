@@ -7,6 +7,7 @@ const NODE_ICONS: Record<string, string> = {
   trigger: 'arrow_forward',
   'llm-agent': 'smart_toy',
   'mcp-tool': 'build',
+  'flow-tool': 'integration_instructions',
   retriever: 'search',
   branch: 'call_split',
   code: 'code',

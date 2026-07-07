@@ -33,6 +33,15 @@ const catalog: NodeCatalogEntry[] = [
     outputs: 1,
   },
   {
+    type: 'flow-tool',
+    label: 'Flow Tool',
+    category: 'tools',
+    description: 'Expose webhook flows as tools for LLM Agents. Select multiple flows — each becomes a callable tool.',
+    defaultConfig: { flowIds: [], selectedFlows: [] },
+    inputs: 0,
+    outputs: 0,
+  },
+  {
     type: 'retriever',
     label: 'Retriever',
     category: 'tools',
