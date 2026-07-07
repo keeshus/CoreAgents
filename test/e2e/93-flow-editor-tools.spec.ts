@@ -222,4 +222,53 @@ test.describe('Flow Editor DOM tools', () => {
     await page.waitForTimeout(500);
     expect(page.url()).toContain('debug=1');
   });
+
+  // ─── Flow info retrieval tools ────────────────────────────────
+
+  test('list_canvas_nodes — lists all nodes on canvas', async ({ page }) => {
+    const nodes = await page.evaluate(() => {
+      const items = document.querySelectorAll('.react-flow__node');
+      return [...items].map(n => n.textContent?.trim());
+    });
+    expect(nodes.length).toBeGreaterThanOrEqual(2);
+    expect(nodes.some(n => n?.toLowerCase().includes('trigger'))).toBe(true);
+    expect(nodes.some(n => n?.toLowerCase().includes('output'))).toBe(true);
+  });
+
+  test('get_flow_info — returns flow metadata via API', async ({ request }) => {
+    const res = await request.get(`${API_URL}/flows/${flowId}`);
+    expect(res.ok()).toBe(true);
+    const flow = await res.json();
+    expect(flow.name).toBeDefined();
+    expect(flow.nodes).toBeDefined();
+    expect(Array.isArray(flow.nodes)).toBe(true);
+  });
+
+  test('get_canvas_state — reads canvas state', async ({ page }) => {
+    const state = await page.evaluate(() => {
+      const nodes = document.querySelectorAll('.react-flow__node');
+      return {
+        nodeCount: nodes.length,
+        nodes: [...nodes].map(n => ({ text: n.textContent?.trim(), type: n.classList.toString().match(/node-([^\s]+)/)?.[1] || 'unknown' })),
+      };
+    });
+    expect(state.nodeCount).toBeGreaterThanOrEqual(2);
+    expect(state.nodes[0].text).toBeDefined();
+  });
+
+  test('get_node_type_info — returns docs for all types', async ({ request }) => {
+    for (const type of ['trigger', 'llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool']) {
+      const res = await request.get(`${API_URL}/catalog`);
+      expect(res.ok()).toBe(true);
+      const catalog = await res.json();
+      const entry = catalog.find((e: any) => e.type === type);
+      expect(entry).toBeDefined();
+      expect(entry.description).toBeDefined();
+    }
+  });
+
+  test('get_debug_results — returns execution history', async ({ request }) => {
+    const res = await request.get(`${API_URL}/flows/${flowId}/executions?limit=5`);
+    expect(res.ok()).toBe(true);
+  });
 });

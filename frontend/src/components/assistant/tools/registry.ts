@@ -1400,6 +1400,129 @@ const deleteChatSession: AssistantTool = {
   async execute({ sessionId }) { return apiFetch(`/chat/sessions/${sessionId}`, { method: 'DELETE' }); },
 };
 
+// ── Flow canvas information retrieval tools ──────────────────────
+
+const getCanvasState: AssistantTool = {
+  name: 'get_canvas_state',
+  description: 'Get the full canvas state: all nodes (with types, labels, positions) and all edges (connections). Use this to understand the flow structure before making changes.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() {
+    const nodes = document.querySelectorAll('.react-flow__node');
+    if (nodes.length === 0) return 'No nodes found on the canvas. Open a flow in the editor first.';
+    const nodeList = [...nodes].map(n => ({
+      id: n.getAttribute('data-id'),
+      text: n.textContent?.trim() || '',
+      type: n.classList.toString().match(/node-([^\s]+)/)?.[1] || 'unknown',
+    }));
+    // Read edges from window state if available
+    let edges: any[] = [];
+    const canvasEdges = (window as any).__flowCanvasEdges;
+    if (canvasEdges) edges = canvasEdges;
+    const flow = JSON.parse(await apiFetch(`/flows/${window.location.pathname.match(/\/flows\/([^/]+)\/edit/)?.[1] || ''}`));
+    return JSON.stringify({ nodes: nodeList, edges, flowName: flow.name, flowDescription: flow.description, nodeCount: nodeList.length, edgeCount: edges.length }, null, 2);
+  },
+};
+
+const getNodeDetails: AssistantTool = {
+  name: 'get_node_details',
+  description: 'Get detailed information about a specific node on the canvas, including its connections and type-specific config.',
+  inputSchema: { type: 'object', properties: { label: { type: 'string', description: 'The label or type of the node to inspect' } }, required: ['label'] },
+  async execute({ label }) {
+    const nodes = document.querySelectorAll('.react-flow__node');
+    let target: Element | null = null;
+    for (const n of nodes) {
+      if (n.textContent?.toLowerCase().includes((label as string).toLowerCase())) { target = n; break; }
+    }
+    if (!target) return `No node found matching "${label}". Available nodes: ${[...nodes].map(n => n.textContent?.trim()).join(', ')}`;
+    const nodeId = target.getAttribute('data-id');
+    const nodeType = target.classList.toString().match(/node-([^\s]+)/)?.[1] || 'unknown';
+    // Try to open it to read config, then close
+    (target as HTMLElement).click();
+    await new Promise(r => setTimeout(r, 300));
+    let config = '{}';
+    const modal = document.querySelector('.fixed.inset-0.z-50');
+    if (modal) {
+      const fields: Record<string, string> = {};
+      modal.querySelectorAll('input, textarea, select, [data-field-label]').forEach((el: any) => {
+        const name = el.getAttribute('data-field-label') || el.placeholder || el.name || el.id || 'unknown';
+        fields[name] = el.value || el.textContent?.trim() || '';
+      });
+      config = JSON.stringify(fields, null, 2);
+      // Close
+      const closeBtn = modal.querySelector('button[aria-label="Close"]');
+      if (closeBtn) (closeBtn as HTMLElement).click();
+    }
+    return JSON.stringify({ id: nodeId, type: nodeType, text: target.textContent?.trim(), config }, null, 2);
+  },
+};
+
+const listCanvasNodes: AssistantTool = {
+  name: 'list_canvas_nodes',
+  description: 'List all nodes currently on the flow canvas with their types and visible labels.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() {
+    const nodes = document.querySelectorAll('.react-flow__node');
+    if (nodes.length === 0) return 'No nodes found on the canvas. Open a flow in the editor first.';
+    const list = [...nodes].map(n => {
+      const type = n.classList.toString().match(/node-([^\s]+)/)?.[1] || 'unknown';
+      return `[${type}] "${n.textContent?.trim()}"`;
+    }).join('\n');
+    return `Nodes on canvas (${nodes.length}):\n${list}`;
+  },
+};
+
+const getFlowInfo: AssistantTool = {
+  name: 'get_flow_info',
+  description: 'Get the current flow metadata: name, description, trigger type, node count, edge count, and group assignment.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() {
+    const match = typeof window !== 'undefined' ? window.location.pathname.match(/\/flows\/([^/]+)\/edit/) : null;
+    if (!match) return 'Not on a flow editor page.';
+    const flow = JSON.parse(await apiFetch(`/flows/${match[1]}`));
+    const triggerNode = (flow.nodes || []).find((n: any) => n.data?.type === 'trigger');
+    const triggerType = triggerNode?.data?.config?.triggerType || 'unknown';
+    return JSON.stringify({
+      name: flow.name, description: flow.description || '(none)',
+      triggerType, nodeCount: (flow.nodes || []).length, edgeCount: (flow.edges || []).length,
+      groupId: flow.groupId || '(none)', version: flow.version,
+    }, null, 2);
+  },
+};
+
+const getDebugResults: AssistantTool = {
+  name: 'get_debug_results',
+  description: 'Get results from the last debug execution of this flow. Shows step-by-step output.',
+  inputSchema: { type: 'object', properties: {} },
+  async execute() {
+    const match = typeof window !== 'undefined' ? window.location.pathname.match(/\/flows\/([^/]+)\/edit/) : null;
+    if (!match) return 'Not on a flow editor page.';
+    const flowExecs = JSON.parse(await apiFetch(`/flows/${match[1]}/executions?limit=5`));
+    return JSON.stringify(flowExecs, null, 2);
+  },
+};
+
+const getNodeTypeInfo: AssistantTool = {
+  name: 'get_node_type_info',
+  description: 'Get documentation/description for a specific node type.',
+  inputSchema: { type: 'object', properties: { nodeType: { type: 'string', enum: ['trigger', 'llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool'] } }, required: ['nodeType'] },
+  async execute({ nodeType }) {
+    const docs: Record<string, string> = {
+      'trigger': 'The starting node. Triggers define how a flow starts: manually, via chat, webhook, or on a schedule. Each flow has exactly one trigger.',
+      'llm-agent': 'Calls an LLM (e.g. OpenAI GPT-4, Anthropic Claude). Configure endpoint, model, system prompt, temperature, max tokens, and response format. Can use tools from connected MCP Tool nodes and Flow Tool nodes.',
+      'code': 'Executes JavaScript code in a sandboxed sidecar. Receives upstream data as `input`, returns an object. Has access to node, npm, python3, git, and standard Unix tools.',
+      'branch': 'Routes the flow based on a JavaScript condition expression. Has two or more output handles. The condition returns a label matching one of the output handles.',
+      'output': 'Returns the result of the flow. Select which upstream fields to include in the output. A flow must have at least one output node to return a result.',
+      'hitl': 'Human-in-the-loop: pauses execution for human approval. Configure prompt, buttons (label + value), assignment type (user, role, or group), and optional feedback.',
+      'mcp-tool': 'Calls a tool on a configured MCP server. Connect to an LLM Agent via the tool-input handle to make MCP tools available to the LLM. Can auto-discover tools from the server.',
+      'retriever': 'Performs vector search (RAG). Queries a collection in a vector store using an embedding provider. Returns matching document chunks as context. Connect to an LLM Agent via tool-input to inject context.',
+      'parallel': 'Runs multiple sub-nodes concurrently. Merges outputs from all sub-nodes into a single result. Useful for fan-out/fan-in patterns.',
+      'subflow': 'Executes another flow as a sub-routine. Maps parent flow inputs to the subflow trigger fields. Receives the subflow output as result. Supports env var inheritance.',
+      'flow-tool': 'Exposes webhook flows as callable tools for LLM Agents. Select multiple webhook flows — each becomes a tool named flow_<name>. Connect to an LLM Agent via the purple tool-output handle.',
+    };
+    return docs[nodeType as string] || `No documentation available for "${nodeType}".`;
+  },
+};
+
 const sendChatMessage: AssistantTool = {
   name: 'send_chat_message',
   description: 'Send a message in a chat session and get the AI response via SSE.',
@@ -1499,7 +1622,7 @@ const reEncryptSecrets: AssistantTool = {
 
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo],
-  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows],
+  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows, getCanvasState, getNodeDetails, listCanvasNodes, getFlowInfo, getDebugResults, getNodeTypeInfo],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint, updateEndpoint, getEndpoint, getDefaultEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools, updateMcpServer, getMcpServer],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider, updateEmbeddingProvider, getEmbeddingProvider],
