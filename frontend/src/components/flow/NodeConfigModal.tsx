@@ -187,7 +187,7 @@ export function NodeConfigModal({
                               onChange={() => toggleField(label)}
                               className="w-3 h-3 accent-primary"
                             />
-                            <span className="text-xs font-semibold text-on-surface">{label}</span>
+                            <span className="text-xs font-semibold font-medium text-on-surface">{label}</span>
                             <span className="text-[10px] text-on-surface-variant">({fields.length} fields)</span>
                           </label>
                           {fields.length > 0 && (
@@ -236,7 +236,7 @@ export function NodeConfigModal({
                         <div key={label}>
                           <div className="flex items-center gap-2 px-1 py-0.5">
                             <Icon name="input" className="text-sm text-on-surface-variant shrink-0" />
-                            <span className="text-xs font-semibold text-on-surface">{label}</span>
+                            <span className="text-xs font-semibold font-medium text-on-surface">{label}</span>
                             <span className="text-[10px] text-on-surface-variant">({fields.length} fields)</span>
                           </div>
                           {fields.length > 0 && (
@@ -355,7 +355,7 @@ export function NodeConfigModal({
                 className="font-mono"
               />
               <div>
-                <p className="text-xs font-medium text-on-surface-variant mb-1">Output Structure <span className="text-on-surface-variant">(documentation)</span></p>
+                <span className="text-xs font-medium text-on-surface-variant mb-1 block">Output Structure <span className="text-on-surface-variant">(documentation)</span></span>
                 <textarea
                   value={node.data.config.outputSchema || ''}
                   onChange={(e) => onConfigChange({ outputSchema: e.target.value })}

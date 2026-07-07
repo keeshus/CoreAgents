@@ -19,6 +19,7 @@ export function SelectField({ label, value, onChange, options, error, helpText, 
     <div className={`relative ${className}`}>
       <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
          <Select.Trigger
+          data-field-label={label}
           className={`w-full rounded-t bg-surface-container-high border-b-2 transition-colors flex items-center justify-between text-left cursor-pointer min-h-[48px] group ${
             error ? 'border-error' : 'border-outline-variant data-[state=open]:border-primary focus:border-primary'
           } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}

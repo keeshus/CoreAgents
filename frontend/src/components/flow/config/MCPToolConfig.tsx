@@ -87,7 +87,7 @@ export function MCPToolConfig({ config, onChange, flow }: MCPToolConfigProps) {
                   onChange={() => toggleTool(t.name)}
                   className="w-3 h-3 accent-primary"
                 />
-                <span className="text-xs font-mono text-on-surface">{t.name}</span>
+                <span className="text-xs font-mono font-medium text-on-surface">{t.name}</span>
                 {t.description && (
                   <span className="text-[9px] text-on-surface-variant truncate ml-auto max-w-[200px]">
                     {t.description}

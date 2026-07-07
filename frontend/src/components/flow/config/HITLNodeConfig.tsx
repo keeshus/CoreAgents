@@ -377,7 +377,7 @@ export function HITLNodeConfig({ config, onChange, nodeId, nodes, edges }: HITLN
 
       <label className="flex items-center gap-2 text-sm cursor-pointer">
         <input type="checkbox" checked={config?.allowFeedback !== false} onChange={(e) => onChange({ allowFeedback: e.target.checked })} className="rounded accent-primary" />
-        <span className="text-sm text-on-surface-variant">Allow reviewer feedback</span>
+        <span className="text-sm font-medium text-on-surface-variant">Allow reviewer feedback</span>
         <span className="text-xs text-on-surface-variant">(text input field)</span>
       </label>
 

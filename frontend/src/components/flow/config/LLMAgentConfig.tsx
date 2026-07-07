@@ -154,6 +154,7 @@ export function LLMAgentConfig({ config, onChange, suggestions, flow }: LLMAgent
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
           <span className="text-xs font-medium text-on-surface-variant">Temperature: {config.temperature}</span>
+          <span className="text-xs font-medium text-on-surface-variant" data-field-label="Temperature">Temperature</span>
           <input
             type="range"
             min="0"

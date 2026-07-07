@@ -96,8 +96,13 @@ function getFieldLabel(el: Element): string | null {
 function findModalField(label: string): HTMLElement | null {
   const modal = document.querySelector('.fixed.inset-0.z-50');
   if (!modal) return null;
+  // First try native form elements
   for (const el of modal.querySelectorAll('input, textarea, select')) {
     if (getFieldLabel(el) === label) return el as HTMLElement;
+  }
+  // Fallback: find Radix Select triggers by data-field-label
+  for (const el of modal.querySelectorAll('[data-field-label]')) {
+    if (el.getAttribute('data-field-label') === label) return el as HTMLElement;
   }
   return null;
 }
@@ -178,6 +183,24 @@ const updateNodeField: AssistantTool = {
       sel.value = matchingOption.value;
       sel.dispatchEvent(new Event('change', { bubbles: true }));
       return `Set select "${label}" to "${matchingOption.value}".`;
+    }
+
+    // Radix Select trigger (has data-field-label, is a button)
+    if (field.tagName === 'BUTTON' && field.hasAttribute('data-field-label')) {
+      field.click();
+      // Wait for Radix popup to appear
+      await new Promise(r => setTimeout(r, 100));
+      // Find the option in the portal
+      const option = document.querySelector(`[data-radix-select-item][data-value="${value}"]`) ||
+        Array.from(document.querySelectorAll('[data-radix-select-item]')).find(
+          el => el.textContent?.trim().toLowerCase() === norm(value).toLowerCase()
+        );
+      if (option) {
+        (option as HTMLElement).click();
+        return `Set select "${label}" to "${value}".`;
+      }
+      const available = Array.from(document.querySelectorAll('[data-radix-select-item]')).map(el => el.textContent?.trim()).filter(Boolean).join(', ');
+      return `Value "${value}" is not a valid option for "${label}". Available options: ${available}`;
     }
 
     reactSetValue(field as HTMLInputElement | HTMLTextAreaElement, value);

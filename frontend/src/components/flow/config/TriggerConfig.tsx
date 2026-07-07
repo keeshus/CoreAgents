@@ -71,7 +71,7 @@ export function TriggerConfig({ config, onChange, flowId }: TriggerConfigProps) 
           Define the input contract below.
         </p>
         <div>
-          <p className="text-xs font-medium text-on-surface-variant mb-1">Input Schema</p>
+          <span className="text-xs font-medium text-on-surface-variant mb-1 block">Input Schema</span>
           <textarea
             value={config.inputSchema || ''}
             onChange={(e) => onChange({ inputSchema: e.target.value })}
@@ -226,7 +226,7 @@ export function TriggerConfig({ config, onChange, flowId }: TriggerConfigProps) 
 
       {triggerType === 'webhook' && (
         <div>
-          <p className="text-xs font-medium text-on-surface-variant mb-1">Expected Input Schema</p>
+          <span className="text-xs font-medium text-on-surface-variant mb-1 block">Expected Input Schema</span>
           <textarea
             value={config.inputSchema || ''}
             onChange={(e) => onChange({ inputSchema: e.target.value })}
