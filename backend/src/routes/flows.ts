@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { eq, and, asc, desc, sql, inArray, isNull, or } from 'drizzle-orm';
-import crypto from 'crypto';
 import { db } from '../db/connection.js';
 import { flows, flowVersions, executions, executionSteps, chatMessages, chatSessions, userAssignments, users, groups, groupMembers, apiDeployments, apiKeys } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { FlowExecutor } from '../../../worker/src/executor/engine.js';
 import { topologicalSort } from '../../../worker/src/executor/dag.js';
+import { generateApiKey, generateSlug } from './webhook-api-keys.js';
 
 const router = Router();
 
@@ -273,7 +273,7 @@ router.put(
         summary: '',
       }).onConflictDoUpdate({
         target: apiDeployments.flow_id,
-        set: { path_slug: slug, updated_at: new Date() },
+        set: { updated_at: new Date() },
       });
 
       // Auto-create personal API key if user doesn't have one
@@ -396,25 +396,5 @@ router.post(
     res.json({ valid: errors.length === 0, errors });
   }),
 );
-
-// ── Webhook helpers ────────────────────────────────────────────
-
-const API_KEY_PREFIX = 'wh_';
-
-function generateApiKey(): { raw: string; hash: string; prefix: string } {
-  const random = crypto.randomBytes(48).toString('hex');
-  const raw = `${API_KEY_PREFIX}${random}`;
-  const hash = crypto.createHash('sha256').update(raw).digest('hex');
-  const prefix = raw.slice(0, 10);
-  return { raw, hash, prefix };
-}
-
-function generateSlug(name: string): string {
-  return name.toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .replace(/-+/g, '-')
-    .slice(0, 63);
-}
 
 export default router;

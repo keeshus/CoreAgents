@@ -48,11 +48,17 @@ async function authenticateWebhookRequest(req: any, flowId: string): Promise<{ s
     return { status: 401, message: 'Authentication required. Provide an API key (Authorization: Bearer wh_...) or a webhook secret (?secret=...).' };
   }
 
-  if (authHeader && !apiKeyValid) {
+  // Allow if EITHER method passes (the caller can choose which to use)
+  if (apiKeyValid || secretValid) {
+    return null;
+  }
+
+  // Neither method passed — report the error for the method(s) the caller attempted
+  if (authHeader) {
     return { status: 401, message: 'Invalid API key' };
   }
 
-  if (providedSecret && !secretValid) {
+  if (providedSecret) {
     return { status: 403, message: 'Invalid webhook secret' };
   }
 

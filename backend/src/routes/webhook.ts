@@ -1,20 +1,30 @@
 import { Router } from 'express';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { flows, executions } from '../db/schema.js';
+import { flows, apiDeployments, executions } from '../db/schema.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import type { NodeData, FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
 
-// POST /api/webhook/:flowId — trigger a flow via webhook
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// POST /api/webhook/:flowId — trigger a flow via webhook (UUID or slug)
 // Optionally pass ?secret=... for verification
 router.post(
   '/webhook/:flowId',
   asyncHandler(async (req, res) => {
-    const flowId = req.params.flowId as string;
+    let flowId = req.params.flowId as string;
     const providedSecret = (req.query.secret as string) || '';
+
+    // If not a UUID, try resolving as a slug
+    if (!UUID_RE.test(flowId)) {
+      const [deployment] = await db.select().from(apiDeployments).where(eq(apiDeployments.path_slug, flowId));
+      if (deployment) {
+        flowId = deployment.flow_id;
+      }
+    }
 
     // Load flow
     const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
