@@ -35,6 +35,32 @@ services:
     networks:
       - core-agents
 
+  sidecar-backend:
+    build:
+      context: .
+      dockerfile: sidecar/Dockerfile
+    image: core-agents-sidecar:latest
+    container_name: core-agents-sidecar-backend
+    restart: unless-stopped
+    tmpfs: /var/flow-data
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      - core-agents
+
+  sidecar-worker:
+    build:
+      context: .
+      dockerfile: sidecar/Dockerfile
+    image: core-agents-sidecar:latest
+    container_name: core-agents-sidecar-worker
+    restart: unless-stopped
+    tmpfs: /var/flow-data
+    cap_add:
+      - SYS_ADMIN
+    networks:
+      - core-agents
+
   backend:
     build:
       context: .
@@ -49,9 +75,12 @@ services:
       DATABASE_URL: postgres://${DB_USER:-coreagents}:${DB_PASSWORD:-coreagents}@postgres:5432/${DB_NAME:-coreagents}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SIDECAR_URL: http://sidecar-backend:4001
     depends_on:
       postgres:
         condition: service_healthy
+      sidecar-backend:
+        condition: service_started
     networks:
       - core-agents
 
@@ -67,11 +96,14 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VALKEY_HOST: valkey
+      SIDECAR_URL: http://sidecar-worker:4001
     depends_on:
       valkey:
         condition: service_started
       postgres:
         condition: service_healthy
+      sidecar-worker:
+        condition: service_started
     networks:
       - core-agents
 
