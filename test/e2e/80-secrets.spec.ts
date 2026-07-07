@@ -145,8 +145,8 @@ test.describe('Secrets management', () => {
     await page.getByTestId('flow-secret-name').fill('db-password');
     await page.getByTestId('flow-secret-value').fill('s3cr3t');
 
-    // Click the add button next to the value input
-    await page.getByTestId('flow-secret-value').locator('..').locator('button').click();
+    // Click the add button (the one with the add icon, last in the secrets row)
+    await page.getByTestId('flow-secret-value').locator('..').locator('button[class*="m3-button"]').click();
 
     // The secret should appear in the list
     await expect(page.getByText('db-password')).toBeVisible({ timeout: 5000 });
@@ -157,6 +157,9 @@ test.describe('Secrets management', () => {
   // ═══════════════════════════════════════════════════════════════
 
   test('create a Conjur vault config', async ({ request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Group-${Date.now()}` } });
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
     const res = await request.post(`${API_URL}/secret-vaults`, {
       data: {
         name: 'Test Conjur',
@@ -165,6 +168,7 @@ test.describe('Secrets management', () => {
         account: 'conjur',
         login: 'host/myapp',
         apiKey: 'myapp-api-key-456',
+        groupId: group.id,
       },
     });
     expect(res.status()).toBe(201);
@@ -177,6 +181,9 @@ test.describe('Secrets management', () => {
   });
 
   test('test connection to Conjur vault', async ({ request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Group-${Date.now()}` } });
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
     const res = await request.post(`${API_URL}/secret-vaults`, {
       data: {
         name: 'Connectable Vault',
@@ -185,6 +192,7 @@ test.describe('Secrets management', () => {
         account: 'conjur',
         login: 'host/myapp',
         apiKey: 'myapp-api-key-456',
+        groupId: group.id,
       },
     });
     expect(res.status()).toBe(201);
@@ -198,17 +206,16 @@ test.describe('Secrets management', () => {
   });
 
   test('bind a vault to a group via group-vault-config', async ({ request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Group-${Date.now()}` } });
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
     const vRes = await request.post(`${API_URL}/secret-vaults`, {
-      data: { name: 'Group Vault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456' },
+      data: { name: 'Group Vault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456', groupId: group.id },
     });
     const vault = await vRes.json();
     cleanupVaultIds.push(vault.id);
 
     await request.post(`${API_URL}/secret-vaults/${vault.id}/test`);
-
-    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Group-${Date.now()}` } });
-    const group = await gRes.json();
-    cleanupGroupIds.push(group.id);
 
     const bindRes = await request.put(`${API_URL}/group-vault-config/${group.id}`, {
       data: { vaultId: vault.id, enabled: true },
@@ -273,9 +280,16 @@ test.describe('Secrets management', () => {
   test('{{secrets.cyberark.PATH}} resolves from bound Conjur vault', async ({ page, request }) => {
     test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
 
-    // Create a Conjur vault
+    // Create a group first (vaults require a group)
+    const groupName = `Conjur-Group-${Date.now()}`;
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: groupName } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    // Create a Conjur vault bound to the group
     const vRes = await request.post(`${API_URL}/secret-vaults`, {
-      data: { name: 'E2E Conjur', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456' },
+      data: { name: 'E2E Conjur', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456', groupId: group.id },
     });
     expect(vRes.status()).toBe(201);
     const vault = await vRes.json();
@@ -284,13 +298,7 @@ test.describe('Secrets management', () => {
     // Connect it
     await request.post(`${API_URL}/secret-vaults/${vault.id}/test`);
 
-    // Create a group bound to this vault
-    const groupName = `Conjur-Group-${Date.now()}`;
-    const gRes = await request.post(`${API_URL}/groups`, { data: { name: groupName } });
-    expect(gRes.status()).toBe(201);
-    const group = await gRes.json();
-    cleanupGroupIds.push(group.id);
-
+    // Bind the vault to the group via group-vault-config
     await request.put(`${API_URL}/group-vault-config/${group.id}`, {
       data: { vaultId: vault.id, enabled: true },
     });

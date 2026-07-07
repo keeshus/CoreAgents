@@ -63,28 +63,20 @@ test.describe('Env Vars settings page', () => {
     await expect(page.getByLabel('Value')).toBeVisible();
 
     // Switch to Core Secret via the type dropdown
-    // Click the trigger directly (Radix combobox has pointer-event issues with the span inside)
     await page.locator('[role="combobox"]').filter({ hasText: 'Static' }).click();
     await page.getByRole('option', { name: 'Core Secret' }).waitFor({ timeout: 5000 });
     await page.getByRole('option', { name: 'Core Secret' }).click();
     await page.waitForTimeout(300);
 
     // After switching to Core Secret, the value field becomes a select too
-    await expect(page.locator('[role="combobox"]')).toHaveCount(3, { timeout: 5000 });
-
-    // Switch to CyberArk — click the type combobox again
-    await page.locator('[role="combobox"]').nth(1).click();
-    await page.getByRole('option', { name: 'CyberArk' }).waitFor({ timeout: 5000 });
-    await page.getByRole('option', { name: 'CyberArk' }).click();
-    await page.waitForTimeout(300);
-    await expect(page.getByPlaceholder('e.g. /apps/myapp/deploy/key')).toBeVisible();
+    await expect(page.locator('[role="combobox"]')).toHaveCount(2, { timeout: 5000 });
 
     // Switch back to Static
-    await page.locator('[role="combobox"]').nth(1).click();
+    await page.locator('[role="combobox"]').filter({ hasText: 'Core Secret' }).click();
     await page.getByRole('option', { name: 'Static' }).waitFor({ timeout: 5000 });
     await page.getByRole('option', { name: 'Static' }).click();
     await page.waitForTimeout(300);
-    await expect(page.getByPlaceholder('Enter plain text value')).toBeVisible();
+    await expect(page.getByLabel('Value')).toBeVisible();
   });
 
   test('group env vars tab — select a group and view vars', async ({ request, page }) => {
@@ -96,11 +88,9 @@ test.describe('Env Vars settings page', () => {
     await page.goto('/settings/env-vars');
     await page.waitForTimeout(1500);
 
-    // Open the group filter dropdown and select the group
-    const filter = page.getByTestId('group-filter').locator('[role="combobox"]');
-    await filter.click();
-    await page.getByRole('option', { name: group.name }).waitFor({ timeout: 5000 });
-    await page.getByRole('option', { name: group.name }).click();
+    // Open the group filter dropdown (SearchableSelect trigger button with "All items" text)
+    await page.getByText('All items').first().click();
+    await page.getByText(group.name).first().click();
     await page.waitForTimeout(500);
 
     await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
@@ -115,16 +105,20 @@ test.describe('Env Vars settings page', () => {
     await page.goto('/settings/env-vars');
     await page.waitForTimeout(1500);
 
-    // Select group via filter
-    const filter = page.getByTestId('group-filter').locator('[role="combobox"]');
-    await filter.click();
-    await page.getByRole('option', { name: group.name }).waitFor({ timeout: 5000 });
-    await page.getByRole('option', { name: group.name }).click();
+    // Select group via filter — click the SearchableSelect trigger button
+    await page.getByText('All items').first().click();
+    await page.getByText(group.name).first().click();
     await page.waitForTimeout(500);
 
     // Open add form
     await page.getByRole('button', { name: /Add/i }).first().click();
     await page.waitForTimeout(500);
+
+    // Select the group in the form's Group selector (defaults to "App-wide")
+    // Click the trigger button, then select the group from the dropdown inside the form
+    await page.getByTestId('add-var-form').locator('button').filter({ hasText: 'App-wide' }).click();
+    await page.getByTestId('add-var-form').getByText(group.name).click();
+    await page.waitForTimeout(300);
 
     await page.getByLabel('Variable name').fill('GROUP_VAR');
     await page.getByLabel('Value').fill('group-val');

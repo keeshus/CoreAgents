@@ -54,7 +54,7 @@ test.describe('Flow env vars and secret types', () => {
     await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
 
     // The Environment Variables section should show FLOW_TOKEN
-    await expect(page.getByText('Environment Variables')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Environment Variables', { exact: true })).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
     await expect(page.getByText('FLOW_TOKEN').first()).toBeVisible({ timeout: 5000 });
     // Use the Static badge rendered inside the env var item
@@ -74,7 +74,7 @@ test.describe('Flow env vars and secret types', () => {
     await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
 
     // Scroll down to env vars section
-    const envSection = page.getByText('Environment Variables');
+    const envSection = page.getByText('Environment Variables', { exact: true });
     await expect(envSection).toBeVisible();
 
     // Fill in the new env var form
@@ -82,15 +82,15 @@ test.describe('Flow env vars and secret types', () => {
     await page.getByPlaceholder('Variable name').locator('..').locator('select').selectOption('static');
     await page.getByPlaceholder('Variable name').locator('..').getByPlaceholder('Value').fill('postgres://localhost:5432/mydb');
 
-    // Click the Add button (add icon button inside the env var form)
+    // Click the add button
     await page.getByPlaceholder('Variable name').locator('..').locator('button').click();
 
     // The var should appear in the list
     await expect(page.getByText('DB_URL')).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Static').first()).toBeVisible();
 
-    // Save the flow settings — click the Save button in the modal footer
-    await page.locator('button').filter({ hasText: 'Save' }).last().click();
+    // Close the modal (auto-save — no Save button needed)
+    await page.getByRole('button', { name: 'close' }).click();
     await expect(page.getByText('Flow Settings')).not.toBeVisible({ timeout: 5000 });
 
     // Verify persistence — reload and check
@@ -194,9 +194,15 @@ test.describe('Flow env vars and secret types', () => {
   test('cyberark env var references a CyberArk vault', async ({ page, request }) => {
     test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
 
-    // Create a Conjur vault
+    // Create a group first (vaults require a group)
+    const groupRes = await request.post(`${API_URL}/groups`, { data: { name: `CyberArk-Env-Group-${Date.now()}` } });
+    expect(groupRes.status()).toBe(201);
+    const group = await groupRes.json();
+    cleanupGroupIds.push(group.id);
+
+    // Create a Conjur vault bound to the group
     const vRes = await request.post(`${API_URL}/secret-vaults`, {
-      data: { name: 'E2E CyberArk Env', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456' },
+      data: { name: 'E2E CyberArk Env', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'myapp-api-key-456', groupId: group.id },
     });
     expect(vRes.status()).toBe(201);
     const vault = await vRes.json();
@@ -205,12 +211,7 @@ test.describe('Flow env vars and secret types', () => {
     // Test connection
     await request.post(`${API_URL}/secret-vaults/${vault.id}/test`);
 
-    // Create a group bound to this vault
-    const groupRes = await request.post(`${API_URL}/groups`, { data: { name: `CyberArk-Env-Group-${Date.now()}` } });
-    expect(groupRes.status()).toBe(201);
-    const group = await groupRes.json();
-    cleanupGroupIds.push(group.id);
-
+    // Bind the vault to the group
     await request.put(`${API_URL}/group-vault-config/${group.id}`, {
       data: { vaultId: vault.id, enabled: true },
     });
