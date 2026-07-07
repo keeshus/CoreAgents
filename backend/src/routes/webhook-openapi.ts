@@ -22,7 +22,7 @@ async function authenticateWebhookRequest(req: any, flowId: string): Promise<{ s
       const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
       const [keyRecord] = await db.select()
         .from(apiKeys)
-        .where(and(eq(apiKeys.key_hash, keyHash), eq(apiKeys.flow_id, flowId)));
+        .where(and(eq(apiKeys.key_hash, keyHash), eq(apiKeys.flow_id, flowId))).limit(1);
       if (keyRecord?.enabled) {
         apiKeyValid = true;
         db.update(apiKeys).set({ last_used_at: new Date() }).where(eq(apiKeys.id, keyRecord.id)).catch(() => {});
@@ -32,7 +32,7 @@ async function authenticateWebhookRequest(req: any, flowId: string): Promise<{ s
 
   const providedSecret = (req.query.secret as string) || '';
   if (providedSecret) {
-    const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
+    const [flow] = await db.select().from(flows).where(eq(flows.id, flowId)).limit(1);
     if (flow) {
       const nodes = (flow.nodes || []) as any[];
       const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger');
@@ -68,7 +68,7 @@ router.post(
 
     const [deployment] = await db.select()
       .from(apiDeployments)
-      .where(eq(apiDeployments.path_slug, slug));
+      .where(eq(apiDeployments.path_slug, slug)).limit(1);
 
     if (!deployment) {
       res.status(404).json({ error: 'Webhook endpoint not found' });
@@ -82,7 +82,7 @@ router.post(
     }
 
     // Load flow
-    const [flow] = await db.select().from(flows).where(eq(flows.id, deployment.flow_id));
+    const [flow] = await db.select().from(flows).where(eq(flows.id, deployment.flow_id)).limit(1);
     if (!flow) {
       res.status(404).json({ error: 'Flow not found' });
       return;
@@ -151,7 +151,7 @@ router.get(
 
     const [deployment] = await db.select()
       .from(apiDeployments)
-      .where(eq(apiDeployments.path_slug, slug));
+      .where(eq(apiDeployments.path_slug, slug)).limit(1);
     if (!deployment) {
       res.status(404).json({ error: 'Webhook endpoint not found' });
       return;
@@ -175,7 +175,7 @@ router.get(
       createdAt: executions.created_at,
     })
       .from(executions)
-      .where(and(eq(executions.id, executionId), eq(executions.flow_id, deployment.flow_id)));
+      .where(and(eq(executions.id, executionId), eq(executions.flow_id, deployment.flow_id))).limit(1);
 
     if (!exec) {
       res.status(404).json({ error: 'Execution not found' });
@@ -213,7 +213,7 @@ router.get(
 
     const [deployment] = await db.select()
       .from(apiDeployments)
-      .where(eq(apiDeployments.path_slug, slug));
+      .where(eq(apiDeployments.path_slug, slug)).limit(1);
     if (!deployment) {
       res.status(404).json({ error: 'Webhook endpoint not found' });
       return;

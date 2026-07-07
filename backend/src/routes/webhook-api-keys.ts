@@ -36,7 +36,7 @@ router.post(
   requirePermission('flow:edit'),
   asyncHandler(async (req, res) => {
     const flowId = asStr(req.params.flowId);
-    const [flow] = await db.select({ id: apiDeployments.flow_id }).from(apiDeployments).where(eq(apiDeployments.flow_id, flowId));
+    const [flow] = await db.select({ id: apiDeployments.flow_id }).from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1);
     if (!flow) { res.status(404).json({ error: 'Flow not found or not deployed' }); return; }
 
     const { raw, hash, prefix } = generateApiKey();
@@ -62,7 +62,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     const flowId = asStr(req.params.flowId);
     await db.update(apiKeys).set({ enabled: false })
-      .where(and(eq(apiKeys.flow_id, flowId), eq(apiKeys.user_id, req.user!.userId)));
+      .where(and(eq(apiKeys.flow_id, flowId), eq(apiKeys.user_id, req.user!.userId))).limit(1);
     res.status(204).end();
   }),
 );
@@ -75,7 +75,7 @@ router.delete(
     const flowId = asStr(req.params.flowId);
     const userId = asStr(req.params.userId);
     await db.update(apiKeys).set({ enabled: false })
-      .where(and(eq(apiKeys.flow_id, flowId), eq(apiKeys.user_id, userId)));
+      .where(and(eq(apiKeys.flow_id, flowId), eq(apiKeys.user_id, userId))).limit(1);
     res.status(204).end();
   }),
 );
@@ -86,7 +86,7 @@ router.get(
   requirePermission('flow:edit'),
   asyncHandler(async (req, res) => {
     const flowId = asStr(req.params.flowId);
-    const [deployment] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId));
+    const [deployment] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1);
     if (!deployment) {
       res.json({ pathSlug: '', rateLimit: 0, summary: '' });
       return;
@@ -105,7 +105,7 @@ router.put(
 
     const slug = pathSlug || generateSlug(req.body.name || flowId);
 
-    const [existing] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId));
+    const [existing] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1);
 
     if (existing) {
       const [updated] = await db.update(apiDeployments)
