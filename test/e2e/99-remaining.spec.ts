@@ -72,7 +72,7 @@ test.describe('Remaining features', () => {
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Start', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'c1', type: 'code', position: { x: 200, y: 0 }, data: { label: 'Prepare', type: 'code', config: { code: 'return { count: (input.count || 0) + 1, items: [1, 2, 3], status: "ready" };' } } },
-        { id: 'b1', type: 'branch', position: { x: 400, y: 0 }, data: { label: 'Check', type: 'branch', config: { condition: 'input.count < 3 ? "continue" : "done"', outputLabels: ['continue', 'done'] } } },
+        { id: 'b1', type: 'branch', position: { x: 400, y: 0 }, data: { label: 'Check', type: 'branch', config: { condition: 'input.count < 3' } } },
         { id: 'h1', type: 'hitl', position: { x: 600, y: -100 }, data: { label: 'Review', type: 'hitl', config: { prompt: 'Review result?', buttons: [{ label: 'Retry', value: 'retry' }, { label: 'Approve', value: 'approved' }] } } },
         { id: 'o1', type: 'output', position: { x: 800, y: 100 }, data: { label: 'Output', type: 'output', config: { inputFields: ['prepare.count', 'prepare.status'] } } },
       ],

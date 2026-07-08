@@ -11,11 +11,12 @@ test.describe('Node type config fields', () => {
         { id: 'n1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trig', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'n2', type: 'llm-agent', position: { x: 0, y: 100 }, data: { label: 'LLM', type: 'llm-agent', config: { endpointId: '', model: '', systemPrompt: '', temperature: 0.7, maxTokens: 256, responseFormat: 'text' } } },
         { id: 'n3', type: 'code', position: { x: 0, y: 200 }, data: { label: 'Code', type: 'code', config: { code: 'return input;' } } },
-        { id: 'n4', type: 'branch', position: { x: 0, y: 300 }, data: { label: 'Branch', type: 'branch', config: { condition: '', outputLabels: ['true', 'false'] } } },
+        { id: 'n4', type: 'branch', position: { x: 0, y: 300 }, data: { label: 'Branch', type: 'branch', config: { condition: '' } } },
         { id: 'n5', type: 'output', position: { x: 0, y: 400 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
         { id: 'n6', type: 'hitl', position: { x: 0, y: 500 }, data: { label: 'HITL', type: 'hitl', config: { prompt: '', buttons: [{ label: 'Approve', value: 'approved' }] } } },
         { id: 'n7', type: 'mcp-tool', position: { x: 0, y: 600 }, data: { label: 'MCP', type: 'mcp-tool', config: { serverId: '', toolName: '' } } },
         { id: 'n8', type: 'retriever', position: { x: 0, y: 700 }, data: { label: 'Ret', type: 'retriever', config: { collectionName: 'default', topK: 5 } } },
+        { id: 'n9', type: 'switch', position: { x: 0, y: 800 }, data: { label: 'Switch', type: 'switch', config: { fieldPath: '', cases: [] } } },
       ],
       edges: [],
     });
@@ -115,5 +116,30 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My Retriever');
     await expect(page.getByLabel('Node name')).toHaveValue('My Retriever');
+  });
+
+  test('switch node config fields are accessible', async ({ page }) => {
+    await openNode(page, 'Switch');
+    await expect(page.getByLabel('Node name')).toBeVisible();
+    await page.getByLabel('Node name').fill('My Switch');
+    await expect(page.getByLabel('Node name')).toHaveValue('My Switch');
+    // Should have a field selector
+    await expect(page.getByText('Select Input Field')).toBeVisible();
+    // Should have cases section
+    await expect(page.getByText('Cases')).toBeVisible();
+  });
+
+  test('switch node allows adding and removing cases', async ({ page }) => {
+    await openNode(page, 'Switch');
+    // Add a case
+    await page.getByText('+ Add case').click();
+    // Should now have at least one case input
+    const caseInputs = page.locator('[data-testid="node-config-modal"] input[placeholder="Value to match"]');
+    await expect(caseInputs).toHaveCount(1);
+    // Fill in the case value
+    await caseInputs.fill('test-value');
+    await expect(caseInputs).toHaveValue('test-value');
+    // Default path selector should appear
+    await expect(page.getByText('Default path (optional)')).toBeVisible();
   });
 });

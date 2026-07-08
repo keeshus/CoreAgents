@@ -47,34 +47,16 @@ describe('LLMAgentNodeData', () => {
 // ── BranchNodeData ───────────────────────────────────────────
 
 describe('BranchNodeData', () => {
-  it('accepts config with inputFields', () => {
+  it('accepts config with condition', () => {
     const data = {
       label: 'Branch',
       type: 'branch' as const,
       config: {
         condition: 'payload.score > 0.5',
-        outputLabels: ['high', 'low'],
-        inputFields: ['score', 'threshold'],
       },
     };
 
-    expect(data.config.inputFields).toBeDefined();
-    expect(data.config.inputFields).toHaveLength(2);
-    expect(data.config.inputFields).toContain('score');
-    expect(data.config.inputFields).toContain('threshold');
-  });
-
-  it('works without optional inputFields', () => {
-    const data = {
-      label: 'Branch',
-      type: 'branch' as const,
-      config: {
-        condition: 'payload.x > 10',
-        outputLabels: ['yes', 'no'],
-      },
-    };
-
-    expect((data.config as Record<string, unknown>).inputFields).toBeUndefined();
+    expect(data.config.condition).toBeDefined();
   });
 });
 
@@ -228,14 +210,12 @@ describe('Default configs', () => {
     expect(defaultConfig.outputSchema).toBe('');
   });
 
-  it('branch default config provides condition and outputLabels', () => {
+  it('branch default config provides condition', () => {
     const defaultConfig = {
       condition: '',
-      outputLabels: ['true', 'false'],
     };
 
     expect(defaultConfig.condition).toBe('');
-    expect(defaultConfig.outputLabels).toEqual(['true', 'false']);
   });
 
   it('hitl default config provides default approve/reject buttons', () => {
