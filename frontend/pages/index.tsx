@@ -559,16 +559,18 @@ export default function FlowsListPage() {
             </div>
 
             {/* Group filter */}
-            <div className="mb-4 max-w-xs">
-              <SearchableSelect
-                label="Filter by group"
-                value={contextFilterGroupId}
-                onChange={(v) => { setContextFilterGroupId(v); setShowContextForm(false); }}
-                items={contextGroups}
-                includeAll={true}
-                allLabel="All items"
-              />
-            </div>
+            {contextGroups.length > 0 && (
+              <div className="mb-4 max-w-xs">
+                <SearchableSelect
+                  label="Filter by group"
+                  value={contextFilterGroupId}
+                  onChange={(v) => { setContextFilterGroupId(v); setShowContextForm(false); }}
+                  items={contextGroups}
+                  includeAll={true}
+                  allLabel="All items"
+                />
+              </div>
+            )}
 
             {showContextForm && (
               <div className="bg-surface rounded-lg border p-4 mb-4 space-y-3">
