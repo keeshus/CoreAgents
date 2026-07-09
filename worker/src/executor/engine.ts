@@ -1423,6 +1423,7 @@ function resolveNestedValue(obj: unknown, path: string): unknown {
             headers: fetchHeaders,
             body: fetchBody,
             redirect: followRedirects ? 'follow' : 'manual',
+            signal: controller.signal,
           });
           const responseBody = await response.text();
           let parsedBody: unknown;
