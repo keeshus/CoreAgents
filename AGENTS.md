@@ -90,7 +90,7 @@ docker compose -f docker-compose.e2e.yml down -v --timeout 10
 ```
 
 ### Notes
-- 425 tests across 33 spec files
+- 428 tests across 33 spec files
 - The parallel script (`test/run-e2e-parallel.sh`) splits tests into 4 balanced groups, each running on its own Docker stack with isolated ports
 - Stack 1 uses default ports (3000-3005) for SSO/openai-chat compatibility
 - The setup test (register + login) runs once per stack
