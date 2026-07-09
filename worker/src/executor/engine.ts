@@ -45,6 +45,19 @@ export class HitlPauseError extends Error {
   }
 }
 
+export class PauseExecutionError extends Error {
+  public nodeId: string;
+  public savedOutputs: Record<string, unknown>;
+  public resumeDelay: number;
+  constructor(nodeId: string, savedOutputs: Record<string, unknown>, resumeDelay: number) {
+    super(`Paused: waiting for delay at node ${nodeId}`);
+    this.name = 'PauseExecutionError';
+    this.nodeId = nodeId;
+    this.savedOutputs = savedOutputs;
+    this.resumeDelay = resumeDelay;
+  }
+}
+
 export class FlowStopError extends Error {
   public nodeId: string;
   public status: string;
@@ -443,7 +456,14 @@ export class FlowExecutor {
           }
         }
       } catch (err) {
-        // If HITL node paused, populate saved outputs before re-throwing
+        // If node is paused (HITL or delay), populate saved outputs before re-throwing
+        if (err instanceof PauseExecutionError) {
+          const saved: Record<string, unknown> = {};
+          for (const [k, v] of nodeOutputs) {
+            if (k !== '__input__' && flow.nodes.some(n => n.id === k)) saved[k] = v;
+          }
+          throw new PauseExecutionError(err.nodeId, saved, err.resumeDelay);
+        }
         if (err instanceof HitlPauseError) {
           const saved: Record<string, unknown> = {};
           for (const [k, v] of nodeOutputs) {
@@ -979,8 +999,22 @@ export class FlowExecutor {
             if (typeof parsed === 'object' && parsed !== null) Object.assign(result, parsed);
           } catch {}
         }
-        return result;
-      }
+  return result;
+}
+
+function resolveNestedValue(obj: unknown, path: string): unknown {
+  const parts = path.split('.');
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    if (typeof current === 'object' && !Array.isArray(current) && part in (current as Record<string, unknown>)) {
+      current = (current as Record<string, unknown>)[part];
+    } else {
+      return undefined;
+    }
+  }
+  return current;
+}
 
       case 'mcp-tool': {
         const config = (nodeData as any).config;
@@ -1352,6 +1386,148 @@ export class FlowExecutor {
         return inp || input;
       }
 
+      case 'http': {
+        const config = (nodeData as any).config || {};
+        const { method = 'GET', url = '', headers = '', body = '', authType = 'none', authUsername, authPassword, authToken, authKeyName, authKeyValue, followRedirects = true, timeout = 30000, sslVerify = true, hmacSecret, hmacHeader } = config;
+        if (!url) throw new Error('HTTP Request node: URL is required');
+        const fetchUrl = await resolveTemplate(url, input, context);
+        const fetchHeaders: Record<string, string> = {};
+        if (headers) {
+          try {
+            const parsed = JSON.parse(await resolveTemplate(headers, input, context));
+            Object.assign(fetchHeaders, parsed);
+          } catch { throw new Error('HTTP Request node: headers must be valid JSON'); }
+        }
+        if (authType === 'basic' && authUsername && authPassword) {
+          fetchHeaders['Authorization'] = 'Basic ' + Buffer.from(`${authUsername}:${authPassword}`).toString('base64');
+        } else if (authType === 'bearer' && authToken) {
+          fetchHeaders['Authorization'] = 'Bearer ' + authToken;
+        } else if (authType === 'api-key' && authKeyName && authKeyValue) {
+          fetchHeaders[authKeyName] = authKeyValue;
+        }
+        let fetchBody: string | undefined;
+        if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
+          fetchBody = await resolveTemplate(body, input, context);
+          if (!fetchHeaders['Content-Type']) fetchHeaders['Content-Type'] = 'application/json';
+        }
+        if (hmacSecret && hmacHeader) {
+          const crypto = await import('node:crypto');
+          const hmac = crypto.createHmac('sha256', hmacSecret).update(fetchBody || '').digest('hex');
+          fetchHeaders[hmacHeader] = hmac;
+        }
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        try {
+          const response = await fetch(fetchUrl, {
+            method,
+            headers: fetchHeaders,
+            body: fetchBody,
+            redirect: followRedirects ? 'follow' : 'manual',
+          });
+          const responseBody = await response.text();
+          let parsedBody: unknown;
+          try { parsedBody = JSON.parse(responseBody); } catch { parsedBody = responseBody; }
+          return {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: parsedBody,
+            ok: response.ok,
+          };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      case 'loop': {
+        const loopConfig = (nodeData as any).config || {};
+        const { itemsField, itemVariable = 'item', subNodes = [], subEdges = [], collectResults = true } = loopConfig;
+        if (!itemsField) throw new Error('Loop node: itemsField is required');
+        const items = resolveNestedValue(input, itemsField);
+        if (!Array.isArray(items)) throw new Error(`Loop node: "${itemsField}" is not an array`);
+        const results: unknown[] = [];
+        const errors: { index: number; error: string }[] = [];
+        const subFlowDef = { id: '', name: '', description: '', nodes: subNodes, edges: subEdges, version: 1, createdAt: '', updatedAt: '' };
+        for (let i = 0; i < items.length; i++) {
+          try {
+            const loopInput = { ...(input as Record<string, unknown>), [itemVariable]: items[i], index: i };
+            const subExecutor = new FlowExecutor();
+            const subResult = await subExecutor.execute(subFlowDef, loopInput, onEvent, context);
+            if (collectResults) results.push(subResult.output);
+          } catch (err) {
+            errors.push({ index: i, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+        return { results: collectResults ? results : undefined, count: items.length, errors: errors.length > 0 ? errors : undefined };
+      }
+
+      case 'delay': {
+        const delayConfig = (nodeData as any).config || {};
+        const { type: delayType, seconds, duration, timestamp, jitter } = delayConfig;
+        let delayMs = 0;
+        const now = Date.now();
+        if (delayType === 'fixed' && seconds) {
+          delayMs = seconds * 1000;
+        } else if (delayType === 'duration' && duration) {
+          const match = duration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/);
+          if (!match) throw new Error(`Delay node: invalid ISO 8601 duration "${duration}"`);
+          const [, h, m, s] = match;
+          delayMs = ((parseInt(h || '0') * 3600) + (parseInt(m || '0') * 60) + parseFloat(s || '0')) * 1000;
+        } else if (delayType === 'timestamp' && timestamp) {
+          const resolved = await resolveTemplate(timestamp, input, context);
+          const target = new Date(resolved).getTime();
+          if (isNaN(target)) throw new Error(`Delay node: invalid timestamp "${resolved}"`);
+          delayMs = Math.max(0, target - now);
+        }
+        if (jitter) {
+          delayMs += Math.floor((Math.random() * 2 - 1) * jitter * 1000);
+          delayMs = Math.max(0, delayMs);
+        }
+        if (delayMs > 0) {
+          throw new PauseExecutionError(node.id, input as Record<string, unknown>, delayMs);
+        }
+        return { delayed: false };
+      }
+
+      case 'ai-action': {
+        const aiConfig = (nodeData as any).config || {};
+        const { endpointId, model, prompt, temperature = 0.7, maxTokens = 1024 } = aiConfig;
+        if (!endpointId) throw new Error('AI Action node: endpointId is required');
+        if (!model) throw new Error('AI Action node: model is required');
+        if (!prompt) throw new Error('AI Action node: prompt is required');
+        if (!context.getEndpoint) throw new Error('AI Action node: getEndpoint not available');
+        const resolvedPrompt = await resolveTemplate(prompt, input, context);
+        const endpoint = await context.getEndpoint(endpointId);
+        if (!endpoint) throw new Error(`AI Action node: endpoint "${endpointId}" not found`);
+        const result = await callLLM({
+          endpointId,
+          model,
+          systemPrompt: '',
+          messages: [{ role: 'user', content: resolvedPrompt }],
+          temperature,
+          maxTokens,
+        }, endpoint);
+        return { content: result.text };
+      }
+
+      case 'map': {
+        const mapConfig = (nodeData as any).config || {};
+        const { fields = [], mode = 'replace' } = mapConfig;
+        const output: Record<string, unknown> = {};
+        for (const field of fields) {
+          const resolved = resolveNestedValue(input, field.value);
+          output[field.name] = resolved !== undefined ? resolved : null;
+        }
+        if (mode === 'merge') {
+          return { ...(input as Record<string, unknown>), ...output };
+        }
+        return output;
+      }
+
+      case 'note': {
+        return { note: true };
+      }
+
       default:
         throw new Error(`Unknown node type: ${(nodeData as any).type}`);
     }
@@ -1453,7 +1629,7 @@ export class SubFlowExecutor {
 
       return result;
     } catch (err) {
-      if (err instanceof HitlPauseError || err instanceof FlowStopError) {
+      if (err instanceof HitlPauseError || err instanceof PauseExecutionError || err instanceof FlowStopError) {
         if (context.completeSubExecution && subExecutionId) {
           await context.completeSubExecution(subExecutionId, {}, 'failed', 'Interrupted by HITL/stop');
         }

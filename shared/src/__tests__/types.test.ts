@@ -15,8 +15,8 @@ describe('nodeTypeSchema', () => {
 });
 
 describe('NODE_TYPES', () => {
-  it('contains all 11 node types', () => {
-    expect(NODE_TYPES).toHaveLength(12);
+  it('contains all 17 node types', () => {
+    expect(NODE_TYPES).toHaveLength(18);
     expect(NODE_TYPES).toContain('trigger');
     expect(NODE_TYPES).toContain('llm-agent');
     expect(NODE_TYPES).toContain('mcp-tool');

@@ -16,6 +16,12 @@ const NODE_ICONS: Record<string, string> = {
   hitl: 'schedule',
   output: 'check_circle',
   subflow: 'account_tree',
+  http: 'http_post',
+  loop: 'loop',
+  delay: 'timer',
+  'ai-action': 'auto_awesome',
+  map: 'data_object',
+  note: 'sticky_note_2',
 };
 
 interface NodeCatalogProps {

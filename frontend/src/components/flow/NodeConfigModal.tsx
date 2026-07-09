@@ -11,6 +11,8 @@ import { RetrieverConfig } from '@/components/flow/config/RetrieverConfig';
 import { TemplateAutocomplete } from '@/components/flow/config/TemplateAutocomplete';
 import { HITLNodeConfig } from '@/components/flow/config/HITLNodeConfig';
 import { SubflowNodeConfig } from '@/components/flow/config/SubflowNodeConfig';
+import { LoopNodeConfig } from './config/LoopNodeConfig';
+import { HttpConfig } from './config/HttpConfig';
 import { TriggerConfig } from '@/components/flow/config/TriggerConfig';
 import { Tooltip } from '@/components/ui/Tooltip';
 
@@ -27,6 +29,12 @@ const NODE_LABELS: Record<string, string> = {
   parallel: 'Parallel Agents',
   hitl: 'Human in the Loop',
   subflow: 'Subflow',
+  http: 'HTTP Request',
+  loop: 'Loop',
+  delay: 'Delay',
+  'ai-action': 'AI Action',
+  map: 'Map',
+  note: 'Note',
 };
 
 interface NodeConfigModalProps {
@@ -508,6 +516,160 @@ export function NodeConfigModal({
             />
           )}
 
+          {node.data.type === 'ai-action' && (
+            <div className="space-y-3">
+              <p className="text-xs text-on-surface-variant">
+                Single LLM call — no tool loop, no context layering. Configure a prompt to transform upstream data.
+              </p>
+            </div>
+          )}
+
+          {node.data.type === 'http' && (
+            <HttpConfig config={node.data.config} onChange={onConfigChange} />
+          )}
+
+          {node.data.type === 'loop' && (
+            <LoopNodeConfig config={node.data.config} onChange={onConfigChange} nodeId={node.id} nodes={nodes} edges={edges} />
+          )}
+
+          {node.data.type === 'delay' && (
+            <div className="space-y-3">
+              <SelectField
+                label="Delay Type"
+                value={node.data.config.type || 'fixed'}
+                onChange={(v) => onConfigChange({ type: v })}
+                options={[
+                  { value: 'fixed', label: 'Fixed seconds' },
+                  { value: 'duration', label: 'ISO 8601 Duration' },
+                  { value: 'timestamp', label: 'Specific timestamp' },
+                ]}
+              />
+              {node.data.config.type === 'fixed' && (
+                <TextField
+                  label="Seconds"
+                  value={String(node.data.config.seconds || 5)}
+                  onChange={(v) => onConfigChange({ seconds: parseInt(v) || 0 })}
+                  type="number"
+                />
+              )}
+              {node.data.config.type === 'duration' && (
+                <TextField
+                  label="Duration (ISO 8601)"
+                  value={node.data.config.duration || ''}
+                  onChange={(v) => onConfigChange({ duration: v })}
+                  placeholder="PT30S, PT5M, PT1H"
+                />
+              )}
+              {node.data.config.type === 'timestamp' && (
+                <TextField
+                  label="Timestamp"
+                  value={node.data.config.timestamp || ''}
+                  onChange={(v) => onConfigChange({ timestamp: v })}
+                  placeholder="2026-07-09T12:00:00Z or {{input.Var.field}}"
+                />
+              )}
+              <TextField
+                label="Jitter (±seconds)"
+                value={String(node.data.config.jitter || 0)}
+                onChange={(v) => onConfigChange({ jitter: parseInt(v) || 0 })}
+                type="number"
+                helpText="Random +/- seconds to add to the delay."
+              />
+            </div>
+          )}
+
+          {node.data.type === 'map' && (
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs font-medium text-on-surface-variant block mb-1">Fields</span>
+                <div className="space-y-2">
+                  {(node.data.config.fields || []).map((f: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2 p-2 border border-outline-variant rounded bg-surface">
+                      <div className="flex-1 space-y-1">
+                        <input
+                          className="w-full rounded border border-outline p-1.5 text-sm bg-surface"
+                          value={f.name}
+                          onChange={(e) => {
+                            const list = [...(node.data.config.fields || [])];
+                            list[i] = { ...list[i], name: e.target.value };
+                            onConfigChange({ fields: list });
+                          }}
+                          placeholder="Field name"
+                        />
+                        <select
+                          value={f.type || 'string'}
+                          onChange={(e) => {
+                            const list = [...(node.data.config.fields || [])];
+                            list[i] = { ...list[i], type: e.target.value };
+                            onConfigChange({ fields: list });
+                          }}
+                          className="w-full rounded border border-outline p-1.5 text-sm bg-surface"
+                        >
+                          <option value="string">string</option>
+                          <option value="number">number</option>
+                          <option value="boolean">boolean</option>
+                          <option value="object">object</option>
+                          <option value="array">array</option>
+                        </select>
+                        <input
+                          className="w-full rounded border border-outline p-1.5 text-sm bg-surface font-mono"
+                          value={f.value}
+                          onChange={(e) => {
+                            const list = [...(node.data.config.fields || [])];
+                            list[i] = { ...list[i], value: e.target.value };
+                            onConfigChange({ fields: list });
+                          }}
+                          placeholder="Upstream field path (e.g., trigger.message)"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const list = [...(node.data.config.fields || [])];
+                          list.splice(i, 1);
+                          onConfigChange({ fields: list });
+                        }}
+                        className="p-1 text-on-surface-variant hover:text-error hover:bg-error-container rounded"
+                      >
+                        <Icon name="close" className="text-sm" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const list = [...(node.data.config.fields || [])];
+                      onConfigChange({ fields: [...list, { name: '', type: 'string', value: '' }] });
+                    }}
+                    className="text-sm text-primary hover:underline"
+                  >+ Add field</button>
+                </div>
+              </div>
+              <SelectField
+                label="Mode"
+                value={node.data.config.mode || 'replace'}
+                onChange={(v) => onConfigChange({ mode: v })}
+                options={[
+                  { value: 'replace', label: 'Replace — output only mapped fields' },
+                  { value: 'merge', label: 'Merge — add mapped fields to upstream data' },
+                ]}
+              />
+            </div>
+          )}
+
+          {node.data.type === 'note' && (
+            <div className="space-y-3">
+              <TextField
+                label="Content"
+                value={node.data.config.content || ''}
+                onChange={(v) => onConfigChange({ content: v })}
+                multiline
+                rows={4}
+                placeholder="Write your note here..."
+              />
+            </div>
+          )}
+
           {![
             'llm-agent',
             'mcp-tool',
@@ -520,6 +682,12 @@ export function NodeConfigModal({
             'parallel',
             'hitl',
             'subflow',
+            'http',
+            'loop',
+            'delay',
+            'ai-action',
+            'map',
+            'note',
           ].includes(node.data.type) && (
             <pre className="text-xs bg-surface-container p-3 rounded overflow-auto">
               {JSON.stringify(node.data.config, null, 2)}

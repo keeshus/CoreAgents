@@ -1,0 +1,49 @@
+import { type NodeProps, useStore } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+
+export function LoopNode(props: NodeProps) {
+  const config = props.data?.config as Record<string, any> | undefined;
+  const childCount = useStore((s) =>
+    s.nodes.filter((n: any) => n.parentId === props.id).length
+  );
+  const count = childCount || (config?.subNodes || []).length;
+  const itemsField = config?.itemsField || '';
+  const itemVar = config?.itemVariable || 'item';
+
+  return (
+    <div
+      style={{ overflow: 'visible' }}
+      className={`w-full h-full rounded-xl border-2 border-dashed bg-secondary-container/30 flex flex-col ${
+        props.selected ? 'border-secondary bg-secondary-container/50 shadow-m3-4' : 'border-secondary-container'
+      }`}
+    >
+      <Handle type="target" position={Position.Left} id="input-0" className="!bg-secondary !z-50" />
+      <Handle type="source" position={Position.Right} id="output-0" className="!bg-secondary !z-50" />
+
+      <div className="px-3 py-2 border-b border-secondary-container bg-secondary-container/50 shrink-0">
+        <span className="text-sm font-semibold text-on-secondary-container">{(props.data?.label as string) || 'Loop'}</span>
+        {itemsField && (
+          <span className="ml-2 text-[10px] text-secondary font-mono">{itemsField}</span>
+        )}
+        <span className="ml-2 text-[10px] text-secondary">
+          {count > 0 ? `${count} node${count !== 1 ? 's' : ''}` : 'empty'}
+        </span>
+      </div>
+
+      <div className="flex-1">
+        {count === 0 && (
+          <div className="text-center pt-12 px-4">
+            <p className="text-xs text-on-secondary-container">Drop nodes here</p>
+            <p className="text-[9px] text-secondary mt-1">Each node runs for every item in the array</p>
+          </div>
+        )}
+      </div>
+
+      <div className="px-3 py-1.5 border-t border-secondary-container bg-secondary-container/30 shrink-0">
+        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-secondary-container text-on-secondary-container">
+          for each {itemVar}
+        </span>
+      </div>
+    </div>
+  );
+}

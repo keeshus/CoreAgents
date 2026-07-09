@@ -29,6 +29,12 @@ import { OutputNode } from './nodes/OutputNode';
 import { ParallelNode } from './nodes/ParallelNode';
 import { HITLNode } from './nodes/HITLNode';
 import { SubflowNode } from './nodes/SubflowNode';
+import { HttpNode } from './nodes/HttpNode';
+import { LoopNode } from './nodes/LoopNode';
+import { DelayNode } from './nodes/DelayNode';
+import { AIActionNode } from './nodes/AIActionNode';
+import { MapNode } from './nodes/MapNode';
+import { NoteNode } from './nodes/NoteNode';
 import { DeletableEdge } from './DeletableEdge';
 
 const edgeTypes = { default: DeletableEdge, smoothstep: DeletableEdge };
@@ -46,6 +52,12 @@ const nodeTypes = {
   parallel: ParallelNode,
   hitl: HITLNode,
   subflow: SubflowNode,
+  http: HttpNode,
+  loop: LoopNode,
+  delay: DelayNode,
+  'ai-action': AIActionNode,
+  map: MapNode,
+  note: NoteNode,
 };
 
 interface FlowEditorProps {

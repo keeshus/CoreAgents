@@ -15,6 +15,12 @@ export const NODE_TYPES = [
   'parallel',
   'hitl',
   'subflow',
+  'http',
+  'loop',
+  'delay',
+  'ai-action',
+  'map',
+  'note',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -151,6 +157,85 @@ export interface SubflowNodeData extends BaseNodeData {
   };
 }
 
+export interface HttpNodeData extends BaseNodeData {
+  type: 'http';
+  config: {
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+    url: string;
+    headers?: string;
+    body?: string;
+    authType?: 'none' | 'basic' | 'bearer' | 'api-key';
+    authUsername?: string;
+    authPassword?: string;
+    authToken?: string;
+    authKeyName?: string;
+    authKeyValue?: string;
+    followRedirects?: boolean;
+    timeout?: number;
+    retries?: number;
+    sslVerify?: boolean;
+    hmacSecret?: string;
+    hmacHeader?: string;
+  };
+}
+
+export interface LoopNodeData extends BaseNodeData {
+  type: 'loop';
+  config: {
+    itemsField: string;
+    itemVariable: string;
+    indexVariable?: string;
+    subNodes: FlowNode[];
+    subEdges: FlowEdge[];
+    collectResults?: boolean;
+  };
+}
+
+export interface DelayNodeData extends BaseNodeData {
+  type: 'delay';
+  config: {
+    type: 'fixed' | 'duration' | 'timestamp';
+    seconds?: number;
+    duration?: string;
+    timestamp?: string;
+    jitter?: number;
+  };
+}
+
+export interface AIActionNodeData extends BaseNodeData {
+  type: 'ai-action';
+  config: {
+    endpointId: string;
+    model: string;
+    prompt: string;
+    temperature?: number;
+    maxTokens?: number;
+    responseFormat?: 'text' | 'json_object';
+    outputSchema?: string;
+    inputFields?: string[];
+  };
+}
+
+export interface MapNodeData extends BaseNodeData {
+  type: 'map';
+  config: {
+    fields: Array<{
+      name: string;
+      type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+      value: string;
+    }>;
+    mode: 'merge' | 'replace';
+  };
+}
+
+export interface NoteNodeData extends BaseNodeData {
+  type: 'note';
+  config: {
+    content: string;
+    color?: string;
+  };
+}
+
 export type NodeData =
   | TriggerNodeData
   | LLMAgentNodeData
@@ -163,7 +248,13 @@ export type NodeData =
   | OutputNodeData
   | ParallelNodeData
   | HitlNodeData
-  | SubflowNodeData;
+  | SubflowNodeData
+  | HttpNodeData
+  | LoopNodeData
+  | DelayNodeData
+  | AIActionNodeData
+  | MapNodeData
+  | NoteNodeData;
 
 // ── Edge ─────────────────────────────────────────────────────
 
