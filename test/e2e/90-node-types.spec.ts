@@ -320,4 +320,194 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
+  // ── New nodes ────────────────────────────────────────────────
+
+  test('map node transforms fields', async ({ request }) => {
+    const name = uniqueFlowName('MapTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'm1', type: 'map', position: { x: 300, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'greeting', type: 'string', value: 'trigger.message' }], mode: 'replace' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['mapper.greeting'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'm1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { message: 'world' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.m1?.greeting).toBe('world');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('map node merge mode preserves upstream fields', async ({ request }) => {
+    const name = uniqueFlowName('MapMergeTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Prep', type: 'code', config: { code: 'return { score: 42 };' } } },
+        { id: 'm1', type: 'map', position: { x: 600, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'label', type: 'string', value: 'trigger.message' }], mode: 'merge' } } },
+        { id: 'o1', type: 'output', position: { x: 900, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['mapper.label', 'prep.score'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'm1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { message: 'hello' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.m1?.label).toBe('hello');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('loop node iterates over array items', async ({ request }) => {
+    const name = uniqueFlowName('LoopTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'l1', type: 'loop', position: { x: 300, y: 0 }, data: { label: 'Looper', type: 'loop', config: { itemsField: 'trigger.numbers', itemVariable: 'num', subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'Double', type: 'code', config: { code: 'return { doubled: input.num * 2, original: input.num };' } } }], subEdges: [], collectResults: true } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['looper.results', 'looper.count'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { numbers: [1, 2, 3] }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.l1?.count).toBe(3);
+    expect(completed!.data?.output?.l1?.results).toHaveLength(3);
+    expect(completed!.data?.output?.l1?.results[0]?.doubled).toBe(2);
+    expect(completed!.data?.output?.l1?.results[2]?.doubled).toBe(6);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('http node fetches from an endpoint', async ({ request }) => {
+    const name = uniqueFlowName('HttpTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://mock-llm-e2e:3002/', timeout: 5000 } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['fetcher.status', 'fetcher.ok'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.h1?.status).toBe(200);
+    expect(completed!.data?.output?.h1?.ok).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('delay node with zero seconds passes through', async ({ request }) => {
+    const name = uniqueFlowName('DelayTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'Pause', type: 'delay', config: { type: 'fixed', seconds: 0 } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'd1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'd1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('ai-action node calls LLM and returns response', async ({ request }) => {
+    // Create a mock LLM endpoint for the ai-action node
+    const llmRes = await request.post(`${API_URL}/llm-endpoints`, {
+      data: { name: 'E2E AI Action Mock', providerType: 'openai', baseUrl: `http://mock-llm-e2e:3002/v1`, apiKey: 'mock-key', defaultModel: 'mock-gpt-4o', models: ['mock-gpt-4o'] },
+    });
+    if (!llmRes.ok()) return;
+    const ep = await llmRes.json();
+
+    const name = uniqueFlowName('AIActionTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'a1', type: 'ai-action', position: { x: 300, y: 0 }, data: { label: 'AI', type: 'ai-action', config: { endpointId: ep.id, model: 'mock-gpt-4o', prompt: 'MOCK_RESPONSE: "Hello from AI Action"' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['ai.content'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'a1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'a1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.a1?.content).toBeDefined();
+    await request.delete(`${API_URL}/llm-endpoints/${ep.id}`);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('note node passes through without error', async ({ request }) => {
+    const name = uniqueFlowName('NoteTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'n1', type: 'note', position: { x: 300, y: 0 }, data: { label: 'Note', type: 'note', config: { content: 'important note' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'n1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'n1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.n1?.note).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('delay node with positive seconds pauses execution', async ({ request }) => {
+    const name = uniqueFlowName('DelayPauseTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'Pause', type: 'delay', config: { type: 'fixed', seconds: 1, jitter: 0 } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'd1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'd1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const paused = events.find(e => e.type === 'execution.paused');
+    expect(paused).toBeDefined();
+    expect(paused!.data?.delayMs).toBeGreaterThan(0);
+    await deleteFlow(request, flow.id);
+  });
 });
