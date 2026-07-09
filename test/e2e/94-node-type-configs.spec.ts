@@ -228,10 +228,10 @@ test.describe('Node config — deep field tests', () => {
   });
 
   test('parallel agents: configuration section present', async ({ page }) => {
-    await openNode(page, 'Parallel Agents');
+    await openNode(page, 'Par');
     await expect(page.getByLabel('Node name')).toBeVisible();
-    await page.getByLabel('Node name').fill('Parallel Agents');
-    await expect(page.getByLabel('Node name')).toHaveValue('Parallel Agents');
+    await page.getByLabel('Node name').fill('Par');
+    await expect(page.getByLabel('Node name')).toHaveValue('Par');
   });
 
   test('subflow node config opens and shows subflow selector', async ({ page, request }) => {
