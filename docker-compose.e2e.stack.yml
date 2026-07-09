@@ -1,0 +1,163 @@
+# Core Agents E2E Test – parameterized for parallel stack execution
+# Usage:
+#   STACK_ID=1 PORT_BASE=0 docker compose -p e2e-s1 -f docker-compose.e2e.stack.yml up -d --wait
+#   STACK_ID=2 PORT_BASE=10 docker compose -p e2e-s2 -f docker-compose.e2e.stack.yml up -d --wait
+# Port mapping: each stack gets PORT_BASE added to all host ports
+
+services:
+  postgres-e2e:
+    image: postgres:17-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: coreagents
+      POSTGRES_PASSWORD: coreagents
+      POSTGRES_DB: coreagents
+    tmpfs: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coreagents"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  qdrant-e2e:
+    image: qdrant/qdrant:v1.18.0
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    tmpfs: /qdrant/storage
+    restart: unless-stopped
+
+  valkey-e2e:
+    image: valkey/valkey:7-alpine
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    command: valkey-server --requirepass dev-valkey
+    tmpfs: /data
+    restart: unless-stopped
+
+  db-migrate-e2e:
+    image: node:25-alpine
+    working_dir: /repo
+    volumes:
+      - .:/repo
+    entrypoint:
+      - sh
+      - -c
+      - cd backend && DATABASE_URL=postgres://coreagents:coreagents@postgres-e2e:5432/coreagents npx drizzle-kit push --config drizzle.config.ts
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+
+  backend-e2e:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.e2e
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
+      JWT_SECRET: e2e-test-secret
+      NODE_ENV: e2e
+      FRONTEND_URL: http://localhost:${FRONTEND_PORT:-3000}
+      VALKEY_HOST: valkey-e2e
+      VALKEY_PASSWORD: dev-valkey
+      SECRETS_ENCRYPTION_KEY: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+      SIDECAR_URL: http://sidecar-e2e:4001
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      db-migrate-e2e:
+        condition: service_completed_successfully
+      mock-oidc-e2e:
+        condition: service_started
+      sidecar-e2e:
+        condition: service_started
+
+  frontend-e2e:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.e2e
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      BACKEND_URL: http://backend-e2e:3001
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - backend-e2e
+
+  worker-e2e:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile.e2e
+    environment:
+      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
+      VALKEY_HOST: valkey-e2e
+      VALKEY_PASSWORD: dev-valkey
+      SECRETS_ENCRYPTION_KEY: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+      SIDECAR_URL: http://sidecar-e2e:4001
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      db-migrate-e2e:
+        condition: service_completed_successfully
+      valkey-e2e:
+        condition: service_started
+      sidecar-e2e:
+        condition: service_started
+
+  scheduler-e2e:
+    build:
+      context: .
+      dockerfile: scheduler/Dockerfile.e2e
+    environment:
+      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
+      VALKEY_HOST: valkey-e2e
+      VALKEY_PASSWORD: dev-valkey
+    depends_on:
+      postgres-e2e:
+        condition: service_healthy
+      db-migrate-e2e:
+        condition: service_completed_successfully
+      valkey-e2e:
+        condition: service_started
+
+  sidecar-e2e:
+    build:
+      context: .
+      dockerfile: sidecar/Dockerfile.e2e
+    ports:
+      - "${SIDECAR_PORT:-4001}:4001"
+    tmpfs: /var/flow-data
+    cap_add:
+      - SYS_ADMIN
+
+  mock-llm-e2e:
+    build:
+      context: ./test/mock-llm
+      dockerfile: Dockerfile
+    ports:
+      - "${MOCK_LLM_PORT:-3002}:3002"
+
+  mock-mcp-e2e:
+    build:
+      context: ./test/mock-mcp
+      dockerfile: Dockerfile
+    ports:
+      - "${MOCK_MCP_PORT:-3003}:3003"
+
+  mock-oidc-e2e:
+    build:
+      context: ./test/mock-oidc
+      dockerfile: Dockerfile
+    ports:
+      - "${MOCK_OIDC_PORT:-3004}:3004"
+
+  mock-cyberark-e2e:
+    build:
+      context: ./test/mock-cyberark
+      dockerfile: Dockerfile
+    ports:
+      - "${MOCK_CYBERARK_PORT:-3005}:3005"

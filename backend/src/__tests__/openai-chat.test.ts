@@ -45,7 +45,11 @@ function getMiddleware(router: any, method: string, path: string, index = 0) {
 }
 
 function mockChain(resolvedValue: any) {
-  return { from: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue(resolvedValue) };
+  const limit = vi.fn().mockResolvedValue(resolvedValue);
+  const where = vi.fn(() => Object.assign(Promise.resolve(resolvedValue), { limit }));
+  const chain = { from: vi.fn(() => chain), where };
+  Object.assign(chain, { limit });
+  return chain;
 }
 
 function makeReq(overrides?: any) {

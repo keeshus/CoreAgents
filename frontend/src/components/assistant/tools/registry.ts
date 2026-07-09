@@ -213,7 +213,7 @@ const getAvailableNodes: AssistantTool = {
   description: 'List all node types available in the node catalog for adding to the flow.',
   inputSchema: { type: 'object', properties: {} },
   async execute() {
-    return 'Available node types: llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), branch (condition routing), hitl (human approval — simple approve/reject or multi-approver), output (returns result), parallel (concurrent branches). Click the + button on the left to open the catalog, then select a node type. The trigger node is pre-added and cannot be removed.';
+    return 'Available node types: llm-agent (calls an LLM), mcp-tool (calls an MCP tool), retriever (vector search), code (JavaScript), condition (boolean routing), hitl (human approval — simple approve/reject or multi-approver), output (returns result), parallel (concurrent branches). Click the + button on the left to open the catalog, then select a node type. The trigger node is pre-added and cannot be removed.';
   },
 };
 
@@ -307,7 +307,7 @@ const addNode: AssistantTool = {
   inputSchema: {
     type: 'object',
     properties: {
-      type: { type: 'string', enum: ['llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel'] },
+      type: { type: 'string', enum: ['llm-agent', 'code', 'condition', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel'] },
     },
     required: ['type'],
   },
@@ -1504,13 +1504,13 @@ const getDebugResults: AssistantTool = {
 const getNodeTypeInfo: AssistantTool = {
   name: 'get_node_type_info',
   description: 'Get documentation/description for a specific node type.',
-  inputSchema: { type: 'object', properties: { nodeType: { type: 'string', enum: ['trigger', 'llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool'] } }, required: ['nodeType'] },
+  inputSchema: { type: 'object', properties: {       nodeType: { type: 'string', enum: ['trigger', 'llm-agent', 'code', 'condition', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool'] } }, required: ['nodeType'] },
   async execute({ nodeType }) {
     const docs: Record<string, string> = {
       'trigger': 'The starting node. Triggers define how a flow starts: manually, via chat, webhook, or on a schedule. Each flow has exactly one trigger.',
       'llm-agent': 'Calls an LLM (e.g. OpenAI GPT-4, Anthropic Claude). Configure endpoint, model, system prompt, temperature, max tokens, and response format. Can use tools from connected MCP Tool nodes and Flow Tool nodes.',
       'code': 'Executes JavaScript code in a sandboxed sidecar. Receives upstream data as `input`, returns an object. Has access to node, npm, python3, git, and standard Unix tools.',
-      'branch': 'Routes the flow based on a JavaScript condition expression. Has two or more output handles. The condition returns a label matching one of the output handles.',
+      'condition': 'Routes the flow based on a JavaScript condition expression. Has two or more output handles. The condition returns a label matching one of the output handles.',
       'output': 'Returns the result of the flow. Select which upstream fields to include in the output. A flow must have at least one output node to return a result.',
       'hitl': 'Human-in-the-loop: pauses execution for human approval. Configure prompt, buttons (label + value), assignment type (user, role, or group), and optional feedback.',
       'mcp-tool': 'Calls a tool on a configured MCP server. Connect to an LLM Agent via the tool-input handle to make MCP tools available to the LLM. Can auto-discover tools from the server.',

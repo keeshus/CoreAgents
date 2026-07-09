@@ -159,9 +159,9 @@ test.describe('Flow Editor DOM tools', () => {
   });
 
   test('get_available_nodes returns type list', async () => {
-    const types = 'llm-agent, mcp-tool, retriever, code, branch, hitl, output, parallel';
+    const types = 'llm-agent, mcp-tool, retriever, code, condition, hitl, output, parallel';
     expect(types).toContain('code');
-    expect(types).toContain('branch');
+    expect(types).toContain('condition');
   });
 
   test('save_flow persists canvas state via API', async ({ page, request }) => {
@@ -257,7 +257,7 @@ test.describe('Flow Editor DOM tools', () => {
   });
 
   test('get_node_type_info — returns docs for all types', async ({ request }) => {
-    for (const type of ['trigger', 'llm-agent', 'code', 'branch', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool']) {
+    for (const type of ['trigger', 'llm-agent', 'code', 'condition', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool']) {
       const res = await request.get(`${API_URL}/catalog`);
       expect(res.ok()).toBe(true);
       const catalog = await res.json();

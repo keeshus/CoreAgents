@@ -5,7 +5,7 @@ import type {
   SSEEvent,
   ExecutionStep,
   NodeData,
-  BranchNodeData,
+  ConditionNodeData,
 } from 'core-agents-shared';
 import { topologicalSort } from './dag.js';
 import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
@@ -112,6 +112,7 @@ export class FlowExecutor {
       console.warn(`Flow contains feedback loops (cycles): ${JSON.stringify(cycles)}`);
     }
 
+
     // Validate the flow before execution — catch schema/template issues early
     // Skip validation when there are cycles (feedback loops) — cycle ordering is undefined
     const validationErrors = cycles.length > 0 ? [] : this.compileFlow(sorted, flow.edges, input);
@@ -194,8 +195,8 @@ export class FlowExecutor {
           // doesn't match the button at the sourceHandle index, filter this edge.
           if (!e.condition?.label && e.sourceHandle) {
             const sourceNode = flow.nodes.find(n => n.id === e.source);
-            if (sourceNode && (sourceNode.data as any)?.type === 'branch') {
-              const labels: string[] = (sourceNode.data as any).config?.outputLabels || [];
+            if (sourceNode && (sourceNode.data as any)?.type === 'condition') {
+              const labels: string[] = (sourceNode.data as any).config?.outputLabels || ['true', 'false'];
               const handleIndex = parseInt((e.sourceHandle as string).replace('output-', ''), 10);
               const matchedLabel = (src as any)?.label;
               if (matchedLabel) {
@@ -208,6 +209,14 @@ export class FlowExecutor {
               const verdict = (src as any)?.verdict;
               if (handleIndex === 0) return !verdict;
               if (handleIndex === 1) return !!verdict;
+            }
+            if (sourceNode && (sourceNode.data as any)?.type === 'switch') {
+              const handleIndex = parseInt((e.sourceHandle as string).replace('output-', ''), 10);
+              const caseIndex = (src as any)?.caseIndex;
+              if (caseIndex !== undefined) {
+                return handleIndex !== caseIndex;
+              }
+              return true;
             }
             if (sourceNode && (sourceNode.data as any)?.type === 'hitl') {
               const buttons: Array<{ value: string }> = (sourceNode.data as any).config?.buttons || [];
@@ -244,7 +253,7 @@ export class FlowExecutor {
             const defaultEdge = incomingEdges.find(e => {
               if (!e.sourceHandle) return false;
               const sNode = flow.nodes.find(n => n.id === e.source);
-              if (!sNode || (sNode.data as any)?.type !== 'branch') return false;
+              if (!sNode || (sNode.data as any)?.type !== 'condition') return false;
               const cfg = (sNode.data as any).config || {};
               if (!cfg.defaultPath) return false;
               const labels: string[] = cfg.outputLabels || [];
@@ -319,7 +328,7 @@ export class FlowExecutor {
         if (cfg.temperature !== undefined) enrichedInput.temperature = cfg.temperature;
       }
 
-      if (node.data.type === 'branch') {
+      if (node.data.type === 'condition') {
         const cfg = (node.data as any).config || {};
         if (cfg.condition) enrichedInput.condition = cfg.condition;
       }
@@ -1046,8 +1055,8 @@ export class FlowExecutor {
         return { query, chunks, context: contextText, count: chunks.length };
       }
 
-      case 'branch': {
-        const config = (nodeData as BranchNodeData).config;
+      case 'condition': {
+        const config = (nodeData as ConditionNodeData).config;
         const rawCondition = config.condition;
         const labels = config.outputLabels || ['true', 'false'];
 
@@ -1092,6 +1101,46 @@ export class FlowExecutor {
         }
 
         return { verdict, label: matchedLabel || (verdict ? labels[0] : labels[1]) };
+      }
+
+      case 'switch': {
+        const config = (nodeData as any).config;
+        const fieldPath: string = config.fieldPath || '';
+        const cases: Array<{ value: string; label: string }> = config.cases || [];
+        const defaultPath: string | undefined = config.defaultPath;
+
+        if (!fieldPath) {
+          throw new Error('Switch node: no fieldPath configured');
+        }
+
+        const inputObj = input as Record<string, unknown> | undefined;
+        // Resolve field path like "trigger.status" against input
+        const parts = fieldPath.split('.');
+        let value: unknown = inputObj;
+        for (const part of parts) {
+          if (value && typeof value === 'object') {
+            value = (value as Record<string, unknown>)[part];
+          } else {
+            value = undefined;
+            break;
+          }
+        }
+        const strVal = value !== undefined && value !== null ? String(value) : '';
+
+        const matchIndex = cases.findIndex(c => c.value === strVal);
+        if (matchIndex !== -1) {
+          return { caseIndex: matchIndex, caseValue: cases[matchIndex].value, matched: true };
+        }
+
+        if (defaultPath) {
+          return { caseIndex: cases.length, caseValue: defaultPath, matched: true };
+        }
+
+        throw new Error(
+          `Switch: value "${strVal}" (from "${fieldPath}") does not match any case. ` +
+          `Available cases: [${cases.map(c => c.value).join(', ')}]. ` +
+          `Add a matching case or configure a default path.`
+        );
       }
 
       case 'code': {

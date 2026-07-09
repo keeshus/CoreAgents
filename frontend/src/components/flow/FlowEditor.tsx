@@ -22,7 +22,8 @@ import { LLMAgentNode } from './nodes/LLMAgentNode';
 import { MCPToolNode } from './nodes/MCPToolNode';
 import { FlowToolNode } from './nodes/FlowToolNode';
 import { RetrieverNode } from './nodes/RetrieverNode';
-import { BranchNode } from './nodes/BranchNode';
+import { ConditionNode } from './nodes/ConditionNode';
+import { SwitchNode } from './nodes/SwitchNode';
 import { CodeNode } from './nodes/CodeNode';
 import { OutputNode } from './nodes/OutputNode';
 import { ParallelNode } from './nodes/ParallelNode';
@@ -38,7 +39,8 @@ const nodeTypes = {
   'mcp-tool': MCPToolNode,
   'flow-tool': FlowToolNode,
   retriever: RetrieverNode,
-  branch: BranchNode,
+  condition: ConditionNode,
+  switch: SwitchNode,
   code: CodeNode,
   output: OutputNode,
   parallel: ParallelNode,
@@ -82,7 +84,7 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
       setNodes(initialNodes);
       setEdges(initialEdges);
       // Force handle re-registration for nodes with dynamic handle counts (branch)
-      const branchIds = initialNodes.filter(n => n.type === 'branch' && n.data?.config?.outputLabels?.length > 0).map(n => n.id);
+      const branchIds = initialNodes.filter(n => n.type === 'condition' && n.data?.config?.outputLabels?.length > 0).map(n => n.id);
       if (branchIds.length > 0) {
         requestAnimationFrame(() => { for (const id of branchIds) updateNodeInternals(id); });
       }

@@ -70,7 +70,7 @@ describe('topologicalSort', () => {
     //                   -> (false) llm2 -> output
     const nodes = [
       makeNode('trigger', 'trigger'),
-      makeNode('branch', 'branch'),
+      makeNode('branch', 'condition'),
       makeNode('llm1', 'llm-agent'),
       makeNode('llm2', 'llm-agent'),
       makeNode('output', 'output'),

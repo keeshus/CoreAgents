@@ -52,7 +52,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'b1', type: 'branch', position: { x: 300, y: 0 }, data: { label: 'Check', type: 'branch', config: { condition: 'input.message === "yes"', outputLabels: ['true', 'false'] } } },
+        { id: 'b1', type: 'condition', position: { x: 300, y: 0 }, data: { label: 'Check', type: 'condition', config: { condition: 'input.message === "yes"' } } },
         { id: 'o1', type: 'output', position: { x: 600, y: -100 }, data: { label: 'TruePath', type: 'output', config: { inputFields: ['check.verdict'] } } },
         { id: 'o2', type: 'output', position: { x: 600, y: 100 }, data: { label: 'FalsePath', type: 'output', config: { inputFields: ['check.verdict'] } } },
       ],
@@ -68,6 +68,163 @@ test.describe('All node types', () => {
     expect(branchStep).toBeDefined();
     expect(branchStep!.data?.output?.verdict).toBe(true);
     expect(branchStep!.data?.output?.label).toBe('true');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('condition false label routes correctly', async ({ request }) => {
+    const name = uniqueFlowName('CondFalseTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'b1', type: 'condition', position: { x: 300, y: 0 }, data: { label: 'Check', type: 'condition', config: { condition: 'input.message === "no"' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: -100 }, data: { label: 'TruePath', type: 'output', config: { inputFields: ['check.verdict'] } } },
+        { id: 'o2', type: 'output', position: { x: 600, y: 100 }, data: { label: 'FalsePath', type: 'output', config: { inputFields: ['check.verdict'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'b1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'b1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'b1', sourceHandle: 'output-1', target: 'o2', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    // Input "no" — condition true, verdict=true, label='true', handle-1 routes to o2
+    const events = await debugExecute(flow.id, { message: 'no' }, cookie);
+    const branchStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'b1');
+    expect(branchStep).toBeDefined();
+    expect(branchStep!.data?.output?.verdict).toBe(true);
+    // Now test false path — "yes" !== "no" → "false" matches label 'false', handle-1 routes to o2
+    const events2 = await debugExecute(flow.id, { message: 'yes' }, cookie);
+    const branchStep2 = events2.find(e => e.type === 'step.completed' && e.data?.nodeId === 'b1');
+    expect(branchStep2).toBeDefined();
+    expect(branchStep2!.data?.output?.verdict).toBe(true);
+    expect(branchStep2!.data?.output?.label).toBe('false');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('switch node routes to matching case', async ({ request }) => {
+    const name = uniqueFlowName('SwitchMatchTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 's1', type: 'switch', position: { x: 300, y: 0 }, data: { label: 'Router', type: 'switch', config: { fieldPath: 'trigger.status', cases: [{ value: 'active', label: 'active' }, { value: 'inactive', label: 'inactive' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: -100 }, data: { label: 'Active', type: 'output', config: { inputFields: ['router.caseValue'] } } },
+        { id: 'o2', type: 'output', position: { x: 600, y: 100 }, data: { label: 'Inactive', type: 'output', config: { inputFields: ['router.caseValue'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' },
+        { id: 'e2', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        { id: 'e3', source: 's1', sourceHandle: 'output-1', target: 'o2', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { status: 'active' }, cookie);
+    const switchStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 's1');
+    expect(switchStep).toBeDefined();
+    expect(switchStep!.data?.output?.caseIndex).toBe(0);
+    expect(switchStep!.data?.output?.caseValue).toBe('active');
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('switch node routes to default path when no case matches', async ({ request }) => {
+    const name = uniqueFlowName('SwitchDefaultTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 's1', type: 'switch', position: { x: 300, y: 0 }, data: { label: 'Router', type: 'switch', config: { fieldPath: 'trigger.status', cases: [{ value: 'active', label: 'active' }], defaultPath: 'other' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: -100 }, data: { label: 'Active', type: 'output', config: { inputFields: ['router.caseValue'] } } },
+        { id: 'o2', type: 'output', position: { x: 600, y: 100 }, data: { label: 'Default', type: 'output', config: { inputFields: ['router.caseValue'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' },
+        { id: 'e2', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        { id: 'e3', source: 's1', sourceHandle: 'output-1', target: 'o2', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { status: 'unknown' }, cookie);
+    const switchStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 's1');
+    expect(switchStep).toBeDefined();
+    expect(switchStep!.data?.output?.caseIndex).toBe(1);
+    expect(switchStep!.data?.output?.caseValue).toBe('other');
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('switch node fails when no match and no default path', async ({ request }) => {
+    const name = uniqueFlowName('SwitchFailTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 's1', type: 'switch', position: { x: 300, y: 0 }, data: { label: 'Router', type: 'switch', config: { fieldPath: 'trigger.status', cases: [{ value: 'active', label: 'active' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['router.caseValue'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' },
+        { id: 'e2', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { status: 'unknown' }, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('does not match any case');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('switch node works with code node upstream', async ({ request }) => {
+    const name = uniqueFlowName('SwitchCodeTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'c1', type: 'code', position: { x: 200, y: 0 }, data: { label: 'Prep', type: 'code', config: { code: 'const level = input.score > 50 ? "high" : "low"; return { level, raw: input.score };' } } },
+        { id: 's1', type: 'switch', position: { x: 400, y: 0 }, data: { label: 'Router', type: 'switch', config: { fieldPath: 'prep.level', cases: [{ value: 'high', label: 'high' }, { value: 'low', label: 'low' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: -100 }, data: { label: 'High', type: 'output', config: { inputFields: ['router.caseValue', 'prep.raw'] } } },
+        { id: 'o2', type: 'output', position: { x: 600, y: 100 }, data: { label: 'Low', type: 'output', config: { inputFields: ['router.caseValue', 'prep.raw'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' },
+        { id: 'e3', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        { id: 'e4', source: 's1', sourceHandle: 'output-1', target: 'o2', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { score: 75 }, cookie);
+    const switchStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 's1');
+    expect(switchStep).toBeDefined();
+    expect(switchStep!.data?.output?.caseValue).toBe('high');
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('switch node fails when fieldPath is empty', async ({ request }) => {
+    const name = uniqueFlowName('SwitchNoFieldTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 's1', type: 'switch', position: { x: 300, y: 0 }, data: { label: 'Router', type: 'switch', config: { fieldPath: '', cases: [{ value: 'active', label: 'active' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['router.caseValue'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' },
+        { id: 'e2', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { status: 'active' }, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('no fieldPath configured');
     await deleteFlow(request, flow.id);
   });
 

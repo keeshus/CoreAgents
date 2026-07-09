@@ -5,7 +5,7 @@ const NODE_ICONS: Record<string, string> = {
   'llm-agent': 'smart_toy',
   'mcp-tool': 'build',
   retriever: 'search',
-  branch: 'call_split',
+  condition: 'call_split',
   code: 'code',
   parallel: 'view_column',
   hitl: 'schedule',
@@ -18,7 +18,7 @@ const NODE_LABELS: Record<string, string> = {
   'llm-agent': 'LLM Agent',
   'mcp-tool': 'MCP Tool',
   retriever: 'Retriever',
-  branch: 'Condition',
+  condition: 'Condition',
   code: 'Code',
   output: 'Output',
   parallel: 'Parallel',
@@ -137,7 +137,7 @@ export function StepCard({ step, expanded, onToggle }: StepCardProps) {
             </div>
           )}
 
-          {step.nodeType === 'branch' && step.input?.condition && (
+          {step.nodeType === 'condition' && step.input?.condition && (
             <div>
               <h4 className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider mb-1">Condition</h4>
               <code className="text-xs bg-surface border rounded p-2 block font-mono">{step.input.condition}</code>

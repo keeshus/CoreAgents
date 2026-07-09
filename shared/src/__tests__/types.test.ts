@@ -16,13 +16,13 @@ describe('nodeTypeSchema', () => {
 
 describe('NODE_TYPES', () => {
   it('contains all 11 node types', () => {
-    expect(NODE_TYPES).toHaveLength(11);
+    expect(NODE_TYPES).toHaveLength(12);
     expect(NODE_TYPES).toContain('trigger');
     expect(NODE_TYPES).toContain('llm-agent');
     expect(NODE_TYPES).toContain('mcp-tool');
     expect(NODE_TYPES).toContain('flow-tool');
     expect(NODE_TYPES).toContain('retriever');
-    expect(NODE_TYPES).toContain('branch');
+    expect(NODE_TYPES).toContain('condition');
     expect(NODE_TYPES).toContain('code');
     expect(NODE_TYPES).toContain('output');
     expect(NODE_TYPES).toContain('parallel');

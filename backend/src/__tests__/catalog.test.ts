@@ -20,12 +20,13 @@ const catalog: CatalogEntry[] = [
   { type: 'mcp-tool', label: 'MCP Tool', category: 'tools', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'flow-tool', label: 'Flow Tool', category: 'tools', description: '', defaultConfig: { flowIds: [], selectedFlows: [] }, inputs: 0, outputs: 0 },
   { type: 'retriever', label: 'Retriever', category: 'tools', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'branch', label: 'Condition', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 2 },
+  { type: 'condition', label: 'Condition', category: 'processing', description: '', defaultConfig: { condition: '' }, inputs: 1, outputs: 2 },
   { type: 'code', label: 'Code', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'parallel', label: 'Parallel', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'subflow', label: 'Subflow', category: 'processing', description: '', defaultConfig: { subflowId: '', inputMapping: {} }, inputs: 1, outputs: 1 },
   { type: 'hitl', label: 'Human in the Loop', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'output', label: 'Output', category: 'output', description: '', defaultConfig: {}, inputs: 1, outputs: 0 },
+  { type: 'switch', label: 'Switch', category: 'processing', description: '', defaultConfig: { fieldPath: '', cases: [] }, inputs: 1, outputs: 0 },
 ];
 
 describe('Node Catalog', () => {
@@ -36,12 +37,13 @@ describe('Node Catalog', () => {
     expect(types).toContain('mcp-tool');
     expect(types).toContain('flow-tool');
     expect(types).toContain('retriever');
-    expect(types).toContain('branch');
+    expect(types).toContain('condition');
     expect(types).toContain('code');
     expect(types).toContain('parallel');
     expect(types).toContain('subflow');
     expect(types).toContain('hitl');
     expect(types).toContain('output');
+    expect(types).toContain('switch');
   });
 
   it('includes flow-tool entry with correct config', () => {

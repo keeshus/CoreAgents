@@ -8,7 +8,8 @@ export const NODE_TYPES = [
   'mcp-tool',
   'flow-tool',
   'retriever',
-  'branch',
+  'condition',
+  'switch',
   'code',
   'output',
   'parallel',
@@ -87,12 +88,21 @@ export interface RetrieverNodeData extends BaseNodeData {
   };
 }
 
-export interface BranchNodeData extends BaseNodeData {
-  type: 'branch';
+export interface ConditionNodeData extends BaseNodeData {
+  type: 'condition';
   config: {
     condition: string;
     outputLabels: string[];
     inputFields?: string[];
+    defaultPath?: string;
+  };
+}
+
+export interface SwitchNodeData extends BaseNodeData {
+  type: 'switch';
+  config: {
+    fieldPath: string;
+    cases: Array<{ value: string; label: string }>;
     defaultPath?: string;
   };
 }
@@ -147,7 +157,8 @@ export type NodeData =
   | MCPToolNodeData
   | FlowToolNodeData
   | RetrieverNodeData
-  | BranchNodeData
+  | ConditionNodeData
+  | SwitchNodeData
   | CodeNodeData
   | OutputNodeData
   | ParallelNodeData

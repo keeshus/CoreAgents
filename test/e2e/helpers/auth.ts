@@ -3,7 +3,9 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const AUTH_FILE = resolve(__dirname, '../.auth/user.json');
+const AUTH_FILE = process.env.PLAYWRIGHT_AUTH_FILE
+  ? resolve(process.cwd(), process.env.PLAYWRIGHT_AUTH_FILE)
+  : resolve(__dirname, '../.auth/user.json');
 
 /**
  * Read the auth token cookie from the saved storage state.

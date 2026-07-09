@@ -20,7 +20,8 @@ const NODE_LABELS: Record<string, string> = {
   'mcp-tool': 'MCP Tool',
   'flow-tool': 'Flow Tool',
   retriever: 'Retriever',
-  branch: 'Condition',
+  condition: 'Condition',
+  switch: 'Switch',
   code: 'Code',
   output: 'Output',
   parallel: 'Parallel',
@@ -271,7 +272,81 @@ export function NodeConfigModal({
             <FlowToolConfig config={node.data.config} onChange={onConfigChange} />
           )}
 
-          {node.data.type === 'branch' && (
+          {node.data.type === 'switch' && (
+            <div>
+              <div className="mb-4">
+                <span className="text-xs font-medium text-on-surface-variant block mb-1">Select Input Field</span>
+                <select
+                  value={node.data.config.fieldPath || ''}
+                  onChange={(e) => onConfigChange({ fieldPath: e.target.value, cases: node.data.config.cases || [], defaultPath: node.data.config.defaultPath })}
+                  className="w-full rounded border border-outline p-2 text-sm bg-surface"
+                >
+                  <option value="">-- Select a field --</option>
+                  {upstreamLabels.map((label) => {
+                    const upNode = nodes.find(n => (n.data?.label || n.data?.type || n.id) === label);
+                    const fields = upNode ? getNodeFields(upNode) : [];
+                    if (fields.length === 0) {
+                      return <option key={label} value={label.toLowerCase() + '.'}>{label} (expandable)</option>;
+                    }
+                    return fields.map((f) => (
+                      <option key={`${label}.${f.name}`} value={`${label.toLowerCase()}.${f.name}`}>
+                        {label}.{f.name}
+                      </option>
+                    ));
+                  })}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <span className="text-xs font-medium text-on-surface-variant block mb-1">Cases</span>
+                <div className="space-y-1.5">
+                  {(node.data.config.cases || []).map((c: { value: string; label: string }, i: number) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        className="flex-1 rounded border border-outline p-2 text-sm"
+                        value={c.value}
+                        onChange={(e) => {
+                          const list = [...(node.data.config.cases || [])];
+                          list[i] = { ...list[i], value: e.target.value, label: e.target.value };
+                          onConfigChange({ cases: list });
+                        }}
+                        placeholder="Value to match"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const list = [...(node.data.config.cases || [])];
+                          list.splice(i, 1);
+                          onConfigChange({ cases: list });
+                        }}
+                        className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors"
+                      ><Icon name="close" className="text-sm" /></button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const list = [...(node.data.config.cases || [])];
+                      onConfigChange({ cases: [...list, { value: '', label: '' }] });
+                    }}
+                    className="text-sm text-primary hover:underline block"
+                  >+ Add case</button>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <span className="text-xs font-medium text-on-surface-variant block mb-1">Default path (optional)</span>
+                <input
+                  className="w-full rounded border border-outline p-2 text-sm bg-surface"
+                  value={node.data.config.defaultPath || ''}
+                  onChange={(e) => onConfigChange({ defaultPath: e.target.value })}
+                  placeholder="Label for unmatched values"
+                />
+              </div>
+            </div>
+          )}
+
+          {node.data.type === 'condition' && (
             <div>
               <label className="block">
                 <span className="text-xs font-medium text-on-surface-variant">Condition Expression</span>
@@ -436,7 +511,8 @@ export function NodeConfigModal({
           {![
             'llm-agent',
             'mcp-tool',
-            'branch',
+            'condition',
+            'switch',
             'code',
             'retriever',
             'trigger',

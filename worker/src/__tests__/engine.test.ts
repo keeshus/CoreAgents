@@ -107,23 +107,87 @@ describe('FlowExecutor', () => {
     const flow = makeFlow(
       [
         makeNode('trigger', 'trigger'),
-        makeNode('branch', 'branch', { config: { condition: 'true', outputLabels: ['true', 'false'] } }),
+        makeNode('branch', 'condition', { config: { condition: 'input.message === "yes"' } }),
         makeNode('llm1', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
         makeNode('llm2', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
       ],
       [
         makeEdge('e1', 'trigger', 'branch'),
-        makeEdge('e2', 'branch', 'llm1', { condition: { label: 'true', expression: 'true' } }),
-        makeEdge('e3', 'branch', 'llm2', { condition: { label: 'false', expression: 'false' } }),
+        makeEdge('e2', 'branch', 'llm1', { sourceHandle: 'output-0' }),  // true path (label 'true' = index 0)
+        makeEdge('e3', 'branch', 'llm2', { sourceHandle: 'output-1' }),  // false path (label 'false' = index 1)
       ],
     );
 
-    const result = await executor.execute(flow, {}, onEvent, context);
+    const result = await executor.execute(flow, { message: 'yes' }, onEvent, context);
 
     expect(result.steps.some(s => s.nodeId === 'trigger')).toBe(true);
     expect(result.steps.some(s => s.nodeId === 'branch')).toBe(true);
     expect(result.steps.some(s => s.nodeId === 'llm1')).toBe(true);
     expect(result.steps.every(s => s.nodeId !== 'llm2')).toBe(true);
+  });
+
+  it('routes correctly through a switch node', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('switch', 'switch', {
+          config: {
+            fieldPath: 'trigger.status',
+            cases: [
+              { value: 'active', label: 'active' },
+              { value: 'inactive', label: 'inactive' },
+            ],
+          },
+        }),
+        makeNode('llm1', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+        makeNode('llm2', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+      ],
+      [
+        makeEdge('e1', 'trigger', 'switch'),
+        makeEdge('e2', 'switch', 'llm1', { sourceHandle: 'output-0' }),  // active path
+        makeEdge('e3', 'switch', 'llm2', { sourceHandle: 'output-1' }),  // inactive path
+      ],
+    );
+
+    const result = await executor.execute(flow, { status: 'active' }, onEvent, context);
+
+    // llm1 (active) should have been reached
+    expect(result.steps.some(s => s.nodeId === 'trigger')).toBe(true);
+    expect(result.steps.some(s => s.nodeId === 'switch')).toBe(true);
+    expect(result.steps.some(s => s.nodeId === 'llm1')).toBe(true);
+    // llm2 (inactive) should be skipped
+    expect(result.steps.every(s => s.nodeId !== 'llm2')).toBe(true);
+  });
+
+  it('routes through switch default path when no case matches', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('switch', 'switch', {
+          config: {
+            fieldPath: 'trigger.status',
+            cases: [
+              { value: 'active', label: 'active' },
+            ],
+            defaultPath: 'other',
+          },
+        }),
+        makeNode('llm1', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+        makeNode('llm2', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+      ],
+      [
+        makeEdge('e1', 'trigger', 'switch'),
+        makeEdge('e2', 'switch', 'llm1', { sourceHandle: 'output-0' }),  // active path
+        makeEdge('e3', 'switch', 'llm2', { sourceHandle: 'output-1' }),  // default path
+      ],
+    );
+
+    const result = await executor.execute(flow, { status: 'unknown' }, onEvent, context);
+
+    // llm1 (active) should be skipped because "unknown" !== "active"
+    expect(result.steps.every(s => s.nodeId !== 'llm1')).toBe(true);
+    // llm2 (default path) should have been reached
+    expect(result.steps.some(s => s.nodeId === 'llm2')).toBe(true);
   });
 
   it('output node filters input to only specified inputFields', async () => {

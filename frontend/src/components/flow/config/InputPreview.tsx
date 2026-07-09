@@ -122,7 +122,7 @@ export function getNodeFields(node: any): FieldEntry[] {
         { name: 'count', type: 'number', required: true },
       ];
 
-    case 'branch':
+    case 'condition':
       return [
         { name: 'verdict', type: 'boolean', required: true },
         { name: 'label', type: 'string', required: true },

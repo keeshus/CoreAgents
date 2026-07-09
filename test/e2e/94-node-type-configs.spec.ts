@@ -12,12 +12,13 @@ test.describe('Node type config fields', () => {
         { id: 'n1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trig', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'n2', type: 'llm-agent', position: { x: 0, y: 100 }, data: { label: 'LLM', type: 'llm-agent', config: { endpointId: '', model: '', systemPrompt: '', temperature: 0.7, maxTokens: 256, responseFormat: 'text' } } },
         { id: 'n3', type: 'code', position: { x: 0, y: 200 }, data: { label: 'Code', type: 'code', config: { code: 'return input;' } } },
-        { id: 'n4', type: 'branch', position: { x: 0, y: 300 }, data: { label: 'Branch', type: 'branch', config: { condition: '', outputLabels: ['true', 'false'] } } },
+        { id: 'n4', type: 'condition', position: { x: 0, y: 300 }, data: { label: 'Condition', type: 'condition', config: { condition: '' } } },
         { id: 'n5', type: 'output', position: { x: 0, y: 400 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
         { id: 'n6', type: 'hitl', position: { x: 0, y: 500 }, data: { label: 'HITL', type: 'hitl', config: { prompt: '', buttons: [{ label: 'Approve', value: 'approved' }] } } },
         { id: 'n7', type: 'mcp-tool', position: { x: 0, y: 600 }, data: { label: 'MCP', type: 'mcp-tool', config: { serverId: '', toolName: '' } } },
         { id: 'n8', type: 'retriever', position: { x: 0, y: 700 }, data: { label: 'Ret', type: 'retriever', config: { collectionName: 'default', topK: 5 } } },
-        { id: 'n9', type: 'parallel', position: { x: 0, y: 800 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [] } } },
+        { id: 'n9', type: 'switch', position: { x: 0, y: 800 }, data: { label: 'Switch', type: 'switch', config: { fieldPath: '', cases: [] } } },
+        { id: 'n10', type: 'parallel', position: { x: 0, y: 900 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [] } } },
       ],
       edges: [],
     });
@@ -71,8 +72,8 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('JavaScript Code')).toHaveValue('return { test: true };');
   });
 
-  test('branch node config fields are accessible', async ({ page }) => {
-    await openNode(page, 'Branch');
+  test('condition node config fields are accessible', async ({ page }) => {
+    await openNode(page, 'Condition');
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My Branch');
     await expect(page.getByLabel('Node name')).toHaveValue('My Branch');
@@ -115,6 +116,25 @@ test.describe('Node type config fields', () => {
     await page.getByLabel('Node name').fill('My Parallel');
     await expect(page.getByLabel('Node name')).toHaveValue('My Parallel');
   });
+
+  test('switch node config fields are accessible', async ({ page }) => {
+    await openNode(page, 'Switch');
+    await expect(page.getByLabel('Node name')).toBeVisible();
+    await page.getByLabel('Node name').fill('My Switch');
+    await expect(page.getByLabel('Node name')).toHaveValue('My Switch');
+    await expect(page.getByText('Select Input Field')).toBeVisible();
+    await expect(page.getByText('Cases')).toBeVisible();
+  });
+
+  test('switch node allows adding and removing cases', async ({ page }) => {
+    await openNode(page, 'Switch');
+    await page.getByText('+ Add case').click();
+    const caseInputs = page.locator('[data-testid="node-config-modal"] input[placeholder="Value to match"]');
+    await expect(caseInputs).toHaveCount(1);
+    await caseInputs.fill('test-value');
+    await expect(caseInputs).toHaveValue('test-value');
+    await expect(page.getByText('Default path (optional)')).toBeVisible();
+  });
 });
 test.describe('Node config — deep field tests', () => {
   let flowId: string;
@@ -126,7 +146,7 @@ test.describe('Node config — deep field tests', () => {
         { id: 'n1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trig', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'n2', type: 'llm-agent', position: { x: 0, y: 100 }, data: { label: 'LLM', type: 'llm-agent', config: { endpointId: '', model: '', systemPrompt: '', temperature: 0.7, maxTokens: 256, responseFormat: 'text' } } },
         { id: 'n3', type: 'code', position: { x: 0, y: 200 }, data: { label: 'Code', type: 'code', config: { code: 'return input;' } } },
-        { id: 'n4', type: 'branch', position: { x: 0, y: 300 }, data: { label: 'Brch', type: 'branch', config: { condition: '', outputLabels: ['true', 'false'] } } },
+        { id: 'n4', type: 'condition', position: { x: 0, y: 300 }, data: { label: 'Cond', type: 'condition', config: { condition: '', outputLabels: ['true', 'false'] } } },
         { id: 'n5', type: 'output', position: { x: 0, y: 400 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
         { id: 'n6', type: 'hitl', position: { x: 0, y: 500 }, data: { label: 'HITL', type: 'hitl', config: { prompt: '', buttons: [{ label: 'Approve', value: 'approved' }] } } },
         { id: 'n7', type: 'mcp-tool', position: { x: 0, y: 600 }, data: { label: 'MCP', type: 'mcp-tool', config: { serverId: '', toolName: '' } } },
@@ -150,14 +170,8 @@ test.describe('Node config — deep field tests', () => {
   test('trigger: shows trigger type selector and webhook/schedule fields', async ({ page }) => {
     await openNode(page, 'Trig');
     await expect(page.getByText('Trigger Type')).toBeVisible();
-
-    // Check that the config modal has the trigger config UI
     const modal = page.getByTestId('node-config-modal');
-
-    // Verify trigger type label exists
     await expect(modal.getByText('Manual')).toBeVisible();
-
-    // Check a field is present (Node name)
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My Trigger');
     await expect(page.getByLabel('Node name')).toHaveValue('My Trigger');
@@ -178,17 +192,16 @@ test.describe('Node config — deep field tests', () => {
     await expect(codeField).toHaveValue('return { message: input.text };');
   });
 
-  test('branch: condition expression field present', async ({ page }) => {
-    await openNode(page, 'Brch');
+  test('condition: condition expression field present', async ({ page }) => {
+    await openNode(page, 'Cond');
     await expect(page.getByLabel('Node name')).toBeVisible();
-    await page.getByLabel('Node name').fill('Branch A');
-    await expect(page.getByLabel('Node name')).toHaveValue('Branch A');
+    await page.getByLabel('Node name').fill('Cond A');
+    await expect(page.getByLabel('Node name')).toHaveValue('Cond A');
   });
 
   test('output: field checkboxes present', async ({ page }) => {
     await openNode(page, 'Out');
     await expect(page.getByLabel('Node name')).toBeVisible();
-    // The output node config should exist
     await page.getByLabel('Node name').fill('Output');
     await expect(page.getByLabel('Node name')).toHaveValue('Output');
   });
@@ -222,7 +235,6 @@ test.describe('Node config — deep field tests', () => {
   });
 
   test('subflow node config opens and shows subflow selector', async ({ page, request }) => {
-    // Create a subflow first
     const subRes = await createFlow(request, {
       name: uniqueFlowName('SubChild'),
       nodes: [
@@ -232,11 +244,7 @@ test.describe('Node config — deep field tests', () => {
       edges: [{ id: 'e1', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
     });
     const subFlow = await subRes.json();
-
-    // Now open subflow config on the canvas
-    await openNode(page, 'out'); // use an existing output node
-
+    await openNode(page, 'out');
     await deleteFlow(request, subFlow.id);
   });
-
 });

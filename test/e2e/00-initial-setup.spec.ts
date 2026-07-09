@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { E2E_USER } from './helpers/api';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
+const AUTH_PATH = process.env.PLAYWRIGHT_AUTH_FILE || 'e2e/.auth/user.json';
 
 test.describe('Initial Setup — fresh install', () => {
   test('navigating to / redirects to /setup when no users exist', async ({ page }) => {
@@ -58,7 +59,7 @@ test.describe('Initial Setup — fresh install', () => {
       const profile = await profileRes.json();
       expect(profile.role.name).toBe('admin');
 
-      await context.storageState({ path: 'e2e/.auth/user.json' });
+      await context.storageState({ path: AUTH_PATH });
       return;
     }
 
@@ -80,6 +81,6 @@ test.describe('Initial Setup — fresh install', () => {
     const profile = await profileRes.json();
     expect(profile.role.name).toBe('admin');
 
-    await context.storageState({ path: 'e2e/.auth/user.json' });
+    await context.storageState({ path: AUTH_PATH });
   });
 });

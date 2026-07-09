@@ -5,12 +5,13 @@ const NODE_ICONS: Record<string, string> = {
   'llm-agent': 'smart_toy',
   'mcp-tool': 'build',
   retriever: 'search',
-  branch: 'call_split',
+  condition: 'call_split',
   code: 'code',
   parallel: 'view_column',
   hitl: 'schedule',
   output: 'check_circle',
   subflow: 'account_tree',
+  switch: 'alt_route',
 };
 
 const NODE_LABELS: Record<string, string> = {
@@ -18,12 +19,13 @@ const NODE_LABELS: Record<string, string> = {
   'llm-agent': 'LLM Agent',
   'mcp-tool': 'MCP Tool',
   retriever: 'Retriever',
-  branch: 'Condition',
+  condition: 'Condition',
   code: 'Code',
   output: 'Output',
   parallel: 'Parallel',
   hitl: 'Human in the Loop',
   subflow: 'Subflow',
+  switch: 'Switch',
 };
 
 describe('subflow NODE_ICONS', () => {
