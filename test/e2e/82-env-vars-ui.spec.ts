@@ -17,9 +17,14 @@ test.describe('Env Vars settings page', () => {
     await expect(page.getByRole('heading', { name: /Environment Variables/i })).toBeVisible({ timeout: 10000 });
   });
 
-  test('env vars page shows group filter', async ({ page }) => {
+  test('env vars page shows group filter', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `EV-Group-${Date.now()}` } });
+    expect(gRes.ok()).toBe(true);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
     await page.goto('/settings/env-vars');
-    await expect(page.getByText(/App-wide|Filter by group/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Filter by group')).toBeVisible({ timeout: 10000 });
   });
 
   test('add and remove an app env var via UI', async ({ page }) => {
