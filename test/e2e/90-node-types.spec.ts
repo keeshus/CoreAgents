@@ -388,8 +388,8 @@ test.describe('All node types', () => {
     expect(completed).toBeDefined();
     expect(completed!.data?.output?.l1?.count).toBe(3);
     expect(completed!.data?.output?.l1?.results).toHaveLength(3);
-    expect(completed!.data?.output?.l1?.results[0]?.doubled).toBe(2);
-    expect(completed!.data?.output?.l1?.results[2]?.doubled).toBe(6);
+    expect(completed!.data?.output?.l1?.results[0]?.s1?.doubled).toBe(2);
+    expect(completed!.data?.output?.l1?.results[2]?.s1?.doubled).toBe(6);
     await deleteFlow(request, flow.id);
   });
 
