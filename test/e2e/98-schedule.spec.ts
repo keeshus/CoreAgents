@@ -25,8 +25,48 @@ test.describe('Schedule trigger', () => {
     const events = await debugExecute(flow.id, { triggerType: 'schedule', timestamp: new Date().toISOString(), message: 'cron job run' }, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
-    // Verify the code node's output includes the scheduled input
     expect(completed!.data?.output?.c1?.result).toBe('cron job run');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('schedule flow saves cron expression and can be re-fetched', async ({ request }) => {
+    const name = uniqueFlowName('ScheduleCRUD');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Timer', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '0 */2 * * *', inputMessage: '{"task":"check"}' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await res.json();
+
+    // Read back from API to verify cron was persisted
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.ok()).toBe(true);
+    const saved = await getRes.json();
+    const trigger = saved.nodes.find((n: any) => n.data?.type === 'trigger');
+    expect(trigger).toBeDefined();
+    expect(trigger.data?.config?.cronExpression).toBe('0 */2 * * *');
+
+    // Update the cron expression
+    const updateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: {
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Timer', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '*/10 * * * *', inputMessage: '{"task":"check"}' } } },
+          { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+        ],
+        edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+      },
+    });
+    expect(updateRes.ok()).toBe(true);
+
+    // Verify the updated cron is persisted
+    const getRes2 = await request.get(`${API_URL}/flows/${flow.id}`);
+    const saved2 = await getRes2.json();
+    const trigger2 = saved2.nodes.find((n: any) => n.data?.type === 'trigger');
+    expect(trigger2.data?.config?.cronExpression).toBe('*/10 * * * *');
+
     await deleteFlow(request, flow.id);
   });
 });
