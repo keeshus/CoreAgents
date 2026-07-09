@@ -300,7 +300,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'p1', type: 'parallel', position: { x: 300, y: 0 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'SubA', type: 'code', config: { code: 'return { result: input.message + \" A\" };' } } }, { id: 's2', type: 'code', position: { x: 0, y: 100 }, data: { label: 'SubB', type: 'code', config: { code: 'return { result: input.message + \" B\" };' } } }], subEdges: [] } } },
+        { id: 'p1', type: 'parallel', position: { x: 300, y: 0 }, data: { label: 'Parallel Agents', type: 'parallel', config: { subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'SubA', type: 'code', config: { code: 'return { result: input.message + \" A\" };' } } }, { id: 's2', type: 'code', position: { x: 0, y: 100 }, data: { label: 'SubB', type: 'code', config: { code: 'return { result: input.message + \" B\" };' } } }], subEdges: [] } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['parallel.merged'] } } },
       ],
       edges: [

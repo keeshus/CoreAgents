@@ -7,7 +7,6 @@
     "backend",
     "worker",
     "frontend",
-    "scheduler",
     "sidecar"
   ],
   "scripts": {
@@ -21,8 +20,7 @@
     "frontend:dev": "npm run dev -w frontend",
     "frontend:build": "npm run build -w frontend",
     "frontend:start": "npm run start -w frontend -- -H 0.0.0.0",
-    "scheduler:dev": "tsx watch --env-file=.env scheduler/src/index.ts",
-    "scheduler:build": "npm run build -w scheduler",
+
     "sidecar:dev": "tsx watch --env-file=.env sidecar/src/index.ts --ttl-hours=168",
     "sidecar:build": "npm run build -w sidecar",
     "shared:typecheck": "npm run typecheck -w shared",

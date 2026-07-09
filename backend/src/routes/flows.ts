@@ -7,6 +7,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { FlowExecutor } from '../../../worker/src/executor/engine.js';
 import { topologicalSort } from '../../../worker/src/executor/dag.js';
 import { generateApiKey, generateSlug } from './webhook-api-keys.js';
+import { executionQueue } from '../../../worker/src/queue.js';
 
 const router = Router();
 
@@ -217,6 +218,15 @@ router.post(
       personalApiKey = { rawKey: raw, prefix };
     }
 
+    // ── Schedule hook: register repeatable BullMQ job ────────
+    const scheduleCron = getScheduleCron(flowNodes);
+    if (scheduleCron) {
+      executionQueue.add(`schedule:${createdFlow.id}`, { flowId: createdFlow.id }, {
+        repeat: { pattern: scheduleCron },
+        jobId: `schedule:${createdFlow.id}`,
+      }).catch(err => console.error(`Failed to register schedule for flow ${createdFlow.id}:`, err));
+    }
+
     const response: any = createdFlow;
     if (personalApiKey) {
       response.personalApiKey = personalApiKey;
@@ -301,6 +311,26 @@ router.put(
       }
     }
 
+    // ── Schedule hook: update repeatable BullMQ job ──────────
+    const oldNodes = (result[0].nodes || []) as any[];
+    const oldCron = getScheduleCron(oldNodes);
+    const newCron = getScheduleCron(flowNodes);
+
+    if (oldCron && oldCron !== newCron) {
+      executionQueue.removeRepeatable(`schedule:${id}`, { pattern: oldCron })
+        .catch(err => console.error(`Failed to remove old schedule for flow ${id}:`, err));
+    }
+
+    if (newCron) {
+      executionQueue.add(`schedule:${id}`, { flowId: id }, {
+        repeat: { pattern: newCron },
+        jobId: `schedule:${id}`,
+      }).catch(err => console.error(`Failed to register schedule for flow ${id}:`, err));
+    } else if (oldCron) {
+      executionQueue.removeRepeatable(`schedule:${id}`, { pattern: oldCron })
+        .catch(err => console.error(`Failed to remove schedule for flow ${id}:`, err));
+    }
+
     const response: any = updatedFlow;
     if (personalApiKey) {
       response.personalApiKey = personalApiKey;
@@ -316,6 +346,16 @@ router.delete(
   requirePermission('flow:delete'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
+
+    // ── Remove schedule before deleting ───────────────────────
+    const [existingFlow] = await db.select({ nodes: flows.nodes }).from(flows).where(eq(flows.id, id));
+    if (existingFlow) {
+      const cron = getScheduleCron((existingFlow.nodes || []) as any[]);
+      if (cron) {
+        executionQueue.removeRepeatable(`schedule:${id}`, { pattern: cron })
+          .catch(err => console.error(`Failed to remove schedule for flow ${id}:`, err));
+      }
+    }
 
     // Cascade-delete all related records in a single transaction
     await db.transaction(async (tx) => {
@@ -350,6 +390,14 @@ function deriveIsSubflow(nodes: any[]): boolean {
   return Array.isArray(nodes) && nodes.some(
     (n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'subflow'
   );
+}
+
+function getScheduleCron(nodes: any[]): string | null {
+  const trigger = nodes.find(
+    (n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'schedule'
+  );
+  const cron = trigger?.data?.config?.cronExpression as string | undefined;
+  return cron?.trim() || null;
 }
 
 // ── POST /api/flows/validate — compile/validation endpoint ──────────────────

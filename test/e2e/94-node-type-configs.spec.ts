@@ -18,7 +18,7 @@ test.describe('Node type config fields', () => {
         { id: 'n7', type: 'mcp-tool', position: { x: 0, y: 600 }, data: { label: 'MCP', type: 'mcp-tool', config: { serverId: '', toolName: '' } } },
         { id: 'n8', type: 'retriever', position: { x: 0, y: 700 }, data: { label: 'Ret', type: 'retriever', config: { collectionName: 'default', topK: 5 } } },
         { id: 'n9', type: 'switch', position: { x: 0, y: 800 }, data: { label: 'Switch', type: 'switch', config: { fieldPath: '', cases: [] } } },
-        { id: 'n10', type: 'parallel', position: { x: 0, y: 900 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [] } } },
+        { id: 'n10', type: 'parallel', position: { x: 0, y: 900 }, data: { label: 'Parallel Agents', type: 'parallel', config: { subNodes: [] } } },
       ],
       edges: [],
     });
@@ -110,11 +110,11 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('Node name')).toHaveValue('My Retriever');
   });
 
-  test('parallel node config fields are accessible', async ({ page }) => {
-    await openNode(page, 'Parallel');
+  test('parallel agents node config fields are accessible', async ({ page }) => {
+    await openNode(page, 'Parallel Agents');
     await expect(page.getByLabel('Node name')).toBeVisible();
-    await page.getByLabel('Node name').fill('My Parallel');
-    await expect(page.getByLabel('Node name')).toHaveValue('My Parallel');
+    await page.getByLabel('Node name').fill('My Parallel Agents');
+    await expect(page.getByLabel('Node name')).toHaveValue('My Parallel Agents');
   });
 
   test('switch node config fields are accessible', async ({ page }) => {
@@ -227,11 +227,11 @@ test.describe('Node config — deep field tests', () => {
     await expect(page.getByLabel('Node name')).toHaveValue('My Retriever');
   });
 
-  test('parallel: configuration section present', async ({ page }) => {
-    await openNode(page, 'Par');
+  test('parallel agents: configuration section present', async ({ page }) => {
+    await openNode(page, 'Parallel Agents');
     await expect(page.getByLabel('Node name')).toBeVisible();
-    await page.getByLabel('Node name').fill('Parallel');
-    await expect(page.getByLabel('Node name')).toHaveValue('Parallel');
+    await page.getByLabel('Node name').fill('Parallel Agents');
+    await expect(page.getByLabel('Node name')).toHaveValue('Parallel Agents');
   });
 
   test('subflow node config opens and shows subflow selector', async ({ page, request }) => {

@@ -1,15 +1,17 @@
 /**
  * Worker consumer entry point.
  * Listens to the BullMQ queue and executes flows as jobs arrive.
+ * Handles both direct enqueue ({ flow, input }) and repeatable schedule jobs ({ flowId }).
  */
 import { createExecutionWorker } from './queue.js';
 import { executeFlowWithPersistence } from './executor/runner.js';
 import { createSidecarClient, createReaper } from './sandbox/index.js';
+import { startReconciliation, stopReconciliation } from './schedule-reconciliation.js';
 
 async function main() {
   console.log('Worker started, waiting for jobs...');
 
-  const { getDb, executions, executionSteps, agentContexts, agentStore, groups } = await import('core-agents-shared');
+  const { getDb, flows, executions, executionSteps, agentContexts, agentStore, groups } = await import('core-agents-shared');
   const { db } = getDb();
   const { eq, and, inArray } = await import('drizzle-orm');
 
@@ -17,14 +19,44 @@ async function main() {
   const reaper = createReaper(sidecarClient, db, executions);
 
   const worker = createExecutionWorker(async (job) => {
-    const { flow, input } = job;
+    const { flow, input, flowId } = job;
     const executionId = (input as any)?.__executionId as string | undefined;
-    console.log(`Executing flow: ${flow.name} (${flow.id})${executionId ? ' exec=' + executionId : ''}`);
+
+    // Resolve flow definition — either from direct payload or load from DB (repeatable schedule)
+    let flowDef: any;
+    if (flow) {
+      flowDef = flow;
+    } else if (flowId) {
+      const [dbFlow] = await db.select().from(flows).where(eq(flows.id, flowId));
+      if (!dbFlow) {
+        console.error(`Flow ${flowId} not found for scheduled execution`);
+        return;
+      }
+      flowDef = {
+        id: dbFlow.id,
+        name: dbFlow.name,
+        description: dbFlow.description || '',
+        nodes: dbFlow.nodes,
+        edges: dbFlow.edges,
+        version: dbFlow.version,
+        createdAt: '',
+        updatedAt: '',
+        flowContext: dbFlow.flow_context || '',
+        groupId: dbFlow.group_id || undefined,
+      };
+    } else {
+      console.error('Invalid job: missing both flow and flowId');
+      return;
+    }
+
+    const resolvedInput = input || { triggerType: 'schedule', timestamp: new Date().toISOString() };
+
+    console.log(`Executing flow: ${flowDef.name} (${flowDef.id})${executionId ? ' exec=' + executionId : ''}`);
 
     let execId = executionId;
     if (!execId) {
       const [exec] = await db.insert(executions).values({
-        flow_id: flow.id, status: 'running', input, started_at: new Date(),
+        flow_id: flowDef.id, status: 'running', input: resolvedInput, started_at: new Date(),
       }).returning();
       execId = exec.id;
     } else {
@@ -33,8 +65,8 @@ async function main() {
     }
 
     const result = await executeFlowWithPersistence({
-      flow,
-      input,
+      flow: flowDef,
+      input: resolvedInput,
       executionId: execId,
       db,
       executionsTable: executions,
@@ -47,18 +79,22 @@ async function main() {
       groupsTable: groups,
     });
 
-    console.log(`Flow ${flow.id}: ${result.status} (exec ${execId})`);
+    console.log(`Flow ${flowDef.id}: ${result.status} (exec ${execId})`);
   });
 
   reaper.start();
 
+  startReconciliation(db, flows, eq);
+
   process.on('SIGTERM', () => {
     console.log('Worker: shutting down...');
+    stopReconciliation();
     reaper.stop();
     worker.close();
   });
   process.on('SIGINT', () => {
     console.log('Worker: shutting down...');
+    stopReconciliation();
     reaper.stop();
     worker.close();
   });

@@ -79,9 +79,9 @@ const catalog: NodeCatalogEntry[] = [
   },
   {
     type: 'parallel',
-    label: 'Parallel',
+    label: 'Parallel Agents',
     category: 'processing',
-    description: 'Run multiple sub-nodes concurrently. Each receives the same input, and their outputs are merged.',
+    description: 'Run multiple LLM Agent nodes concurrently. Each receives the same input, and their outputs are merged.',
     defaultConfig: { subNodes: [], subEdges: [] },
     inputs: 1,
     outputs: 1,

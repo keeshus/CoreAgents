@@ -21,7 +21,7 @@ const NODE_LABELS: Record<string, string> = {
   condition: 'Condition',
   code: 'Code',
   output: 'Output',
-  parallel: 'Parallel',
+  parallel: 'Parallel Agents',
   hitl: 'Human in the Loop',
   subflow: 'Subflow',
 };

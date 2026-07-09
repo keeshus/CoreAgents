@@ -1,7 +1,0 @@
-FROM node:25-alpine
-WORKDIR /repo
-COPY package*.json ./
-COPY shared/ ./shared/
-COPY scheduler/ ./scheduler/
-RUN npm install -w shared -w scheduler
-CMD ["npx", "tsx", "scheduler/src/index.ts"]

@@ -65,22 +65,6 @@ services:
       - SIDECAR_URL=http://sidecar:4001
     restart: always
 
-  scheduler:
-    build:
-      context: .
-      dockerfile: scheduler/Dockerfile
-    container_name: core-agents-scheduler
-    environment:
-      - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
-      - VALKEY_HOST=valkey
-      - VALKEY_PASSWORD=${VALKEY_PASSWORD:-dev-valkey}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      valkey:
-        condition: service_started
-    restart: unless-stopped
-
   worker:
     container_name: core-agents-worker
     build:

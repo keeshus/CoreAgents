@@ -22,7 +22,7 @@ const catalog: CatalogEntry[] = [
   { type: 'retriever', label: 'Retriever', category: 'tools', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'condition', label: 'Condition', category: 'processing', description: '', defaultConfig: { condition: '' }, inputs: 1, outputs: 2 },
   { type: 'code', label: 'Code', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'parallel', label: 'Parallel', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
+  { type: 'parallel', label: 'Parallel Agents', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'subflow', label: 'Subflow', category: 'processing', description: '', defaultConfig: { subflowId: '', inputMapping: {} }, inputs: 1, outputs: 1 },
   { type: 'hitl', label: 'Human in the Loop', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'output', label: 'Output', category: 'output', description: '', defaultConfig: {}, inputs: 1, outputs: 0 },

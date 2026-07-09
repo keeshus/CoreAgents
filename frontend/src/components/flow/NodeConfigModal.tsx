@@ -24,7 +24,7 @@ const NODE_LABELS: Record<string, string> = {
   switch: 'Switch',
   code: 'Code',
   output: 'Output',
-  parallel: 'Parallel',
+  parallel: 'Parallel Agents',
   hitl: 'Human in the Loop',
   subflow: 'Subflow',
 };
@@ -478,7 +478,7 @@ export function NodeConfigModal({
           {node.data.type === 'parallel' && (
             <div className="space-y-3">
               <p className="text-xs text-on-surface-variant">
-                Drag LLM Agent nodes from the catalog onto the canvas and drop them inside the Parallel
+                Drag LLM Agent nodes from the catalog onto the canvas and drop them inside the Parallel Agents
                 container. They will run concurrently with the same input and their outputs will be
                 merged.
               </p>
