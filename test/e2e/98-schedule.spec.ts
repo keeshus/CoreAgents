@@ -69,4 +69,79 @@ test.describe('Schedule trigger', () => {
 
     await deleteFlow(request, flow.id);
   });
+
+  test('schedule flow can be converted to manual and back', async ({ request }) => {
+    const name = uniqueFlowName('ScheduleToggle');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Timer', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '0 * * * *', inputMessage: '{}' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await res.json();
+
+    // Verify schedule is set
+    const get1 = await (await request.get(`${API_URL}/flows/${flow.id}`)).json();
+    expect(get1.nodes.find((n: any) => n.data?.type === 'trigger').data?.config?.triggerType).toBe('schedule');
+
+    // Convert to manual trigger (removes BullMQ repeatable job)
+    await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: {
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Manual', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+        ],
+        edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+      },
+    });
+
+    // Verify it's now manual and still executable
+    const get2 = await (await request.get(`${API_URL}/flows/${flow.id}`)).json();
+    expect(get2.nodes.find((n: any) => n.data?.type === 'trigger').data?.config?.triggerType).toBe('manual');
+
+    const events = await debugExecute(flow.id, { message: 'manual run' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    await deleteFlow(request, flow.id);
+  });
+
+  test('schedule flow auto-executes via BullMQ cron', async ({ request }) => {
+    const name = uniqueFlowName('ScheduleAuto');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Cron', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '* * * * *', inputMessage: '{"source":"cron"}' } } },
+        { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Mark', type: 'code', config: { code: 'return { scheduled: true, source: input.source || input.message };' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: ['mark.scheduled', 'mark.source'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+
+    // Wait up to 75s for the cron (* * * * * fires at :00 each minute) to trigger
+    let found = false;
+    for (let i = 0; i < 75; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const execRes = await request.get(`${API_URL}/flows/${flow.id}/executions`);
+      if (!execRes.ok()) continue;
+      const body = await execRes.json();
+      const execs = body.data || body;
+      if (!Array.isArray(execs)) continue;
+      const scheduled = execs.find((e: any) => e.input?.source === 'cron');
+      if (scheduled) {
+        found = true;
+        expect(scheduled.status).toBe('completed');
+        break;
+      }
+    }
+    expect(found).toBe(true);
+
+    await deleteFlow(request, flow.id);
+  });
 });
