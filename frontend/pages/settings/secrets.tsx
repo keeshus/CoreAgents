@@ -188,30 +188,34 @@ export default function SecretsPage() {
         {error && <div className="bg-error-container border text-error text-sm rounded p-3 mb-4">{error}</div>}
 
         {/* Group filter */}
-        <div className="mb-4 max-w-xs">
-          <SearchableSelect
-            label="Filter by group"
-            value={selectedGroupId}
-            onChange={(v) => { setSelectedGroupId(v); setShowForm(false); }}
-            items={groups.map(function(g){return{value:g.id,label:g.name}})}
-            includeAll={true}
-            allLabel="All items"
-          />
-        </div>
+        {groups.length > 0 && (
+          <div className="mb-4 max-w-xs">
+            <SearchableSelect
+              label="Filter by group"
+              value={selectedGroupId}
+              onChange={(v) => { setSelectedGroupId(v); setShowForm(false); }}
+              items={groups.map(function(g){return{value:g.id,label:g.name}})}
+              includeAll={true}
+              allLabel="All items"
+            />
+          </div>
+        )}
 
         {/* Add secret form */}
         {showForm && (
           <div className="bg-surface rounded-xl border p-4 mb-6 space-y-3">
             <h3 className="text-sm font-semibold text-on-surface">New Secret</h3>
-            <SearchableSelect
-              label="Group"
-              value={formGroupId}
-              onChange={(v) => setFormGroupId(v)}
-              items={groups.map(function(g){return{value:g.id,label:g.name}})}
-              includeAll={true}
-              allLabel="App-wide"
-              className="col-span-1"
-            />
+            {groups.length > 0 && (
+              <SearchableSelect
+                label="Group"
+                value={formGroupId}
+                onChange={(v) => setFormGroupId(v)}
+                items={groups.map(function(g){return{value:g.id,label:g.name}})}
+                includeAll={true}
+                allLabel="App-wide"
+                className="col-span-1"
+              />
+            )}
             <TextField label="Secret name" value={newSecretName} onChange={setNewSecretName} />
             {formGroupId && (
               <div className="flex gap-1">

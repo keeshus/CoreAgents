@@ -227,16 +227,18 @@ export default function SecretVaultsPage() {
         )}
 
         {/* Group filter */}
-        <div className="mb-4 max-w-xs">
-          <SearchableSelect
-            label="Filter by group"
-            value={filterGroupId || ''}
-            onChange={(v) => setFilterGroupId(v || null)}
-            items={groups.map(g => ({ value: g.id, label: g.name }))}
-            includeAll={true}
-            allLabel="All items"
-          />
-        </div>
+        {groups.length > 0 && (
+          <div className="mb-4 max-w-xs">
+            <SearchableSelect
+              label="Filter by group"
+              value={filterGroupId || ''}
+              onChange={(v) => setFilterGroupId(v || null)}
+              items={groups.map(g => ({ value: g.id, label: g.name }))}
+              includeAll={true}
+              allLabel="All items"
+            />
+          </div>
+        )}
 
         {/* Add / Edit form */}
         {showForm && (

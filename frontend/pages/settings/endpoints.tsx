@@ -210,16 +210,18 @@ export default function EndpointsPage() {
         </div>
 
         {/* Group filter */}
-        <div className="mb-4 max-w-xs">
-          <SearchableSelect
-            label="Filter by group"
-            value={filterGroupId || ''}
-            onChange={(v) => { setFilterGroupId(v || null); setShowForm(false); }}
-            items={groups.map(function(g){return{value:g.id,label:g.name}})}
-            includeAll={true}
-            allLabel="All items"
-          />
-        </div>
+        {groups.length > 0 && (
+          <div className="mb-4 max-w-xs">
+            <SearchableSelect
+              label="Filter by group"
+              value={filterGroupId || ''}
+              onChange={(v) => { setFilterGroupId(v || null); setShowForm(false); }}
+              items={groups.map(function(g){return{value:g.id,label:g.name}})}
+              includeAll={true}
+              allLabel="All items"
+            />
+          </div>
+        )}
 
         {/* Error banner */}
         {error && (
