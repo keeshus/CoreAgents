@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { FlowExecutor, HitlPauseError } from '../executor/engine.js';
+import { FlowExecutor, HitlPauseError, PauseExecutionError } from '../executor/engine.js';
 import type { FlowDefinition, FlowNode, FlowEdge } from 'core-agents-shared';
 import type { ExecutionContext } from '../executor/engine.js';
 
@@ -298,5 +298,162 @@ describe('FlowExecutor', () => {
 
     const result = await executor.execute(flow, {}, onEvent, context);
     expect(result.output).toBeDefined();
+  });
+
+  it('executes a note node as pass-through', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('note', 'note'),
+      ],
+      [makeEdge('e1', 'trigger', 'note')],
+    );
+
+    const result = await executor.execute(flow, { message: 'hello' }, onEvent, context);
+    expect(result.steps.some(s => s.nodeId === 'note')).toBe(true);
+    expect(result.output).toHaveProperty('trigger');
+    expect(result.output).toHaveProperty('note');
+  });
+
+  it('executes a map node with replace mode', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('map', 'map', {
+          config: {
+            fields: [{ name: 'result', type: 'string', value: 'message' }],
+            mode: 'replace',
+          },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'map')],
+    );
+
+    const result = await executor.execute(flow, { message: 'hello' }, onEvent, context);
+    // The map node's output is keyed by its node id
+    expect(result.output.map).toHaveProperty('result', 'hello');
+    expect(result.output.map).not.toHaveProperty('message');
+  });
+
+  it('executes a map node with merge mode', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('map', 'map', {
+          config: {
+            fields: [{ name: 'transformed', type: 'string', value: 'message' }],
+            mode: 'merge',
+          },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'map')],
+    );
+
+    const result = await executor.execute(flow, { message: 'hello' }, onEvent, context);
+    // In merge mode, upstream data is preserved in the map output plus mapped fields
+    expect(result.output.map).toHaveProperty('message', 'hello');
+    expect(result.output.map).toHaveProperty('transformed', 'hello');
+  });
+
+  it('executes a delay node with fixed seconds (throws PauseExecutionError)', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('delay', 'delay', {
+          config: { type: 'fixed', seconds: 5 },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'delay')],
+    );
+
+    await expect(executor.execute(flow, { message: 'test' }, onEvent, context))
+      .rejects.toThrow(PauseExecutionError);
+  });
+
+  it('executes ai-action node and returns LLM response', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('ai', 'ai-action', {
+          config: {
+            endpointId: 'ep1',
+            model: 'claude-3-haiku',
+            prompt: 'Summarize: {{input.trigger.message}}',
+          },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'ai')],
+    );
+
+    const result = await executor.execute(flow, { message: 'hello world' }, onEvent, context);
+    expect(result.steps.some(s => s.nodeId === 'ai')).toBe(true);
+    expect(result.output.ai).toHaveProperty('content');
+  });
+
+  it('throws if ai-action node has no endpointId', async () => {
+    const flow = makeFlow(
+      [makeNode('ai', 'ai-action', { config: { endpointId: '', model: 'claude', prompt: 'test' } })],
+      [],
+    );
+
+    await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('endpointId');
+  });
+
+  it('throws if ai-action node has no model', async () => {
+    const flow = makeFlow(
+      [makeNode('ai', 'ai-action', { config: { endpointId: 'ep1', model: '', prompt: 'test' } })],
+      [],
+    );
+
+    await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('model');
+  });
+
+  it('throws if ai-action node has no prompt', async () => {
+    const flow = makeFlow(
+      [makeNode('ai', 'ai-action', { config: { endpointId: 'ep1', model: 'claude', prompt: '' } })],
+      [],
+    );
+
+    await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('prompt');
+  });
+
+  it('executes a loop node over an array', async () => {
+    const items = [{ id: 1 }, { id: 2 }];
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('loop', 'loop', {
+          config: {
+            itemsField: 'trigger.items',
+            itemVariable: 'item',
+            collectResults: true,
+            subNodes: [makeNode('sub', 'output', { config: { inputFields: [] } })],
+            subEdges: [],
+          },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'loop')],
+    );
+
+    const result = await executor.execute(flow, { items }, onEvent, context);
+    expect(result.steps.some(s => s.nodeId === 'loop')).toBe(true);
+  });
+
+  it('throws if loop node has no itemsField', async () => {
+    const flow = makeFlow(
+      [makeNode('loop', 'loop', { config: { itemsField: '' } })],
+      [],
+    );
+
+    await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('itemsField');
+  });
+
+  it('throws if loop node field is not an array', async () => {
+    const flow = makeFlow(
+      [makeNode('loop', 'loop', { config: { itemsField: 'trigger.message' } })],
+      [],
+    );
+
+    await expect(executor.execute(flow, { message: 'not-an-array' }, onEvent, context)).rejects.toThrow('not an array');
   });
 });

@@ -25,8 +25,14 @@ const catalog: CatalogEntry[] = [
   { type: 'parallel', label: 'Parallel Agents', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
   { type: 'subflow', label: 'Subflow', category: 'processing', description: '', defaultConfig: { subflowId: '', inputMapping: {} }, inputs: 1, outputs: 1 },
   { type: 'hitl', label: 'Human in the Loop', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'output', label: 'Output', category: 'output', description: '', defaultConfig: {}, inputs: 1, outputs: 0 },
   { type: 'switch', label: 'Switch', category: 'processing', description: '', defaultConfig: { fieldPath: '', cases: [] }, inputs: 1, outputs: 0 },
+  { type: 'http', label: 'HTTP Request', category: 'tools', description: '', defaultConfig: { method: 'GET', url: '' }, inputs: 1, outputs: 1 },
+  { type: 'loop', label: 'Loop', category: 'processing', description: '', defaultConfig: { itemsField: '', subNodes: [], subEdges: [] }, inputs: 1, outputs: 1 },
+  { type: 'delay', label: 'Delay', category: 'processing', description: '', defaultConfig: { type: 'fixed', seconds: 5 }, inputs: 1, outputs: 1 },
+  { type: 'ai-action', label: 'AI Action', category: 'processing', description: '', defaultConfig: { endpointId: '', model: '', prompt: '' }, inputs: 1, outputs: 1 },
+  { type: 'map', label: 'Map', category: 'processing', description: '', defaultConfig: { fields: [], mode: 'replace' }, inputs: 1, outputs: 1 },
+  { type: 'note', label: 'Note', category: 'processing', description: '', defaultConfig: { content: '' }, inputs: 0, outputs: 0 },
+  { type: 'output', label: 'Output', category: 'output', description: '', defaultConfig: {}, inputs: 1, outputs: 0 },
 ];
 
 describe('Node Catalog', () => {
@@ -44,6 +50,12 @@ describe('Node Catalog', () => {
     expect(types).toContain('hitl');
     expect(types).toContain('output');
     expect(types).toContain('switch');
+    expect(types).toContain('http');
+    expect(types).toContain('loop');
+    expect(types).toContain('delay');
+    expect(types).toContain('ai-action');
+    expect(types).toContain('map');
+    expect(types).toContain('note');
   });
 
   it('includes flow-tool entry with correct config', () => {
@@ -64,6 +76,67 @@ describe('Node Catalog', () => {
     expect(subflow!.outputs).toBe(1);
     expect(subflow!.defaultConfig).toHaveProperty('subflowId', '');
     expect(subflow!.defaultConfig).toHaveProperty('inputMapping', {});
+  });
+
+  it('includes http entry with correct config', () => {
+    const entry = catalog.find(e => e.type === 'http');
+    expect(entry).toBeDefined();
+    expect(entry!.category).toBe('tools');
+    expect(entry!.inputs).toBe(1);
+    expect(entry!.outputs).toBe(1);
+    expect(entry!.defaultConfig).toHaveProperty('method', 'GET');
+    expect(entry!.defaultConfig).toHaveProperty('url', '');
+  });
+
+  it('includes loop entry with correct config', () => {
+    const entry = catalog.find(e => e.type === 'loop');
+    expect(entry).toBeDefined();
+    expect(entry!.category).toBe('processing');
+    expect(entry!.inputs).toBe(1);
+    expect(entry!.outputs).toBe(1);
+    expect(entry!.defaultConfig).toHaveProperty('itemsField', '');
+    expect(entry!.defaultConfig).toHaveProperty('subNodes', []);
+    expect(entry!.defaultConfig).toHaveProperty('subEdges', []);
+  });
+
+  it('includes delay entry with correct config', () => {
+    const entry = catalog.find(e => e.type === 'delay');
+    expect(entry).toBeDefined();
+    expect(entry!.category).toBe('processing');
+    expect(entry!.inputs).toBe(1);
+    expect(entry!.outputs).toBe(1);
+    expect(entry!.defaultConfig).toHaveProperty('type', 'fixed');
+    expect(entry!.defaultConfig).toHaveProperty('seconds', 5);
+  });
+
+  it('includes ai-action entry with correct config', () => {
+    const entry = catalog.find(e => e.type === 'ai-action');
+    expect(entry).toBeDefined();
+    expect(entry!.category).toBe('processing');
+    expect(entry!.inputs).toBe(1);
+    expect(entry!.outputs).toBe(1);
+    expect(entry!.defaultConfig).toHaveProperty('endpointId', '');
+    expect(entry!.defaultConfig).toHaveProperty('model', '');
+    expect(entry!.defaultConfig).toHaveProperty('prompt', '');
+  });
+
+  it('includes map entry with correct config', () => {
+    const entry = catalog.find(e => e.type === 'map');
+    expect(entry).toBeDefined();
+    expect(entry!.category).toBe('processing');
+    expect(entry!.inputs).toBe(1);
+    expect(entry!.outputs).toBe(1);
+    expect(entry!.defaultConfig).toHaveProperty('fields', []);
+    expect(entry!.defaultConfig).toHaveProperty('mode', 'replace');
+  });
+
+  it('includes note entry with correct config', () => {
+    const entry = catalog.find(e => e.type === 'note');
+    expect(entry).toBeDefined();
+    expect(entry!.category).toBe('processing');
+    expect(entry!.inputs).toBe(0);
+    expect(entry!.outputs).toBe(0);
+    expect(entry!.defaultConfig).toHaveProperty('content', '');
   });
 
   it('has valid categories for all entries', () => {
