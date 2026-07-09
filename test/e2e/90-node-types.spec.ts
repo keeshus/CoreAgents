@@ -489,4 +489,317 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
+  // ── Map: edge cases ─────────────────────────────────────────
+
+  test('map node resolves nested field paths', async ({ request }) => {
+    const name = uniqueFlowName('MapNestedTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Nest', type: 'code', config: { code: 'return { level: { inner: 42, label: "deep" } };' } } },
+        { id: 'm1', type: 'map', position: { x: 600, y: 0 }, data: { label: 'M', type: 'map', config: { fields: [{ name: 'result', type: 'string', value: 'nest.level.inner' }, { name: 'tag', type: 'string', value: 'nest.level.label' }], mode: 'replace' } } },
+        { id: 'o1', type: 'output', position: { x: 900, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'm1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.m1?.result).toBe(42);
+    expect(completed!.data?.output?.m1?.tag).toBe('deep');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('map node stores null for missing upstream path', async ({ request }) => {
+    const name = uniqueFlowName('MapNullTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'm1', type: 'map', position: { x: 300, y: 0 }, data: { label: 'M', type: 'map', config: { fields: [{ name: 'x', type: 'string', value: 't1.nonexistent' }], mode: 'replace' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'm1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.m1?.x).toBeNull();
+    await deleteFlow(request, flow.id);
+  });
+
+  // ── Loop: edge cases ────────────────────────────────────────
+
+  test('loop node with collectResults=false returns only count', async ({ request }) => {
+    const name = uniqueFlowName('LoopNoCollect');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'l1', type: 'loop', position: { x: 300, y: 0 }, data: { label: 'L', type: 'loop', config: { itemsField: 't1.items', itemVariable: 'x', subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'Echo', type: 'code', config: { code: 'return { val: input.x };' } } }], subEdges: [], collectResults: false } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { items: [10, 20, 30] }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.l1?.count).toBe(3);
+    expect(completed!.data?.output?.l1?.results).toBeUndefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('loop node fails when itemsField is not an array', async ({ request }) => {
+    const name = uniqueFlowName('LoopFailTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'l1', type: 'loop', position: { x: 300, y: 0 }, data: { label: 'L', type: 'loop', config: { itemsField: 't1.message', itemVariable: 'x', subNodes: [], subEdges: [] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { message: 'not-an-array' }, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('not an array');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('loop node with custom itemVariable name', async ({ request }) => {
+    const name = uniqueFlowName('LoopCustomVar');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'l1', type: 'loop', position: { x: 300, y: 0 }, data: { label: 'L', type: 'loop', config: { itemsField: 't1.nums', itemVariable: 'val', subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'D', type: 'code', config: { code: 'return { squared: input.val * input.val };' } } }], subEdges: [], collectResults: true } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { nums: [3, 4] }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.l1?.count).toBe(2);
+    expect(completed!.data?.output?.l1?.results[0]?.s1?.squared).toBe(9);
+    expect(completed!.data?.output?.l1?.results[1]?.s1?.squared).toBe(16);
+    await deleteFlow(request, flow.id);
+  });
+
+  // ── HTTP: edge cases ────────────────────────────────────────
+
+  test('http node POST with JSON body', async ({ request }) => {
+    const name = uniqueFlowName('HttpPostTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'POST', url: 'http://backend-e2e:3001/api/health', body: '{"test":true}', headers: '{"Content-Type":"application/json"}', timeout: 5000 } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.h1?.status).toBe(200);
+    expect(completed!.data?.output?.h1?.ok).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('http node returns error for unreachable host', async ({ request }) => {
+    const name = uniqueFlowName('HttpErrTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'GET', url: 'http://nonexistent.invalid/', timeout: 1000 } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  // ── Delay: edge cases ───────────────────────────────────────
+
+  test('delay node with ISO 8601 duration', async ({ request }) => {
+    const name = uniqueFlowName('DelayDurTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'D', type: 'delay', config: { type: 'duration', duration: 'PT0S' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'd1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'd1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('delay node with past timestamp passes through', async ({ request }) => {
+    const name = uniqueFlowName('DelayTsTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'D', type: 'delay', config: { type: 'timestamp', timestamp: '2020-01-01T00:00:00Z' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'd1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'd1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  // ── AI Action: error cases ──────────────────────────────────
+
+  test('ai-action node fails when endpointId is missing', async ({ request }) => {
+    const name = uniqueFlowName('AIActionNoEp');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'a1', type: 'ai-action', position: { x: 300, y: 0 }, data: { label: 'AI', type: 'ai-action', config: { endpointId: '', model: 'mock', prompt: 'test' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'a1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'a1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('endpointId is required');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('ai-action node fails when prompt is missing', async ({ request }) => {
+    const name = uniqueFlowName('AIActionNoPrompt');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'a1', type: 'ai-action', position: { x: 300, y: 0 }, data: { label: 'AI', type: 'ai-action', config: { endpointId: 'ep-1', model: 'mock', prompt: '' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'a1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'a1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('prompt is required');
+    await deleteFlow(request, flow.id);
+  });
+
+  // ── Multi-node advanced flow ─────────────────────────────────
+
+  test('advanced: trigger → code → map → loop → output', async ({ request }) => {
+    const name = uniqueFlowName('AdvMultiNode');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'c1', type: 'code', position: { x: 250, y: 0 }, data: { label: 'Prep', type: 'code', config: { code: 'const vals = [1, 2, 3]; return { numbers: vals.map(n => ({ original: n })) };' } } },
+        { id: 'm1', type: 'map', position: { x: 500, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'transformed', type: 'object', value: 'prep.numbers' }], mode: 'replace' } } },
+        { id: 'l1', type: 'loop', position: { x: 750, y: 0 }, data: { label: 'Looper', type: 'loop', config: { itemsField: 'mapper.transformed', itemVariable: 'item', subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'D', type: 'code', config: { code: 'return { result: input.item.original * 10 };' } } }], subEdges: [], collectResults: true } } },
+        { id: 'o1', type: 'output', position: { x: 1000, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'm1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e4', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, { message: 'start' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    // Verify the full pipeline: code → map → loop
+    expect(completed!.data?.output?.c1?.numbers).toHaveLength(3);
+    expect(completed!.data?.output?.m1?.transformed).toHaveLength(3);
+    expect(completed!.data?.output?.l1?.count).toBe(3);
+    expect(completed!.data?.output?.l1?.results[0]?.s1?.result).toBe(10);
+    expect(completed!.data?.output?.l1?.results[2]?.s1?.result).toBe(30);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('advanced: trigger → http → map → output', async ({ request }) => {
+    const name = uniqueFlowName('AdvHttpMap');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'h1', type: 'http', position: { x: 250, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://backend-e2e:3001/api/health', timeout: 5000 } } },
+        { id: 'm1', type: 'map', position: { x: 500, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'httpStatus', type: 'number', value: 'fetcher.status' }, { name: 'healthy', type: 'boolean', value: 'fetcher.ok' }], mode: 'replace' } } },
+        { id: 'o1', type: 'output', position: { x: 750, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'm1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.m1?.httpStatus).toBe(200);
+    expect(completed!.data?.output?.m1?.healthy).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
 });
