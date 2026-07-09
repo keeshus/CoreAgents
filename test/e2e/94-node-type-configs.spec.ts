@@ -129,7 +129,7 @@ test.describe('Node type config fields', () => {
     await page.getByLabel('Node name').fill('My Map');
     await expect(page.getByLabel('Node name')).toHaveValue('My Map');
     await expect(page.getByText('Fields', { exact: true })).toBeVisible();
-    await expect(page.getByText('Mode')).toBeVisible();
+    await expect(page.getByText('Mode', { exact: true })).toBeVisible();
   });
 
   test('http node config fields are accessible', async ({ page }) => {
