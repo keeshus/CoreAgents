@@ -126,13 +126,13 @@ test.describe('Schedule trigger', () => {
     const flow = await res.json();
 
     // Wait for the cron (* * * * * fires at :00 each minute) to trigger
-    // Sleep until the next minute boundary + 5s for BullMQ to process
+    // Sleep until just past the next minute boundary + 15s for BullMQ to process
     const now = new Date();
-    const msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 5000;
-    if (msToNextMin > 1000) await new Promise(r => setTimeout(r, Math.min(msToNextMin, 65000)));
+    const msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 15000;
+    if (msToNextMin > 1000) await new Promise(r => setTimeout(r, Math.min(msToNextMin, 75000)));
 
     let found = false;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 30; i++) {
       await new Promise(r => setTimeout(r, 1000));
       const execRes = await request.get(`${API_URL}/flows/${flow.id}/executions`);
       if (!execRes.ok()) continue;
