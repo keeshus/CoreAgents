@@ -20,7 +20,7 @@ export async function reconcileSchedules(db: any, flowsTable: any, eq: any): Pro
     const bullJobs = new Map<string, string>();
     for (const job of repeatableJobs) {
       const flowId = job.id?.replace(/^schedule:/, '');
-      if (flowId) bullJobs.set(flowId, job.pattern);
+      if (flowId && job.pattern) bullJobs.set(flowId, job.pattern);
     }
 
     for (const flow of allFlows) {
