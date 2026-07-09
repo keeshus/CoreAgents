@@ -20,11 +20,11 @@ test.describe('Node type config fields', () => {
         { id: 'n9', type: 'switch', position: { x: 0, y: 800 }, data: { label: 'Switch', type: 'switch', config: { fieldPath: '', cases: [] } } },
         { id: 'n10', type: 'parallel', position: { x: 0, y: 900 }, data: { label: 'Parallel Agents', type: 'parallel', config: { subNodes: [] } } },
         { id: 'n11', type: 'map', position: { x: 0, y: 1000 }, data: { label: 'Map', type: 'map', config: { fields: [], mode: 'replace' } } },
-        { id: 'n12', type: 'http', position: { x: 0, y: 1100 }, data: { label: 'HTTP', type: 'http', config: { method: 'GET', url: '' } } },
-        { id: 'n13', type: 'loop', position: { x: 0, y: 1200 }, data: { label: 'Loop', type: 'loop', config: { itemsField: '', subNodes: [], subEdges: [] } } },
-        { id: 'n14', type: 'delay', position: { x: 0, y: 1300 }, data: { label: 'Delay', type: 'delay', config: { type: 'fixed', seconds: 0 } } },
-        { id: 'n15', type: 'ai-action', position: { x: 0, y: 1400 }, data: { label: 'AI Action', type: 'ai-action', config: { endpointId: '', model: '', prompt: '' } } },
-        { id: 'n16', type: 'note', position: { x: 0, y: 1500 }, data: { label: 'Note', type: 'note', config: { content: '' } } },
+        { id: 'n12', type: 'http', position: { x: 0, y: 1050 }, data: { label: 'HTTP', type: 'http', config: { method: 'GET', url: '' } } },
+        { id: 'n13', type: 'loop', position: { x: 0, y: 1100 }, data: { label: 'Loop', type: 'loop', config: { itemsField: '', subNodes: [], subEdges: [] } } },
+        { id: 'n14', type: 'delay', position: { x: 0, y: 1150 }, data: { label: 'Delay', type: 'delay', config: { type: 'fixed', seconds: 0 } } },
+        { id: 'n15', type: 'ai-action', position: { x: 0, y: 1200 }, data: { label: 'AI Action', type: 'ai-action', config: { endpointId: '', model: '', prompt: '' } } },
+        { id: 'n16', type: 'note', position: { x: 0, y: 1250 }, data: { label: 'Note', type: 'note', config: { content: '' } } },
       ],
       edges: [],
     });
@@ -128,7 +128,7 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My Map');
     await expect(page.getByLabel('Node name')).toHaveValue('My Map');
-    await expect(page.getByText('Fields')).toBeVisible();
+    await expect(page.getByText('Fields', { exact: true })).toBeVisible();
     await expect(page.getByText('Mode')).toBeVisible();
   });
 
@@ -137,8 +137,8 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My HTTP');
     await expect(page.getByLabel('Node name')).toHaveValue('My HTTP');
-    await expect(page.getByText('Method')).toBeVisible();
-    await expect(page.getByText('URL')).toBeVisible();
+    await expect(page.getByText('Method', { exact: true })).toBeVisible();
+    await expect(page.getByText('URL', { exact: true })).toBeVisible();
   });
 
   test('loop node config fields are accessible', async ({ page }) => {
@@ -146,7 +146,7 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My Loop');
     await expect(page.getByLabel('Node name')).toHaveValue('My Loop');
-    await expect(page.getByText('Array Field')).toBeVisible();
+    await expect(page.getByText('Array Field', { exact: true })).toBeVisible();
   });
 
   test('delay node config fields are accessible', async ({ page }) => {
