@@ -109,6 +109,7 @@ test.describe('Schedule trigger', () => {
   });
 
   test('schedule flow auto-executes via BullMQ cron', async ({ request }) => {
+    test.setTimeout(120000);
     const name = uniqueFlowName('ScheduleAuto');
     const res = await createFlow(request, {
       name,
@@ -124,16 +125,21 @@ test.describe('Schedule trigger', () => {
     });
     const flow = await res.json();
 
-    // Wait up to 75s for the cron (* * * * * fires at :00 each minute) to trigger
+    // Wait for the cron (* * * * * fires at :00 each minute) to trigger
+    // Sleep until the next minute boundary + 5s for BullMQ to process
+    const now = new Date();
+    const msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 5000;
+    if (msToNextMin > 1000) await new Promise(r => setTimeout(r, Math.min(msToNextMin, 65000)));
+
     let found = false;
-    for (let i = 0; i < 75; i++) {
+    for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 1000));
       const execRes = await request.get(`${API_URL}/flows/${flow.id}/executions`);
       if (!execRes.ok()) continue;
       const body = await execRes.json();
       const execs = body.data || body;
       if (!Array.isArray(execs)) continue;
-      const scheduled = execs.find((e: any) => e.input?.source === 'cron');
+      const scheduled = execs.find((e: any) => e.input?.triggerType === 'schedule');
       if (scheduled) {
         found = true;
         expect(scheduled.status).toBe('completed');
