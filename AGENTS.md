@@ -64,24 +64,38 @@
 
 ## E2E Tests
 - **ALWAYS run E2E tests before committing and pushing any changes** — they catch regressions in both frontend and backend.
-- Workflow:
-  ```bash
-  # Start Docker stack (infra + backend + frontend + worker + mock-llm)
-  docker compose -f docker-compose.e2e.yml up -d --wait
-  
-  # Run tests headless
-  npx playwright test --config test/playwright.config.ts --retries=0
-  
-  # Or with browser for debugging
-  npx playwright test --config test/playwright.config.ts --retries=0 --headed
-  
-  # Clean up
-  docker compose -f docker-compose.e2e.yml down -v --timeout 10
-  ```
-- Test suites: frontend/e2e/ — 46 tests across 13 spec files
-- Tests use `data-testid` attributes for reliable locators — add them when creating new components
-- Use `uniqueFlowName()` from `helpers/api.ts` for unique flow names to avoid 409 conflicts
-- The mock LLM server at `test/mock-llm/` provides OpenAI-compatible responses for LLM Agent node tests
+
+### Fast mode (4 parallel Docker stacks, ~2 min)
+```bash
+# Build images first (only needed after code changes)
+docker compose -f docker-compose.e2e.stack.yml build
+
+# Run all 425 tests across 4 isolated stacks in parallel
+bash test/run-e2e-parallel.sh
+```
+
+### Sequential mode (single stack, ~6 min)
+```bash
+# Start stack
+docker compose -f docker-compose.e2e.yml up -d --wait
+
+# Run tests
+npx playwright test --config test/playwright.config.ts --retries=0
+
+# Or with browser for debugging
+npx playwright test --config test/playwright.config.ts --retries=0 --headed
+
+# Clean up
+docker compose -f docker-compose.e2e.yml down -v --timeout 10
+```
+
+### Notes
+- 425 tests across 33 spec files
+- The parallel script (`test/run-e2e-parallel.sh`) splits tests into 4 balanced groups, each running on its own Docker stack with isolated ports
+- Stack 1 uses default ports (3000-3005) for SSO/openai-chat compatibility
+- The setup test (register + login) runs once per stack
+- Tests use `uniqueFlowName()` from `helpers/api.ts` for unique flow names to avoid 409 conflicts
+- The mock LLM server at `test/mock-llm/` provides OpenAI-compatible responses
 - Debug executions use `debugExecute()` from `helpers/stream.ts` which reads SSE events
 
 ## Checking for compliance
