@@ -1002,20 +1002,6 @@ export class FlowExecutor {
   return result;
 }
 
-function resolveNestedValue(obj: unknown, path: string): unknown {
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    if (typeof current === 'object' && !Array.isArray(current) && part in (current as Record<string, unknown>)) {
-      current = (current as Record<string, unknown>)[part];
-    } else {
-      return undefined;
-    }
-  }
-  return current;
-}
-
       case 'mcp-tool': {
         const config = (nodeData as any).config;
         if (!config?.serverId || !config?.toolName) {
@@ -1444,7 +1430,18 @@ function resolveNestedValue(obj: unknown, path: string): unknown {
         const loopConfig = (nodeData as any).config || {};
         const { itemsField, itemVariable = 'item', subNodes = [], subEdges = [], collectResults = true } = loopConfig;
         if (!itemsField) throw new Error('Loop node: itemsField is required');
-        const items = resolveNestedValue(input, itemsField);
+        const loopResolve = (obj: unknown, path: string): unknown => {
+          const parts = path.split('.');
+          let cur: unknown = obj;
+          for (const p of parts) {
+            if (cur === null || cur === undefined) return undefined;
+            if (typeof cur === 'object' && !Array.isArray(cur) && p in (cur as Record<string, unknown>)) {
+              cur = (cur as Record<string, unknown>)[p];
+            } else { return undefined; }
+          }
+          return cur;
+        };
+        const items = loopResolve(input, itemsField);
         if (!Array.isArray(items)) throw new Error(`Loop node: "${itemsField}" is not an array`);
         const results: unknown[] = [];
         const errors: { index: number; error: string }[] = [];
@@ -1515,8 +1512,19 @@ function resolveNestedValue(obj: unknown, path: string): unknown {
         const mapConfig = (nodeData as any).config || {};
         const { fields = [], mode = 'replace' } = mapConfig;
         const output: Record<string, unknown> = {};
+        const resolvePath = (obj: unknown, path: string): unknown => {
+          const parts = path.split('.');
+          let cur: unknown = obj;
+          for (const p of parts) {
+            if (cur === null || cur === undefined) return undefined;
+            if (typeof cur === 'object' && !Array.isArray(cur) && p in (cur as Record<string, unknown>)) {
+              cur = (cur as Record<string, unknown>)[p];
+            } else { return undefined; }
+          }
+          return cur;
+        };
         for (const field of fields) {
-          const resolved = resolveNestedValue(input, field.value);
+          const resolved = resolvePath(input, field.value);
           output[field.name] = resolved !== undefined ? resolved : null;
         }
         if (mode === 'merge') {

@@ -328,7 +328,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'm1', type: 'map', position: { x: 300, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'greeting', type: 'string', value: 'trigger.message' }], mode: 'replace' } } },
+        { id: 'm1', type: 'map', position: { x: 300, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'greeting', type: 'string', value: 't1.message' }], mode: 'replace' } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['mapper.greeting'] } } },
       ],
       edges: [
@@ -351,7 +351,7 @@ test.describe('All node types', () => {
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
         { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Prep', type: 'code', config: { code: 'return { score: 42 };' } } },
-        { id: 'm1', type: 'map', position: { x: 600, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'label', type: 'string', value: 'trigger.message' }], mode: 'merge' } } },
+        { id: 'm1', type: 'map', position: { x: 600, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'label', type: 'string', value: 't1.message' }], mode: 'merge' } } },
         { id: 'o1', type: 'output', position: { x: 900, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['mapper.label', 'prep.score'] } } },
       ],
       edges: [

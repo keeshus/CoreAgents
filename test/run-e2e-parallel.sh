@@ -54,7 +54,7 @@ run_stack() {
   VALKEY_PORT=$VALKEY_PORT \
   QDRANT_PORT=$QDRANT_PORT \
   SIDECAR_PORT=$SIDECAR_PORT \
-  docker compose -p "$PROJECT" -f docker-compose.e2e.stack.yml up -d --wait 2>&1 | tail -3
+  docker compose -p "$PROJECT" -f docker-compose.e2e.stack.yml up -d --build --wait 2>&1 | tail -3
 
   # Frontend has no Docker health check — wait until it actually serves HTTP
   echo "[Stack $STACK_ID] Waiting for frontend..."
