@@ -128,7 +128,7 @@ test.describe('Node type config fields', () => {
     await expect(page.getByLabel('Node name')).toBeVisible();
     await page.getByLabel('Node name').fill('My Map');
     await expect(page.getByLabel('Node name')).toHaveValue('My Map');
-    await expect(page.getByText('Field Mappings')).toBeVisible();
+    await expect(page.getByText('Fields')).toBeVisible();
     await expect(page.getByText('Mode')).toBeVisible();
   });
 

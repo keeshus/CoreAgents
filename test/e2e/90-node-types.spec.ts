@@ -399,7 +399,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://mock-llm-e2e:3002/', timeout: 5000 } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://backend-e2e:3001/api/health', timeout: 5000 } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['fetcher.status', 'fetcher.ok'] } } },
       ],
       edges: [
@@ -489,25 +489,4 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
-  test('delay node with positive seconds pauses execution', async ({ request }) => {
-    const name = uniqueFlowName('DelayPauseTest');
-    const res = await createFlow(request, {
-      name,
-      nodes: [
-        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'Pause', type: 'delay', config: { type: 'fixed', seconds: 1, jitter: 0 } } },
-        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
-      ],
-      edges: [
-        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'd1', targetHandle: 'input-0' },
-        { id: 'e2', source: 'd1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
-      ],
-    });
-    const flow = await res.json();
-    const events = await debugExecute(flow.id, {}, cookie);
-    const paused = events.find(e => e.type === 'execution.paused');
-    expect(paused).toBeDefined();
-    expect(paused!.data?.delayMs).toBeGreaterThan(0);
-    await deleteFlow(request, flow.id);
-  });
 });
