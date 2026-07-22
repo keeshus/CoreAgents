@@ -38,7 +38,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "core-agents-shared": "*",
-    "next": "^16.2.10",
+    "next": "^16.2.11",
     "react": "^19.2.8",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
