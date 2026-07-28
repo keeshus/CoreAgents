@@ -14,7 +14,7 @@
     "core-agents-shared": "*",
     "@anthropic-ai/sdk": "^0.115.0",
     "openai": "^6.49.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "bullmq": "^5.81.0",
     "ioredis": "^5.11.1"
   },
