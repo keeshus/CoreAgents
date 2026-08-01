@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
 import { getAuthCookie } from './helpers/auth';
-import { pollExecution } from './helpers/stream';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
@@ -28,10 +27,39 @@ async function readSSE(url: string, body: unknown, cookie: string): Promise<any[
         try { events.push(JSON.parse(line.slice(6))); } catch {}
       }
     }
-    if (events.some(e => e.type === 'execution.completed' || e.type === 'execution.failed')) break;
+    if (events.some(e => e.type === 'execution.completed' || e.type === 'execution.failed' || e.type === 'execution.paused')) break;
   }
   reader.releaseLock();
   return events;
+}
+
+function subflowTriggerNode(label: string, schema: string): any {
+  return { id: 'n1', type: 'trigger', position: { x: 0, y: 0 }, data: { label, type: 'trigger', config: { triggerType: 'subflow', inputSchema: schema } } };
+}
+
+function codeNode(id: string, label: string, code: string): any {
+  return { id, type: 'code', position: { x: 250, y: 0 }, data: { label, type: 'code', config: { code } } };
+}
+
+function outputNode(id: string, label: string, inputFields: string[]): any {
+  return { id, type: 'output', position: { x: 500, y: 0 }, data: { label, type: 'output', config: { inputFields } } };
+}
+
+async function createCodeChildFlow(request: any, code: string, pushId: (id: string) => void): Promise<any> {
+  const res = await request.post(`${API_URL}/flows`, {
+    data: {
+      name: uniqueFlowName('Child-Flow'),
+      nodes: [subflowTriggerNode('Trigger', JSON.stringify({ type: 'object', properties: { text: { type: 'string' } }, required: ['text'] })), codeNode('n2', 'Transform', code), outputNode('n3', 'Output', ['Transform.result'])],
+      edges: [
+        { id: 'e1', source: 'n1', target: 'n2' },
+        { id: 'e2', source: 'n2', target: 'n3' },
+      ],
+    },
+  });
+  expect(res.ok()).toBe(true);
+  const flow = await res.json();
+  pushId(flow.id);
+  return flow;
 }
 
 test.describe('Subflows feature', () => {
@@ -236,5 +264,307 @@ test.describe('Subflows feature', () => {
     expect(failedEvent).toBeDefined();
     const errorMsg = failedEvent?.data?.error || '';
     expect(errorMsg).toContain('not found');
+  });
+
+  // ─── Nested subflows (depth 2) ────────────────────────────
+
+  test('nested subflow: parent → subflow A → subflow B (depth 2) completes with child output', async ({ page, request }) => {
+    const adminCookie = `token=${getAuthCookie()?.split('=')[1] || ''}`;
+
+    // Level 2: flow B transforms text
+    const flowB = await createCodeChildFlow(request, 'return { result: "B:" + (input.text || "") }', id => createdFlowIds.push(id));
+    // Level 1: flow A calls flow B, then wraps the result
+    const flowARes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Nested-A'),
+        nodes: [
+          subflowTriggerNode('Trigger', JSON.stringify({ type: 'object', properties: { text: { type: 'string' } }, required: ['text'] })),
+          { id: 'a2', type: 'subflow', position: { x: 300, y: 0 }, data: { label: 'SubB', type: 'subflow', config: { subflowId: flowB.id, subflowName: flowB.name, inputMapping: { text: '{{input.Trigger.text}}' } } } },
+          codeNode('a3', 'A-Code', 'return { result: "A:" + JSON.stringify(input.subb) }'),
+          outputNode('a4', 'A-Out', ['A-Code.result']),
+        ],
+        edges: [
+          { id: 'e1', source: 'n1', target: 'a2' },
+          { id: 'e2', source: 'a2', target: 'a3' },
+          { id: 'e3', source: 'a3', target: 'a4' },
+        ],
+      },
+    });
+    expect(flowARes.ok()).toBe(true);
+    const flowA = await flowARes.json();
+    createdFlowIds.push(flowA.id);
+
+    // Level 0: parent calls flow A
+    const parentRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Nested-Parent'),
+        nodes: [
+          { id: 'p1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'p2', type: 'subflow', position: { x: 300, y: 0 }, data: { label: 'SubA', type: 'subflow', config: { subflowId: flowA.id, subflowName: flowA.name, inputMapping: { text: '{{input.Trigger.text}}' } } } },
+          { id: 'p3', type: 'output', position: { x: 600, y: 0 }, data: { label: 'P-Out', type: 'output', config: { inputFields: ['SubA.a2'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 'p1', target: 'p2' },
+          { id: 'e2', source: 'p2', target: 'p3' },
+        ],
+      },
+    });
+    expect(parentRes.ok()).toBe(true);
+    const parent = await parentRes.json();
+    createdFlowIds.push(parent.id);
+
+    const events = await readSSE(
+      `${API_URL}/flows/${parent.id}/execute`,
+      { input: { text: 'hello' }, _debug: true },
+      adminCookie,
+    );
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    // Both subflows started and completed — depth increases per level
+    const startedEvents = events.filter(e => e.type === 'subflow.started');
+    expect(startedEvents).toHaveLength(2);
+    const labels = startedEvents.map(e => e.data?.subflowLabel || '');
+    expect(labels.some(l => l === flowA.name)).toBe(true);
+    expect(labels.some(l => l === flowB.name)).toBe(true);
+    const depths = startedEvents.map(e => e.data?.depth);
+    expect(depths).toContain(1);
+    expect(depths).toContain(2);
+
+    const completedEvents = events.filter(e => e.type === 'subflow.completed');
+    expect(completedEvents).toHaveLength(2);
+
+    // Flow B's result is threaded back through A into the parent output
+    const outputStr = JSON.stringify(completed?.data?.output || {});
+    expect(outputStr).toContain('B:hello');
+    expect(outputStr).toContain('A:');
+  });
+
+  // ─── Recursion guard ─────────────────────────────────────
+
+  test('self-referencing subflow fails with clear circular-reference error', async ({ page, request }) => {
+    const res = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Self-Ref'),
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 's1', type: 'subflow', position: { x: 300, y: 0 }, data: { label: 'Self', type: 'subflow', config: { subflowId: '00000000-0000-0000-0000-000000000000', inputMapping: {} } } },
+          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 't1', target: 's1' },
+          { id: 'e2', source: 's1', target: 'o1' },
+        ],
+      },
+    });
+    expect(res.ok()).toBe(true);
+    const flow = await res.json();
+    createdFlowIds.push(flow.id);
+
+    // Patch the subflow node to reference the flow itself
+    const patchedNodes = flow.nodes.map((n: any) =>
+      n.id === 's1' ? { ...n, data: { ...n.data, config: { ...n.data.config, subflowId: flow.id, subflowName: flow.name } } } : n
+    );
+    const patchRes = await request.put(`${API_URL}/flows/${flow.id}`, { data: { name: flow.name, nodes: patchedNodes, edges: flow.edges } });
+    expect(patchRes.ok()).toBe(true);
+
+    // The validate endpoint catches the cycle when the ancestry is provided
+    const validateRes = await request.post(`${API_URL}/flows/validate`, {
+      data: { nodes: patchedNodes, edges: flow.edges, subflowAncestry: [flow.id] },
+    });
+    expect(validateRes.ok()).toBe(true);
+    const validation = await validateRes.json();
+    expect(validation.valid).toBe(false);
+    expect(JSON.stringify(validation.errors)).toContain('Circular subflow reference');
+
+    // Runtime execution must fail with the same clear error instead of recursing infinitely
+    const adminCookie = `token=${getAuthCookie()?.split('=')[1] || ''}`;
+    const events = await readSSE(
+      `${API_URL}/flows/${flow.id}/execute`,
+      { input: {}, _debug: true },
+      adminCookie,
+    );
+    const failedEvent = events.find(e => e.type === 'execution.failed');
+    expect(failedEvent).toBeDefined();
+    const errorMsg = failedEvent?.data?.error || '';
+    expect(errorMsg).toContain('Circular subflow reference');
+    expect(errorMsg).toContain(flow.name);
+  });
+
+  // ─── HITL inside a subflow ───────────────────────────────
+
+  test('subflow with HITL node: parent pauses at the child HITL and the child sub-execution is recorded', async ({ request }) => {
+    const childRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Hitl-Child'),
+        nodes: [
+          subflowTriggerNode('Trigger', JSON.stringify({ type: 'object', properties: { text: { type: 'string' } }, required: ['text'] })),
+          codeNode('n2', 'Transform', 'return { result: "child:" + (input.text || "") }'),
+          { id: 'n3', type: 'hitl', position: { x: 500, y: 0 }, data: { label: 'Review', type: 'hitl', config: { prompt: 'Approve child step?', buttons: [{ label: 'Approve', value: 'approved' }] } } },
+          outputNode('n4', 'Output', ['Transform.result']),
+        ],
+        edges: [
+          { id: 'e1', source: 'n1', target: 'n2' },
+          { id: 'e2', source: 'n2', target: 'n3' },
+          { id: 'e3', source: 'n3', target: 'n4' },
+        ],
+      },
+    });
+    expect(childRes.ok()).toBe(true);
+    const child = await childRes.json();
+    createdFlowIds.push(child.id);
+
+    const parentRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Hitl-Parent'),
+        nodes: [
+          { id: 'p1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'p2', type: 'subflow', position: { x: 300, y: 0 }, data: { label: 'Sub', type: 'subflow', config: { subflowId: child.id, subflowName: child.name, inputMapping: { text: '{{input.Trigger.text}}' } } } },
+          { id: 'p3', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: ['Sub.result'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 'p1', target: 'p2' },
+          { id: 'e2', source: 'p2', target: 'p3' },
+        ],
+      },
+    });
+    expect(parentRes.ok()).toBe(true);
+    const parent = await parentRes.json();
+    createdFlowIds.push(parent.id);
+
+    const { executeUntilPaused } = await import('./helpers/stream');
+    const { events, executionId } = await executeUntilPaused(parent.id, { text: 'x' }, `token=${getAuthCookie()?.split('=')[1] || ''}`);
+    expect(executionId).toBeTruthy();
+
+    // The pause is caused by the child's HITL node — its prompt is surfaced as pending
+    const paused = events.find(e => e.type === 'execution.paused');
+    expect(paused).toBeDefined();
+    const execRes = await request.get(`${API_URL}/executions/${executionId}`);
+    expect(execRes.ok()).toBe(true);
+    const exec = await execRes.json();
+    expect(exec.status).toBe('awaiting_approval');
+    const pending = Array.isArray(exec.pending_hitls) ? exec.pending_hitls : JSON.parse(exec.pending_hitls || '[]');
+    expect(pending[0]?.prompt).toBe('Approve child step?');
+
+    // The child flow ran as a sub-execution of the parent
+    const subStarted = events.find(e => e.type === 'subflow.started');
+    expect(subStarted).toBeDefined();
+    const subId = subStarted?.data?.subExecutionId;
+    expect(subId).toBeTruthy();
+    const subRes = await request.get(`${API_URL}/executions/${subId}`);
+    expect(subRes.ok()).toBe(true);
+    const sub = await subRes.json();
+    expect(sub.flow_id).toBe(child.id);
+
+    // The child execution record links back to the parent (via the full-row list endpoint)
+    const childListRes = await request.get(`${API_URL}/flows/${child.id}/executions`);
+    expect(childListRes.ok()).toBe(true);
+    const childList = await childListRes.json();
+    const subRow = (childList.data || []).find((e: any) => e.id === subId);
+    expect(subRow).toBeDefined();
+    expect(subRow.parent_execution_id).toBe(executionId);
+
+    // Clean up the stuck pending execution (resume of a HITL inside a subflow does not complete — see report)
+    await request.post(`${API_URL}/executions/${executionId}/cancel`);
+  });
+
+  // ─── Input mapping edge cases ────────────────────────────
+
+  test('subflow input mapping referencing a missing upstream field resolves gracefully', async ({ page, request }) => {
+    const child = await createCodeChildFlow(request, 'return { result: "text=[" + input.text + "]" }', id => createdFlowIds.push(id));
+
+    const parentRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Missing-Field-Parent'),
+        nodes: [
+          { id: 'p1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'p2', type: 'subflow', position: { x: 300, y: 0 }, data: { label: 'Sub', type: 'subflow', config: { subflowId: child.id, subflowName: child.name, inputMapping: { text: '{{input.Trigger.nonexistent}}' } } } },
+          { id: 'p3', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: ['Sub.result'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 'p1', target: 'p2' },
+          { id: 'e2', source: 'p2', target: 'p3' },
+        ],
+      },
+    });
+    expect(parentRes.ok()).toBe(true);
+    const parent = await parentRes.json();
+    createdFlowIds.push(parent.id);
+
+    const adminCookie = `token=${getAuthCookie()?.split('=')[1] || ''}`;
+    const events = await readSSE(
+      `${API_URL}/flows/${parent.id}/execute`,
+      { input: { text: 'hello' }, _debug: true },
+      adminCookie,
+    );
+
+    // Unresolved templates resolve to empty string — no error, child still runs
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeUndefined();
+    const outputStr = JSON.stringify(completed?.data?.output || {});
+    expect(outputStr).toContain('text=[]');
+  });
+
+  // ─── Persisted (non-debug) subflow execution ─────────────
+
+  test('persisted subflow execution: child flow runs as its own execution record and result is returned', async ({ request }) => {
+    const child = await createCodeChildFlow(request, 'return { result: "persisted:" + (input.text || "") }', id => createdFlowIds.push(id));
+
+    const parentRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Persist-Parent'),
+        nodes: [
+          { id: 'p1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'p2', type: 'subflow', position: { x: 300, y: 0 }, data: { label: 'Sub', type: 'subflow', config: { subflowId: child.id, subflowName: child.name, inputMapping: { text: '{{input.Trigger.text}}' } } } },
+          { id: 'p3', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: ['Sub.result'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 'p1', target: 'p2' },
+          { id: 'e2', source: 'p2', target: 'p3' },
+        ],
+      },
+    });
+    expect(parentRes.ok()).toBe(true);
+    const parent = await parentRes.json();
+    createdFlowIds.push(parent.id);
+
+    const adminCookie = `token=${getAuthCookie()?.split('=')[1] || ''}`;
+    const events = await readSSE(
+      `${API_URL}/flows/${parent.id}/execute`,
+      { input: { text: 'zz' }, _debug: false },
+      adminCookie,
+    );
+
+    const started = events.find(e => e.type === 'execution.started');
+    expect(started).toBeDefined();
+    const parentExecutionId = started?.executionId;
+    expect(parentExecutionId).toBeTruthy();
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const outputStr = JSON.stringify(completed?.data?.output || {});
+    expect(outputStr).toContain('persisted:zz');
+
+    // The child flow was persisted as its own execution record
+    const subStarted = events.find(e => e.type === 'subflow.started');
+    expect(subStarted).toBeDefined();
+    const subExecutionId = subStarted?.data?.subExecutionId;
+    expect(subExecutionId).toBeTruthy();
+    expect(subExecutionId).not.toBe(parentExecutionId);
+
+    const subRes = await request.get(`${API_URL}/executions/${subExecutionId}`);
+    expect(subRes.ok()).toBe(true);
+    const sub = await subRes.json();
+    expect(sub.flow_id).toBe(child.id);
+    expect(sub.status).toBe('completed');
+    expect(JSON.stringify(sub.output)).toContain('persisted:zz');
+
+    // Parent record is completed as well
+    const parentRes2 = await request.get(`${API_URL}/executions/${parentExecutionId}`);
+    expect(parentRes2.ok()).toBe(true);
+    expect((await parentRes2.json()).status).toBe('completed');
   });
 });

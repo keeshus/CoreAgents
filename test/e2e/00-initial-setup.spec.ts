@@ -40,6 +40,22 @@ test.describe('Initial Setup — fresh install', () => {
     await expect(page.getByText('Password must be at least 8 characters')).toBeVisible();
   });
 
+  test('navigating to /setup when users exist redirects away from the form', async ({ page }) => {
+    // Works in both states: on a fresh install the form renders, once users
+    // exist /setup must redirect (to /login) instead of showing the form.
+    const res = await page.request.get(`${API_URL}/auth/setup-status`);
+    const { required } = await res.json();
+
+    await page.goto('/setup');
+    if (required) {
+      await expect(page.getByLabel('Name')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('button', { name: 'Create Admin Account' })).toBeVisible();
+    } else {
+      await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+      await expect(page.getByLabel('Email')).toBeVisible({ timeout: 5000 });
+    }
+  });
+
   test('registers first admin user and saves auth state', async ({ page, context }) => {
     const res = await page.request.get(`${API_URL}/auth/setup-status`);
     const { required } = await res.json();

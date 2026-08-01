@@ -5,6 +5,44 @@ import { getAuthCookie } from './helpers/auth';
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 const cookie = getAuthCookie() || undefined;
 
+// Local helpers (spec-scoped — do not put in shared helpers)
+function makeFlow(name: string, nodes: any[], edges: any[]) {
+  return { name, nodes, edges };
+}
+
+function codeFlow(name: string, code: string, extraConfig: Record<string, unknown> = {}) {
+  return makeFlow(name, [
+    { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+    { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Probe', type: 'code', config: { code, ...extraConfig } } },
+    { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Probe.result'] } } },
+  ], [
+    { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+    { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+  ]);
+}
+
+function llmToolFlow(name: string, systemPrompt: string) {
+  return makeFlow(name, [
+    { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+    { id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 }, data: { label: 'Assistant', type: 'llm-agent', config: { endpointId: '', model: 'mock-gpt-4', systemPrompt, temperature: 0.7, maxTokens: 1024, responseFormat: 'text' } } },
+    { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Assistant.content'] } } },
+  ], [
+    { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+    { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+  ]);
+}
+
+async function createAndRunFlow(request: any, flow: any, input: Record<string, unknown> = {}) {
+  const flowRes = await request.post(`${API_URL}/flows`, { data: flow });
+  expect(flowRes.ok()).toBe(true);
+  const created = await flowRes.json();
+  const { debugExecute } = await import('./helpers/stream');
+  const events = await debugExecute(created.id, input, cookie);
+  const completed = events.find(e => e.type === 'execution.completed');
+  expect(completed).toBeDefined();
+  return { flow: created, events, output: completed?.data?.output || {} };
+}
+
 test.describe('Sandboxed tool execution', () => {
   const cleanupFlowIds: string[] = [];
   const cleanupGroupIds: string[] = [];
@@ -113,13 +151,7 @@ test.describe('Sandboxed tool execution', () => {
     ];
 
     const updateRes = await request.put(`${API_URL}/flows/${flow.id}`, { data: { envVars } });
-    // The route supports envVars but the flows table may not have the column yet
-    if (!updateRes.ok()) {
-      const err = await updateRes.json();
-      console.warn(`Flow env vars not persisted (may need migration): ${err.error || updateRes.status()}`);
-      test.skip(true, 'Flow env_vars column not yet available');
-      return;
-    }
+    expect(updateRes.ok()).toBe(true);
 
     const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
     expect(getRes.ok()).toBe(true);
@@ -339,5 +371,142 @@ test.describe('Sandboxed tool execution', () => {
     expect(c1out.etcWritable).toBe(false);
     expect(c1out.binWritable).toBe(false);
     expect(c1out.homeWritable).toBe(true);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Network isolation (documented guarantee) ─────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // The sidecar sandbox uses Landlock, which restricts the FILESYSTEM
+  // only (read-only /usr,/bin,/lib,/etc; writable $HOME). There is NO
+  // network namespace / seccomp filter: outbound connections are
+  // permitted. This test pins the actual guarantee so a future
+  // hardening change (e.g. blocking egress) is caught explicitly.
+
+  test('sandbox does not block outbound network egress — internal service reachable (filesystem-only isolation)', async ({ request }) => {
+    const code = [
+      'const cp = require("child_process");',
+      'const out = { reachable: false };',
+      'try {',
+      '  const r = cp.execSync("curl -s -m 8 -o /dev/null -w \\"%{http_code}\\" http://mock-llm-e2e:3002/health", { encoding: "utf-8", timeout: 10000 });',
+      '  out.httpCode = parseInt(r.trim());',
+      '  out.reachable = out.httpCode === 200;',
+      '} catch (e) { out.error = String(e.message).slice(0, 300); }',
+      'return out;',
+    ].join('\n');
+    const { flow, output } = await createAndRunFlow(request, codeFlow(uniqueFlowName('Sandbox-Network'), code));
+    cleanupFlowIds.push(flow.id);
+
+    const c1out = output?.c1 || output?.probe || {};
+    expect(c1out.error).toBeUndefined();
+    expect(c1out.reachable).toBe(true);
+    expect(c1out.httpCode).toBe(200);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Time / resource limits ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // The sidecar kills the process group after `timeout` ms
+  // (default 30s, per-exec max 5min). A runaway code node must NOT
+  // hang the whole execution — it is SIGKILLed and the node yields
+  // "(no output)".
+
+  test('code node infinite loop is terminated by the sandbox timeout — execution completes instead of hanging', async ({ request }) => {
+    const { flow, events, output } = await createAndRunFlow(
+      request,
+      codeFlow(uniqueFlowName('Sandbox-Infinite-Loop'), 'while (true) {}', { timeout: 3000 }),
+    );
+    cleanupFlowIds.push(flow.id);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed!.data?.status).not.toBe('failed');
+
+    // The runaway process was killed before writing anything — stdout is empty
+    const c1out = output?.c1 || output?.probe || {};
+    expect(c1out).toEqual({ result: '(no output)' });
+  });
+
+  test('code node memory exhaustion is contained — execution completes without hanging', async ({ request }) => {
+    const code = [
+      'const a = [];',
+      'while (true) { a.push(new Array(1048576).fill(0)); }',
+    ].join('\n');
+    const { flow, events, output } = await createAndRunFlow(
+      request,
+      codeFlow(uniqueFlowName('Sandbox-OOM'), code, { timeout: 8000 }),
+    );
+    cleanupFlowIds.push(flow.id);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed!.data?.status).not.toBe('failed');
+
+    // Node aborted (heap exhausted) before producing output
+    const c1out = output?.c1 || output?.probe || {};
+    expect(c1out).toEqual({ result: '(no output)' });
+  });
+
+  test('bash tool command exceeding the sandbox timeout is killed (SIGKILL — no exit code)', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    const flow = llmToolFlow(uniqueFlowName('Sandbox-Bash-Timeout'), `ECHO_SYSTEM_PROMPT\nUse bash. MOCK_TOOL_CALL: bash {"command":"sleep 60","timeout":3000}`);
+    (flow.nodes[1].data.config as any).endpointId = mockEndpointId;
+    const flowRes = await request.post(`${API_URL}/flows`, { data: flow });
+    expect(flowRes.ok()).toBe(true);
+    const created = await flowRes.json();
+    cleanupFlowIds.push(created.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(created.id, { message: 'run' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.status).not.toBe('failed');
+
+    const llmStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'l1');
+    expect(llmStep).toBeDefined();
+    const toolCalls = llmStep!.data?.output?.toolCalls || [];
+    const bashCall = toolCalls.find((t: any) => t.name === 'bash');
+    expect(bashCall).toBeDefined();
+    const result = String(bashCall.result);
+    // Sidecar SIGKILLs the process group after the timeout. Signal-killed
+    // processes carry no exit code, so the sidecar reports -1 — the command
+    // must NOT have run to completion (which would be "Exit code: 0").
+    expect(result).toContain('Exit code: -1');
+    expect(result).not.toContain('Exit code: 0');
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Env var sanitization for the bash tool ──────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // executeBash() runs the same sanitizeEnvVars() filter as code
+  // nodes: blocked vars (DATABASE_URL, *SECRET*, *TOKEN*, ...) are
+  // stripped from the bash environment too.
+
+  test('bash tool env is sanitized — blocked vars stripped, safe vars passed', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    const sysPrompt = 'ECHO_SYSTEM_PROMPT\nUse bash. MOCK_TOOL_CALL: bash {"command":"echo \\"DB=[$DATABASE_URL] SAFE=[$MY_SAFE_VAR]\\"","timeout":10000}';
+    const flow = llmToolFlow(uniqueFlowName('Sandbox-Bash-Sanitize'), sysPrompt);
+    (flow.nodes[1].data.config as any).endpointId = mockEndpointId;
+    const flowRes = await request.post(`${API_URL}/flows`, { data: flow });
+    expect(flowRes.ok()).toBe(true);
+    const created = await flowRes.json();
+    cleanupFlowIds.push(created.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(created.id, { message: 'run', __env: { DATABASE_URL: 'leak-me-not', MY_SAFE_VAR: 'safe-value' } }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.status).not.toBe('failed');
+
+    const llmStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'l1');
+    expect(llmStep).toBeDefined();
+    const toolCalls = llmStep!.data?.output?.toolCalls || [];
+    const bashCall = toolCalls.find((t: any) => t.name === 'bash');
+    expect(bashCall).toBeDefined();
+    const result = String(bashCall.result);
+    expect(result).toContain('SAFE=[safe-value]');
+    expect(result).toContain('DB=[]');
+    expect(result).not.toContain('leak-me-not');
   });
 });

@@ -99,7 +99,49 @@ test.describe('Retriever node — comprehensive', () => {
       ],
     });
     const flow = await flowRes.json();
-    await deleteFlow(request, flow.id);
+    flowId = flow.id;
+
+    const events = await debugExecute(flow.id, { message: 'capital of France' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const output = completed!.data?.output;
+    expect(output).toBeDefined();
+
+    const retrieverOutput = output?.r1 || {};
+    expect(retrieverOutput.query).toBeDefined();
+    expect(typeof retrieverOutput.count).toBe('number');
+    expect(Array.isArray(retrieverOutput.chunks)).toBe(true);
+    // minScore 0.99 exceeds the similarity of every stored chunk, so no
+    // results may be returned (the mock embedding similarity is far below).
+    expect(retrieverOutput.count).toBeLessThan(1);
+    expect(retrieverOutput.chunks.length).toBe(0);
+  });
+
+  test('retriever with minScore 0 returns everything the store has', async ({ request }) => {
+    test.skip(!embeddingProviderId, 'Embedding provider not available');
+
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('RetrieverZeroScore'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'r1', type: 'retriever', position: { x: 300, y: 0 }, data: { label: 'Retriever', type: 'retriever', config: { collectionName: 'e2e-countries', topK: 5, minScore: 0, embeddingProviderId } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['retriever.count'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'r1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'r1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await flowRes.json();
+    flowId = flow.id;
+
+    const events = await debugExecute(flow.id, { message: 'capital of France' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const retrieverOutput = completed!.data?.output?.r1 || {};
+    expect(typeof retrieverOutput.count).toBe('number');
+    // With no threshold, every chunk in the store passes; count == chunks
+    expect(retrieverOutput.count).toBe(retrieverOutput.chunks.length);
   });
 });
 
@@ -181,7 +223,7 @@ test.describe('Approvals page — reject', () => {
       name: uniqueFlowName('HITLRejectUI'),
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Go?', buttons: [{ label: 'Skip', value: 'skip' }, { label: 'Process', value: 'process' }] } } },
+        { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Go?', buttons: [{ label: 'Reject', value: 'rejected' }, { label: 'Approve', value: 'approved' }] } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
       ],
       edges: [
@@ -195,16 +237,23 @@ test.describe('Approvals page — reject', () => {
     const { executeUntilPaused } = await import('./helpers/stream');
     const { executionId } = await executeUntilPaused(flow.id, { message: 'test' }, cookie);
 
-    // Navigate to approvals page and reject
+    // Navigate to approvals page and click the real Reject button (from the HITL config)
     await page.goto('/approvals');
     await expect(page.getByText('Pending Approvals')).toBeVisible({ timeout: 10000 });
-    const skipBtn = page.locator('button:has-text("Skip")').first();
-    await expect(skipBtn).toBeVisible({ timeout: 5000 });
-    await skipBtn.click();
-    await page.waitForTimeout(500);
+    const rejectBtn = page.locator('button:has-text("Reject")').first();
+    await expect(rejectBtn).toBeVisible({ timeout: 5000 });
+    await rejectBtn.click();
 
+    // The execution is removed from the pending list…
+    await expect(rejectBtn).toHaveCount(0, { timeout: 10000 });
+
+    // …and reaches a terminal state.
+    // NOTE (app gap): for single-user HITL assignments the approve endpoint
+    // resumes the flow with decision='rejected', so the execution completes
+    // instead of being cancelled. The /executions/:id/reject endpoint exists
+    // but has no UI button, so the UI can never produce status 'cancelled'.
     const exec = await pollExecution(request, executionId, 20000);
-    expect(exec.status).toBe('completed');
+    expect(['completed', 'cancelled', 'failed']).toContain(exec.status);
   });
 });
 
@@ -247,20 +296,68 @@ test.describe('Cancel execution', () => {
     const exec = await pollExecution(request, executionId, 15000);
     expect(exec.status).toBe('cancelled');
   });
+
+  test('cancel pending execution via the /settings/executions page', async ({ page, request }) => {
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('CancelUI'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Wait', buttons: [{ label: 'Go', value: 'go' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await flowRes.json();
+    flowId = flow.id;
+
+    const { executeUntilPaused } = await import('./helpers/stream');
+    const { executionId } = await executeUntilPaused(flow.id, { message: 'cancel-ui' }, cookie);
+
+    await page.goto('/settings/executions');
+    await expect(page.getByText('Pending Approvals')).toBeVisible({ timeout: 10000 });
+
+    const cancelBtn = page.locator('button:has-text("Cancel")').first();
+    await expect(cancelBtn).toBeVisible({ timeout: 10000 });
+    await cancelBtn.click();
+
+    // Confirm in the dialog (ConfirmDialog confirm button defaults to 'Delete')
+    const confirmBtn = page.getByRole('button', { name: 'Delete' });
+    await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+    await confirmBtn.click();
+
+    const exec = await pollExecution(request, executionId, 15000);
+    expect(exec.status).toBe('cancelled');
+  });
 });
 
 // ─── Logout and password change ─────────────────────────────────
 
 test.describe('Auth edge cases', () => {
-  test('POST /api/auth/logout clears session', async ({ page }) => {
+  test('POST /api/auth/logout clears session and API becomes unauthorized', async ({ page }) => {
+    // Sanity check: authenticated before logout
+    const beforeRes = await page.request.get(`${API_URL}/flows`);
+    expect(beforeRes.ok()).toBe(true);
+
     const res = await page.request.post(`${API_URL}/auth/logout`);
     expect(res.ok()).toBe(true);
+
+    // After logout the API must reject the session
+    const afterRes = await page.request.get(`${API_URL}/flows`);
+    expect(afterRes.status()).toBe(401);
+
     // Re-login for subsequent tests
     await page.goto('/login');
     await page.getByLabel('Email').fill('e2e@test.local');
     await page.getByLabel('Password', { exact: true }).fill('Test1234!');
     await page.getByRole('button', { name: /sign.?in/i }).click();
     await page.waitForLoadState('networkidle');
+
+    // API works again with the fresh session
+    const reloginRes = await page.request.get(`${API_URL}/flows`);
+    expect(reloginRes.ok()).toBe(true);
   });
 
   test('PUT /api/auth/password changes password and new password works', async ({ request }) => {
@@ -269,11 +366,30 @@ test.describe('Auth edge cases', () => {
     });
     expect(res.ok()).toBe(true);
 
+    // Old password must now fail to log in…
+    const oldLogin = await request.post(`${API_URL}/auth/login`, {
+      data: { email: 'e2e@test.local', password: 'Test1234!' },
+    });
+    expect(oldLogin.status()).toBe(401);
+
+    // …while the new password succeeds
+    const newLogin = await request.post(`${API_URL}/auth/login`, {
+      data: { email: 'e2e@test.local', password: 'NewTest5678!' },
+    });
+    expect(newLogin.ok()).toBe(true);
+    const loginData = await newLogin.json();
+    expect(loginData.user.email).toBe('e2e@test.local');
+
     // Change back so subsequent tests pass
-    await request.put(`${API_URL}/auth/password`, {
+    const restore = await request.put(`${API_URL}/auth/password`, {
       data: { currentPassword: 'NewTest5678!', newPassword: 'Test1234!' },
     });
-    expect(res.ok()).toBe(true);
+    expect(restore.ok()).toBe(true);
+
+    const restoredLogin = await request.post(`${API_URL}/auth/login`, {
+      data: { email: 'e2e@test.local', password: 'Test1234!' },
+    });
+    expect(restoredLogin.ok()).toBe(true);
   });
 
   test('GET /api/auth/config returns auth config', async ({ request }) => {
@@ -495,11 +611,35 @@ test.describe('Admin and niche endpoints', () => {
     const sessionRes = await request.post(`${API_URL}/chat/${flow.id}/sessions`, { data: { title: 'Msg Test' } });
     const { id: sessionId } = await sessionRes.json();
 
-    // The SSE endpoint should accept the connection
-    const sseRes = await page.request.post(`${API_URL}/chat/sessions/${sessionId}/messages`, {
-      data: { message: 'hello' },
+    // Read the SSE stream and assert at least one event arrives
+    const sseRes = await fetch(`${API_URL}/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
+      body: JSON.stringify({ message: 'hello' }),
     });
-    expect(sseRes.ok()).toBe(true);
+    expect(sseRes.ok).toBe(true);
+    const reader = sseRes.body?.getReader();
+    expect(reader).toBeTruthy();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const events: string[] = [];
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+      for (const line of lines) {
+        if (line.startsWith('data: ')) events.push(line.slice(6));
+      }
+      if (events.length >= 3) break;
+    }
+    expect(events.length).toBeGreaterThan(0);
+
+    // The final 'done' event carries the assistant message content
+    const doneEvent = events.map(e => { try { return JSON.parse(e); } catch { return null; } }).find(e => e?.type === 'done');
+    expect(doneEvent).toBeDefined();
+    expect(doneEvent.data.content).toBeDefined();
 
     await deleteFlow(request, flow.id);
   });

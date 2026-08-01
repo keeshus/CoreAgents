@@ -353,4 +353,214 @@ const cleanupFlowIds: string[] = [];
     await expect(page.getByText('Group-Assigned').first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Agent Context CRUD via UI ─────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('edit an agent context via UI', async ({ page, request }) => {
+    const origTitle = `Edit-Me-Context-${Date.now()}`;
+    const newTitle = `Renamed-Context-${Date.now()}`;
+    // Create a context via API, then edit it in the Agent Contexts tab
+    const ctxRes = await request.post(`${API_URL}/agent-contexts`, {
+      data: { title: origTitle, description: 'Original desc', content: 'Original content.' },
+    });
+    expect(ctxRes.status()).toBe(201);
+    const ctx = await ctxRes.json();
+    cleanupContextIds.push(ctx.id);
+
+    await page.goto('/');
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: 'Agent Contexts' }).click();
+    await expect(page.getByText(origTitle).first()).toBeVisible({ timeout: 5000 });
+
+    // Click the edit icon button on the context card
+    const card = page.locator('div.bg-surface.rounded-lg.border.p-4').filter({ hasText: origTitle }).first();
+    await card
+      .locator('button')
+      .filter({ has: page.locator('span.material-symbols-outlined', { hasText: 'edit' }) })
+      .click();
+
+    // The form opens with the title prefilled
+    await expect(page.getByLabel('Title')).toHaveValue(origTitle);
+    await page.getByLabel('Title').fill(newTitle);
+
+    // Save via the Update button
+    await page.locator('button.m3-button').filter({ hasText: 'Update' }).click();
+    await expect(page.getByText(newTitle).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(origTitle)).not.toBeVisible({ timeout: 5000 });
+
+    // Backend reflects the rename
+    const getRes = await request.get(`${API_URL}/agent-contexts/${ctx.id}`);
+    expect(getRes.status()).toBe(200);
+    const updated = await getRes.json();
+    expect(updated.title).toBe(newTitle);
+  });
+
+  test('delete an agent context via UI', async ({ page, request }) => {
+    const title = `Delete-Me-Context-${Date.now()}`;
+    const ctxRes = await request.post(`${API_URL}/agent-contexts`, {
+      data: { title, content: 'Will be removed.' },
+    });
+    expect(ctxRes.status()).toBe(201);
+    const ctx = await ctxRes.json();
+
+    await page.goto('/');
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: 'Agent Contexts' }).click();
+    await expect(page.getByText(title).first()).toBeVisible({ timeout: 5000 });
+
+    // Click the delete icon button on the context card
+    const card = page.locator('div.bg-surface.rounded-lg.border.p-4').filter({ hasText: title }).first();
+    await card
+      .locator('button')
+      .filter({ has: page.locator('span.material-symbols-outlined', { hasText: 'delete' }) })
+      .click();
+
+    // Confirm in the dialog
+    await expect(page.getByText('Delete context?')).toBeVisible();
+    await page.getByRole('button', { name: 'Delete' }).click();
+
+    // The context disappears from the list
+    await expect(page.getByText(title)).not.toBeVisible({ timeout: 5000 });
+
+    // Backend reflects the deletion
+    const getRes = await request.get(`${API_URL}/agent-contexts/${ctx.id}`);
+    expect(getRes.status()).toBe(404);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Agent Context checkbox persistence in LLM config ───────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('agent context checkbox persists across save and reload', async ({ page, request }) => {
+    const ctxTitle = `Persist-Ctx-${Date.now()}`;
+    // Create an agent context
+    const ctxRes = await request.post(`${API_URL}/agent-contexts`, {
+      data: { title: ctxTitle, description: 'Persistence test', content: 'Persisted content.' },
+    });
+    expect(ctxRes.status()).toBe(201);
+    const ctx = await ctxRes.json();
+    cleanupContextIds.push(ctx.id);
+
+    const flowRes = await createFlow(request, { name: uniqueFlowName('AC-Persist-Test') });
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    // Add an LLM Agent node
+    await page.getByTestId('add-node-btn').click();
+    await page.getByTestId('catalog-llm-agent').click();
+
+    // Open the LLM Agent config
+    await page.getByText('LLM Agent').first().click();
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+
+    // Check the context checkbox
+    const checkbox = page
+      .locator('label')
+      .filter({ hasText: ctxTitle })
+      .locator('input[type="checkbox"]')
+      .first();
+    await expect(checkbox).toBeVisible({ timeout: 5000 });
+    await expect(checkbox).not.toBeChecked();
+    await checkbox.check();
+    await expect(checkbox).toBeChecked();
+
+    // Close the node config modal (Radix Dialog hides the rest of the page,
+    // which would make the editor Save button inaccessible to role queries)
+    await page.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByTestId('node-config-modal')).not.toBeVisible();
+
+    // Save the flow via the editor Save button and wait for the backend PUT
+    const saveResponse = page.waitForResponse(
+      (resp) => resp.url().includes(`/api/flows/${flow.id}`) && resp.request().method() === 'PUT',
+      { timeout: 10000 },
+    );
+    await page.getByRole('button', { name: 'Save' }).click();
+    await saveResponse;
+
+    // Backend received the contextIds
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.status()).toBe(200);
+    const savedFlow = await getRes.json();
+    const llmNode = savedFlow.nodes.find((n: any) => n.data?.type === 'llm-agent');
+    expect(llmNode).toBeDefined();
+    expect(llmNode.data.config.contextIds).toContain(ctx.id);
+
+    // Reload the editor and reopen the LLM Agent config — the checkbox must still be checked
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+    await page.getByText('LLM Agent').first().click();
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    const checkboxAfter = page
+      .locator('label')
+      .filter({ hasText: ctxTitle })
+      .locator('input[type="checkbox"]')
+      .first();
+    await expect(checkboxAfter).toBeChecked({ timeout: 5000 });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Context layering in chat flows ─────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('chat flow injects attached agent context into the system prompt', async ({ page, request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    // Create an agent context
+    const ctxRes = await request.post(`${API_URL}/agent-contexts`, {
+      data: { title: 'Chat-Flow-Ctx', content: 'Chat contexts give the assistant its expertise.' },
+    });
+    expect(ctxRes.status()).toBe(201);
+    const agentCtx = await ctxRes.json();
+    cleanupContextIds.push(agentCtx.id);
+
+    // Create a chat flow with the context attached to the LLM agent node
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Chat-Context-Test'),
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'chat' } } },
+          {
+            id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 },
+            data: {
+              label: 'Assistant',
+              type: 'llm-agent',
+              config: {
+                endpointId: mockEndpointId, model: 'mock-gpt-4',
+                systemPrompt: 'ECHO_SYSTEM_PROMPT\nYou are a helpful chat assistant.',
+                temperature: 0.7, maxTokens: 1024, responseFormat: 'text',
+                contextIds: [agentCtx.id],
+              },
+            },
+          },
+          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Assistant.content'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+          { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        ],
+      },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'hello' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+
+    // The mock LLM echoed the full system prompt — the chat flow must include the attached context
+    expect(outputStr).toContain('Chat-Flow-Ctx');
+    expect(outputStr).toContain('Chat contexts give the assistant its expertise.');
+    expect(outputStr).toContain('You are a helpful chat assistant.');
+  });
 });

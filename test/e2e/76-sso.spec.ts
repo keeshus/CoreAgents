@@ -192,4 +192,106 @@ test.describe('SSO with mock OIDC', () => {
 
     await request.delete(`${API_URL}/users/${userId}`).catch(() => {});
   });
+
+  // ─── Logout ─────────────────────────────────────────────
+
+  test('SSO logout via UI clears the session and redirects to /login', async ({ page, request }) => {
+    await page.goto('/login');
+    await page.getByText('Sign in with SSO').click();
+    await expect(page).toHaveURL(/localhost:3004\/dex/);
+    await expect(page.locator('#login')).toBeVisible({ timeout: 10000 });
+    await page.locator('#login').fill('admin@mock.local');
+    await page.locator('#password').fill('password');
+    await page.locator('#submit-login').click();
+    await expect(page).toHaveURL(/localhost:3000/);
+
+    // Session is active as the SSO admin
+    const me = await (await page.request.get(`${API_URL}/auth/me`)).json();
+    expect(me.user?.role).toBe('admin');
+    const userId = me.user?.userId;
+
+    // Sign out through the header
+    await page.getByRole('button', { name: 'Sign Out' }).click();
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    await expect(page.getByLabel('Email')).toBeVisible({ timeout: 5000 });
+
+    // No session left behind
+    const afterRes = await page.request.get(`${API_URL}/auth/me`);
+    expect(afterRes.status()).toBe(401);
+
+    await request.delete(`${API_URL}/users/${userId}`).catch(() => {});
+  });
+
+  // ─── SSO settings page UI ───────────────────────────────
+
+  test('SSO settings page reflects saved config and can be edited via UI', async ({ page, request }) => {
+    await page.goto('/settings/sso');
+    await expect(page.getByRole('heading', { name: 'SSO / OIDC Configuration' })).toBeVisible({ timeout: 10000 });
+
+    // Form reflects the config saved in beforeEach
+    await expect(page.getByLabel('Provider name')).toHaveValue('mock-oidc', { timeout: 5000 });
+    await expect(page.getByLabel('Client ID')).toHaveValue('core-agents');
+    await expect(page.getByLabel('Issuer URL')).toHaveValue('http://mock-oidc-e2e:3004/dex');
+    await expect(page.getByLabel('Redirect URI')).toHaveValue('http://localhost:3001/api/auth/sso/callback');
+    await expect(page.getByLabel('Group claim name')).toHaveValue('groups');
+    await expect(page.getByLabel('Admin group mapping')).toHaveValue('core-agents-admin');
+    await expect(page.getByLabel('Editor group mapping')).toHaveValue('core-agents-editor');
+    await expect(page.getByText('Enable SSO')).toBeVisible();
+
+    // Edit via UI and save
+    await page.getByLabel('Provider name').fill('mock-oidc-edited');
+    await page.getByLabel('Admin group mapping').fill('core-agents-admin, extra-admin-group');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page.getByText('SSO configuration saved')).toBeVisible({ timeout: 5000 });
+
+    // API reflects the UI edits
+    const res = await request.get(`${API_URL}/admin/sso-config`);
+    expect(res.ok()).toBe(true);
+    const config = await res.json();
+    expect(config.provider).toBe('mock-oidc-edited');
+    expect(config.adminGroupMapping).toEqual(['core-agents-admin', 'extra-admin-group']);
+    expect(config.editorGroupMapping).toEqual(['core-agents-editor']);
+
+    // Restore the original values for subsequent tests
+    await request.put(`${API_URL}/admin/sso-config`, {
+      data: { provider: 'mock-oidc', adminGroupMapping: ['core-agents-admin'], editorGroupMapping: ['core-agents-editor'] },
+    });
+  });
+
+  // ─── IdP failure paths ──────────────────────────────────
+
+  test('SSO login with wrong IdP credentials shows error from provider', async ({ page }) => {
+    await page.goto('/login');
+    await page.getByText('Sign in with SSO').click();
+    await expect(page).toHaveURL(/localhost:3004\/dex/);
+    await expect(page.locator('#login')).toBeVisible({ timeout: 10000 });
+
+    await page.locator('#login').fill('admin@mock.local');
+    await page.locator('#password').fill('wrong-password');
+    await page.locator('#submit-login').click();
+
+    // The mock IdP rejects the credentials — no redirect back to the app
+    await expect(page.getByText('Invalid credentials')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('SSO login fails cleanly when issuer is unreachable', async ({ request, page }) => {
+    // Point SSO at a non-existent issuer path → OIDC discovery fails
+    await request.put(`${API_URL}/admin/sso-config`, {
+      data: { issuer: 'http://mock-oidc-e2e:3004/nonexistent' },
+    });
+
+    const res = await request.get(`${API_URL}/auth/sso/login`);
+    expect(res.status()).toBe(500);
+    const body = await res.json();
+    expect(body.error).toContain('Failed to initiate SSO login');
+
+    // Login page still renders and offers local sign-in
+    await page.goto('/login');
+    await expect(page.getByLabel('Email')).toBeVisible({ timeout: 10000 });
+
+    // Restore the working issuer
+    await request.put(`${API_URL}/admin/sso-config`, {
+      data: { issuer: 'http://mock-oidc-e2e:3004/dex' },
+    });
+  });
 });

@@ -39,6 +39,7 @@ test.describe('Flow Tool node', () => {
 
 test.describe('Flow Tool config', () => {
   let webhookFlowId: string;
+  let webhookFlowName: string;
   let flowId: string;
 
   test.beforeEach(async ({ page, request }) => {
@@ -61,6 +62,7 @@ test.describe('Flow Tool config', () => {
     });
     const webhookFlow = await webhookRes.json();
     webhookFlowId = webhookFlow.id;
+    webhookFlowName = webhookFlow.name;
 
     // Create the main flow with a Flow Tool node
     const res = await createFlow(request, {
@@ -86,7 +88,83 @@ test.describe('Flow Tool config', () => {
     const modal = page.getByTestId('node-config-modal');
     await expect(modal).toBeVisible({ timeout: 5000 });
     // The webhook flow should appear in the list
-    await     await expect(modal.getByText(/WeatherAPI-/)).toBeVisible({ timeout: 5000 });
+    await expect(modal.getByText(webhookFlowName, { exact: true })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('excludes non-webhook flows from the flow-tool picker', async ({ page, request }) => {
+    // Create a manual-trigger flow — it must NOT show up in the picker
+    const manualRes = await createFlow(request, {
+      name: uniqueFlowName('PickerManual'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Manual', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const manualFlow = await manualRes.json();
+    const manualName = manualFlow.name;
+
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('.react-flow__node').first().click();
+    const modal = page.getByTestId('node-config-modal');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    // The webhook flow (created in beforeEach) is listed...
+    await expect(modal.getByText(webhookFlowName, { exact: true })).toBeVisible({ timeout: 5000 });
+    // ...but the manual flow is excluded entirely
+    await expect(modal.getByText(manualName, { exact: true })).toHaveCount(0);
+    // Exactly one checkbox = exactly one webhook flow in the list
+    await expect(modal.locator('input[type="checkbox"]')).toHaveCount(1);
+
+    await deleteFlow(request, manualFlow.id);
+  });
+
+  test('flow-tool selection persists after save and reload', async ({ page, request }) => {
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('.react-flow__node').first().click();
+    const modal = page.getByTestId('node-config-modal');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    // Select the webhook flow
+    const checkbox = modal.locator('input[type="checkbox"]').first();
+    await checkbox.check();
+    await expect(modal.getByText(/1 flow selected/)).toBeVisible({ timeout: 3000 });
+
+    // Close the modal, then save via the editor, then reload the page
+    await modal.getByRole('button', { name: 'Close' }).click();
+    await expect(modal).not.toBeVisible();
+    // The Save button can silently no-op when its async name-check closure
+    // goes stale (app quirk) — retry the click until the API reflects it
+    await expect.poll(async () => {
+      const btn = page.getByRole('button', { name: 'Save' });
+      if (await btn.isEnabled().catch(() => false)) {
+        await btn.click({ timeout: 2000 }).catch(() => {});
+      }
+      await page.waitForTimeout(400);
+      const res = await page.request.get(`${API_URL}/flows/${flowId}`);
+      if (!res.ok()) return -1;
+      const flow = await res.json();
+      const ft = flow.nodes.find((n: any) => n.data?.type === 'flow-tool');
+      return ft?.data?.config?.flowIds?.includes(webhookFlowId) ? 1 : 0;
+    }, { timeout: 20000, message: 'save should persist the flow-tool selection' }).toBe(1);
+    await page.goto(`/flows/${flowId}/edit`);
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+
+    // Reopen the config — the selection must still be checked
+    await page.locator('.react-flow__node').first().click();
+    const modal2 = page.getByTestId('node-config-modal');
+    await expect(modal2).toBeVisible({ timeout: 5000 });
+    await expect(modal2.getByText(webhookFlowName, { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(modal2.locator('input[type="checkbox"]').first()).toBeChecked();
+    await expect(modal2.getByText(/1 flow selected/)).toBeVisible({ timeout: 3000 });
+
+    // And the flow-tool node config on the server carries the selection
+    const savedRes = await request.get(`${API_URL}/flows/${flowId}`);
+    expect(savedRes.ok()).toBe(true);
+    const saved = await savedRes.json();
+    const ftNode = saved.nodes.find((n: any) => n.data?.type === 'flow-tool');
+    expect(ftNode.data?.config?.flowIds).toContain(webhookFlowId);
+    expect(ftNode.data?.config?.selectedFlows?.length).toBe(1);
   });
 
   test('allows selecting a webhook flow', async ({ page }) => {
@@ -381,7 +459,6 @@ test.describe('Flow Tool execution', () => {
 
   test('Flow Tool execution emits step events for LLM and output', async ({ request }) => {
     test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
-
     const slug = 'echo_tool';
     const webhookRes = await createFlow(request, {
       name: 'Echo Tool',
@@ -526,5 +603,78 @@ test.describe('Flow Tool execution', () => {
     // Flow Tool node should be skipped (no DAG step)
     const ftStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'ft1');
     expect(ftStep).toBeUndefined();
+  });
+
+  test('surfaces a failing webhook flow tool call to the LLM (not silent)', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    // Webhook flow that errors at runtime: a code node configured with an
+    // unsupported language throws in-process, which is a real tool failure.
+    const slug = 'broken_tool';
+    const brokenRes = await createFlow(request, {
+      name: 'Broken Tool',
+      description: 'Always fails',
+      nodes: [
+        { id: 'w1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook', inputSchema: INPUT_SCHEMA } } },
+        { id: 'w2', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Py', type: 'code', config: { language: 'python', code: 'print("hi")' } } },
+        { id: 'w3', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: ['Py.result'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 'w1', sourceHandle: 'output-0', target: 'w2', targetHandle: 'input-0' },
+        { id: 'e2', source: 'w2', sourceHandle: 'output-0', target: 'w3', targetHandle: 'input-0' },
+      ],
+    });
+    const brokenFlow = await brokenRes.json();
+    webhookFlowIds.push(brokenFlow.id);
+
+    const mainRes = await createFlow(request, {
+      name: uniqueFlowName('BrokenToolMain'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        {
+          id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 },
+          data: {
+            label: 'LLM Agent',
+            type: 'llm-agent',
+            config: {
+              endpointId: mockEndpointId,
+              model: 'mock-gpt-4',
+              systemPrompt: `MOCK_TOOL_CALL: flow_${slug} {"message":"boom"} MOCK_RESPONSE: "Recovered after failure."`,
+              temperature: 0.7,
+              maxTokens: 256,
+              responseFormat: 'text',
+            },
+          },
+        },
+        { id: 'ft1', type: 'flow-tool', position: { x: 150, y: 200 }, data: { label: 'Flow Tool', type: 'flow-tool', config: { flowIds: [brokenFlow.id], selectedFlows: [{ id: brokenFlow.id, name: 'Broken Tool' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['llm_agent.content'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'ft1', sourceHandle: 'tool-output', target: 'l1', targetHandle: 'tool-input' },
+      ],
+    });
+    const mainFlow = await mainRes.json();
+    mainFlowIds.push(mainFlow.id);
+
+    const events = await debugExecute(mainFlow.id, { message: 'go' }, cookie);
+
+    // The tool failure is NOT silent: the flow-tool call log carries the error
+    const toolLog = events.find(e => e.type === 'log' && e.data?.toolCall === `flow_${slug}`);
+    expect(toolLog).toBeDefined();
+    const toolResult = JSON.parse(toolLog!.data?.toolResult || '{}');
+    expect(toolResult.status).toBe('failed');
+    expect(toolResult.error).toContain('unsupported language');
+
+    // The sub-execution reports the failure as well
+    const subFailed = events.find(e => e.type === 'subflow.failed');
+    expect(subFailed).toBeDefined();
+    expect(subFailed!.data?.error).toContain('unsupported language');
+
+    // The LLM receives the failure as a tool result and completes with its response
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.output?.l1?.content || '').toContain('Recovered after failure');
   });
 });

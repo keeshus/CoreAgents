@@ -5,6 +5,28 @@ import { getAuthCookie } from './helpers/auth';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
+// ── Local helpers (spec-scoped, no shared helper changes) ─────────
+
+// The mock CyberArk container is only reachable from the worker via its
+// internal hostname; the auth endpoint (which mints tokens) is also exposed
+// on the host at backendPort + 4 (see test/run-e2e-parallel.sh port table).
+const MOCK_CYBERARK_INTERNAL = 'http://mock-cyberark-e2e:3005';
+const CYBERARK_LOGIN = 'host%2Fmyapp';
+const CYBERARK_API_KEY = 'myapp-api-key-456';
+
+/** Mint a valid CyberArk token via the mock's auth endpoint. */
+async function mintCyberArkToken(): Promise<string> {
+  const backendUrl = new URL(API_URL);
+  const cyberarkBase = `http://localhost:${Number(backendUrl.port) + 4}`;
+  const res = await fetch(`${cyberarkBase}/api/authn/dev/${CYBERARK_LOGIN}/authenticate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: CYBERARK_API_KEY,
+  });
+  if (!res.ok) throw new Error(`CyberArk token mint failed: ${res.status}`);
+  return (await res.text()).trim();
+}
+
 test.describe('All node types', () => {
   let mockEndpointId: string | null = null;
 
@@ -206,6 +228,58 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
+  test('switch node matches numeric field values via string coercion', async ({ request }) => {
+    const name = uniqueFlowName('SwitchNumericTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 's1', type: 'switch', position: { x: 300, y: 0 }, data: { label: 'Router', type: 'switch', config: { fieldPath: 't1.quantity', cases: [{ value: '42', label: '42' }, { value: '7', label: '7' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Router.caseValue'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' },
+        { id: 'e2', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    // Field value 42 arrives as a number; the switch stringifies it (String(42) === "42")
+    // and matches the string case value — this is the real coercion behavior.
+    const events = await debugExecute(flow.id, { quantity: 42 }, cookie);
+    const switchStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 's1');
+    expect(switchStep).toBeDefined();
+    expect(switchStep!.data?.output?.caseIndex).toBe(0);
+    expect(switchStep!.data?.output?.caseValue).toBe('42');
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('switch node does not match numeric case values (strict equality on stringified field)', async ({ request }) => {
+    const name = uniqueFlowName('SwitchNumericCaseTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 's1', type: 'switch', position: { x: 300, y: 0 }, data: { label: 'Router', type: 'switch', config: { fieldPath: 't1.quantity', cases: [{ value: 42, label: '42' }] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Router.caseValue'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 's1', targetHandle: 'input-0' },
+        { id: 'e2', source: 's1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    // Case value is a JSON number (42); the field is stringified to "42", and
+    // 42 === "42" is false, so no case matches and the flow fails. Case values
+    // must be strings — pin this strict-equality behavior.
+    const events = await debugExecute(flow.id, { quantity: 42 }, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('does not match any case');
+    await deleteFlow(request, flow.id);
+  });
+
   test('switch node fails when fieldPath is empty', async ({ request }) => {
     const name = uniqueFlowName('SwitchNoFieldTest');
     const res = await createFlow(request, {
@@ -317,6 +391,37 @@ test.describe('All node types', () => {
     // Parallel node output is stored under its slugified node label
     expect(output.p1?.SubA?.result).toBe('hello A');
     expect(output.p1?.SubB?.result).toBe('hello B');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('parallel node runs sub-nodes concurrently (2s each, well under 4s total)', async ({ request }) => {
+    const name = uniqueFlowName('ParallelConcTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'p1', type: 'parallel', position: { x: 300, y: 0 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'SubA', type: 'code', config: { code: 'const end = Date.now() + 2000; while (Date.now() < end) {} return { done: "A" };' } } }, { id: 's2', type: 'code', position: { x: 0, y: 100 }, data: { label: 'SubB', type: 'code', config: { code: 'const end = Date.now() + 2000; while (Date.now() < end) {} return { done: "B" };' } } }], subEdges: [] } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Parallel.SubA', 'Parallel.SubB'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'p1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'p1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    // Each sub-node busy-waits 2s. If executed sequentially the flow would take >= 4s;
+    // concurrency means both run in parallel and the total stays near ~2s.
+    const start = Date.now();
+    const events = await debugExecute(flow.id, { message: 'go' }, cookie);
+    const elapsedMs = Date.now() - start;
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const output = completed!.data?.output;
+    expect(output).toBeDefined();
+    expect(output.p1?.SubA?.done).toBe('A');
+    expect(output.p1?.SubB?.done).toBe('B');
+    expect(elapsedMs).toBeLessThan(4000);
+    expect(elapsedMs).toBeGreaterThanOrEqual(1500);
     await deleteFlow(request, flow.id);
   });
 
@@ -538,6 +643,44 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
+  test('map node passes field values through without type coercion', async ({ request }) => {
+    const name = uniqueFlowName('MapTypesTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'm1', type: 'map', position: { x: 300, y: 0 }, data: { label: 'M', type: 'map', config: { fields: [{ name: 'name', type: 'string', value: 't1.message' }, { name: 'count', type: 'number', value: 't1.quantity' }, { name: 'active', type: 'boolean', value: 't1.enabled' }], mode: 'replace' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'm1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    // The declared field types (string/number/boolean) are metadata only — values
+    // pass through untouched. A string "5" stays a string even for type "number".
+    const events = await debugExecute(flow.id, { message: 'hello', quantity: '5', enabled: true }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const output = completed!.data?.output?.m1;
+    expect(output?.name).toBe('hello');
+    expect(typeof output?.name).toBe('string');
+    expect(output?.count).toBe('5');
+    expect(typeof output?.count).toBe('string');
+    expect(output?.active).toBe(true);
+    expect(typeof output?.active).toBe('boolean');
+    // Real numbers and booleans are preserved as-is too
+    const events2 = await debugExecute(flow.id, { message: 'hello', quantity: 5, enabled: true }, cookie);
+    const completed2 = events2.find(e => e.type === 'execution.completed');
+    expect(completed2).toBeDefined();
+    const output2 = completed2!.data?.output?.m1;
+    expect(output2?.count).toBe(5);
+    expect(typeof output2?.count).toBe('number');
+    expect(output2?.active).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
   // ── Loop: edge cases ────────────────────────────────────────
 
   test('loop node with collectResults=false returns only count', async ({ request }) => {
@@ -617,7 +760,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'POST', url: 'http://backend-e2e:3001/api/health', body: '{"test":true}', headers: '{"Content-Type":"application/json"}', timeout: 5000 } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'POST', url: 'http://mock-llm-e2e:3002/v1/chat/completions', body: '{"test":true}', headers: '{"Content-Type":"application/json"}', timeout: 5000 } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
       ],
       edges: [
@@ -652,6 +795,66 @@ test.describe('All node types', () => {
     const events = await debugExecute(flow.id, {}, cookie);
     const failed = events.find(e => e.type === 'execution.failed');
     expect(failed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('http node expands upstream field templates in request headers', async ({ request }) => {
+    const name = uniqueFlowName('HttpHeaderUpstreamTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        // First call mints a CyberArk token via the mock auth endpoint (text/plain body)
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Token', type: 'http', config: { method: 'POST', url: `${MOCK_CYBERARK_INTERNAL}/api/authn/dev/${CYBERARK_LOGIN}/authenticate`, headers: '{"Content-Type":"text/plain"}', body: CYBERARK_API_KEY, timeout: 5000 } } },
+        // Second call uses the token from the first call's body in a header template
+        { id: 'h2', type: 'http', position: { x: 600, y: 0 }, data: { label: 'Fetch', type: 'http', config: { method: 'GET', url: `${MOCK_CYBERARK_INTERNAL}/api/secrets/dev/variable/prod%2Fdb%2Fpassword`, headers: '{"Authorization":"Token token=\\"{{input.Token.body}}\\""}', timeout: 5000 } } },
+        { id: 'o1', type: 'output', position: { x: 900, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: ['Fetch.status', 'Fetch.body'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'h2', targetHandle: 'input-0' },
+        { id: 'e3', source: 'h2', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const tokenStep = completed!.data?.output?.h1;
+    expect(tokenStep?.status).toBe(200);
+    // The mock returns the token as plain text — templating must have expanded it,
+    // otherwise the mock rejects the request with 401.
+    const fetchStep = completed!.data?.output?.h2;
+    expect(fetchStep?.status).toBe(200);
+    expect(fetchStep?.body).toBe('sup3r-s3cr3t-db-pass!');
+    await deleteFlow(request, flow.id);
+  });
+
+  test('http node expands {{env.*}} templates in request headers', async ({ request }) => {
+    // Mint a valid token first — the flow's {{env.CYB_TOKEN}} must expand to it,
+    // otherwise the mock's secret endpoint rejects the request with 401.
+    const token = await mintCyberArkToken();
+    const name = uniqueFlowName('HttpHeaderEnvTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetch', type: 'http', config: { method: 'GET', url: `${MOCK_CYBERARK_INTERNAL}/api/secrets/dev/variable/prod%2Fdb%2Fpassword`, headers: '{"Authorization":"Token token=\\"{{env.CYB_TOKEN}}\\""}', timeout: 5000 } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: ['Fetch.status', 'Fetch.body'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    // sandboxEnv is populated from the input's __env map
+    const events = await debugExecute(flow.id, { __env: { CYB_TOKEN: token } }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const fetchStep = completed!.data?.output?.h1;
+    expect(fetchStep?.status).toBe(200);
+    expect(fetchStep?.body).toBe('sup3r-s3cr3t-db-pass!');
     await deleteFlow(request, flow.id);
   });
 
@@ -696,6 +899,30 @@ test.describe('All node types', () => {
     const events = await debugExecute(flow.id, {}, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
+    await deleteFlow(request, flow.id);
+  });
+
+  test('delay node with future timestamp raises a pause error instead of waiting', async ({ request }) => {
+    const name = uniqueFlowName('DelayFutureTsTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'D', type: 'delay', config: { type: 'timestamp', timestamp: new Date(Date.now() + 3000).toISOString() } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'd1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'd1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    // Positive delays throw PauseExecutionError which has no resume path in the
+    // runner/SSE layer — the execution fails immediately with the pause message.
+    const events = await debugExecute(flow.id, {}, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('Paused: waiting for delay');
     await deleteFlow(request, flow.id);
   });
 

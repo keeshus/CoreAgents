@@ -234,21 +234,68 @@ return {
 
   // ── Edge connection on canvas ───────────────────────────────────
 
-  test('connect two nodes on the canvas', async ({ page, request }) => {
+  test('connect two nodes on the canvas by dragging between handles', async ({ page, request }) => {
     const name = uniqueFlowName('EdgeTest');
     const res = await createFlow(request, { name });
     const flow = await res.json();
     await page.goto(`/flows/${flow.id}/edit`);
     await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
 
+    // Add a trigger node and an output node from the catalog.
+    // The catalog panel is taller than the viewport, so its first/last items
+    // can sit outside the visible area — dispatch the click directly.
     await page.getByTestId('add-node-btn').click();
-    await page.getByTestId('catalog-trigger').click();
+    await expect(page.getByTestId('catalog-trigger')).toBeVisible({ timeout: 5000 });
+    await page.getByTestId('catalog-trigger').evaluate((el: any) => el.click());
     await page.getByTestId('add-node-btn').click();
-    await page.getByTestId('catalog-trigger').click();
-    await page.waitForTimeout(300);
+    await expect(page.getByTestId('catalog-output')).toBeVisible({ timeout: 5000 });
+    await page.getByTestId('catalog-output').evaluate((el: any) => el.click());
+    await page.waitForTimeout(500);
 
     const nodes = page.locator('.react-flow__node');
     await expect(nodes).toHaveCount(2, { timeout: 5000 });
+
+    // Real drag: source handle of the trigger -> input-0 handle of the output
+    // (the output node also has a feedback-input target handle — ignore it)
+    const sourceHandle = nodes.nth(0).locator('.react-flow__handle.source').first();
+    const targetHandle = nodes.nth(1).locator('.react-flow__handle.target[data-handleid="input-0"]');
+    await expect(sourceHandle).toBeVisible({ timeout: 5000 });
+    await expect(targetHandle).toBeVisible({ timeout: 5000 });
+
+    const sb = await sourceHandle.boundingBox();
+    const tb = await targetHandle.boundingBox();
+    expect(sb).toBeTruthy();
+    expect(tb).toBeTruthy();
+    await page.mouse.move(sb!.x + sb!.width / 2, sb!.y + sb!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(tb!.x + tb!.width / 2, tb!.y + tb!.height / 2, { steps: 15 });
+    await page.mouse.up();
+
+    // The edge must exist in the live canvas state
+    await expect
+      .poll(() => page.evaluate(() => ((window as any).__flowCanvasEdges || []).length), { timeout: 5000 })
+      .toBeGreaterThan(0);
+    const edgeInfo = await page.evaluate(() => {
+      const edges: any[] = (window as any).__flowCanvasEdges || [];
+      return { count: edges.length, first: edges[0] || null };
+    });
+    expect(edgeInfo.first).not.toBeNull();
+    expect(edgeInfo.first.sourceHandle).toBe('output-0');
+    expect(edgeInfo.first.targetHandle).toBe('input-0');
+
+    // Save the flow, then verify the edge is persisted via the API
+    const saveBtn = page.locator('button.m3-button').filter({ hasText: 'Save' }).filter({ hasNotText: 'Saving' }).first();
+    await saveBtn.click();
+    await expect(page.locator('button.m3-button').filter({ hasText: 'Saving' })).toHaveCount(0, { timeout: 10000 });
+
+    const savedRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    const saved = await savedRes.json();
+    expect(Array.isArray(saved.edges)).toBe(true);
+    expect(saved.edges.length).toBeGreaterThanOrEqual(1);
+    const savedEdge = saved.edges[0];
+    expect(savedEdge.sourceHandle).toBe('output-0');
+    expect(savedEdge.targetHandle).toBe('input-0');
+
     await deleteFlow(request, flow.id);
   });
 
@@ -294,15 +341,59 @@ return {
     await deleteFlow(request, flow.id);
   });
 
+  test('mcp tool node with a nonexistent serverId fails with a clear error', async ({ request }) => {
+    const name = uniqueFlowName('MCPMissing');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'm1', type: 'mcp-tool', position: { x: 300, y: 0 }, data: { label: 'MCP Tool', type: 'mcp-tool', config: { serverId: '00000000-0000-0000-0000-000000000000', toolName: 'echo', parameters: { message: 'hi' } } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['mcp_tool.result'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'm1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'm1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    const errorMsg = failed?.data?.error || '';
+    expect(errorMsg).toContain('not found');
+    expect(errorMsg).toContain('00000000-0000-0000-0000-000000000000');
+
+    // The mcp-tool step itself reports the failure
+    const failedStep = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'm1');
+    expect(failedStep).toBeDefined();
+
+    await deleteFlow(request, flow.id);
+  });
+
   // ── Retriever node ──────────────────────────────────────────────
 
-  test('retriever node executes against a Qdrant collection', async ({ request }) => {
+  test('retriever node executes against a collection and returns structured results', async ({ request }) => {
+    // Upload a document so the collection exists (postgres embeddings)
+    const upRes = await request.post(`${API_URL}/knowledge/upload`, {
+      data: {
+        name: 'Retriever Doc',
+        content: 'Retrieval is the process of finding relevant information for a query.',
+        collectionName: 'e2e-complex-retriever',
+      },
+    });
+    expect(upRes.ok()).toBe(true);
+    const uploaded = await upRes.json();
+    const docId = uploaded.id;
+    expect(uploaded.chunkCount).toBeGreaterThan(0);
+
     const name = uniqueFlowName('RetrieverTest');
     const flowRes = await createFlow(request, {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'r1', type: 'retriever', position: { x: 300, y: 0 }, data: { label: 'Retriever', type: 'retriever', config: { collectionName: 'default', topK: 3, minScore: 0 } } },
+        { id: 'r1', type: 'retriever', position: { x: 300, y: 0 }, data: { label: 'Retriever', type: 'retriever', config: { collectionName: 'e2e-complex-retriever', topK: 3, minScore: 0 } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['retriever.count'] } } },
       ],
       edges: [
@@ -313,15 +404,24 @@ return {
     const flow = await flowRes.json();
 
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(flow.id, { message: 'hello' }, cookie);
+    const events = await debugExecute(flow.id, { message: 'retrieval' }, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
     const output = completed?.data?.output || {};
     const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
-    // Retriever should return a count of documents (even if 0)
     expect(outputStr).toContain('count');
 
+    const retrieverOutput = typeof output === 'object' && output ? (output as any).r1 : {};
+    expect(retrieverOutput.query).toBe('retrieval');
+    expect(typeof retrieverOutput.count).toBe('number');
+    expect(Array.isArray(retrieverOutput.chunks)).toBe(true);
+    if (retrieverOutput.chunks.length > 0) {
+      expect(typeof retrieverOutput.chunks[0].text).toBe('string');
+      expect(typeof retrieverOutput.chunks[0].similarity).toBe('number');
+    }
+
     await deleteFlow(request, flow.id);
+    await request.delete(`${API_URL}/documents/${docId}`).catch(() => {});
   });
 
   // ── Feedback loops ─────────────────────────────────────────────
@@ -446,30 +546,45 @@ return {
 
   // ── Co-Pilot comprehensive test ─────────────────────────────────
 
-  test('co-pilot panel opens and accepts input', async ({ page }) => {
+  test('co-pilot panel sends a message and renders the mocked response', async ({ page, request }) => {
+    // Create a default LLM endpoint first so Co-Pilot has a model to call
+    const llmRes = await request.post(`${API_URL}/llm-endpoints`, {
+      data: {
+        name: 'E2E Co-Pilot LLM',
+        providerType: 'openai',
+        baseUrl: 'http://mock-llm-e2e:3002/v1',
+        apiKey: 'mock-key',
+        defaultModel: 'mock-gpt-4',
+        models: ['mock-gpt-4'],
+      },
+    });
+    expect(llmRes.ok()).toBe(true);
+    const ep = await llmRes.json();
+    const setDefault = await request.put(`${API_URL}/llm-endpoints/${ep.id}`, { data: { isDefault: true } });
+    expect(setDefault.ok()).toBe(true);
+
     await page.goto('/');
     await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
 
-    // Co-Pilot button: fixed bottom-right, bg-primary, no dark_mode icon
-    const coPilotBtn = page.locator('button.fixed.bottom-\\[.*\\]').filter({ has: page.locator('span:not(:has-text("dark_mode"))') }).first();
-    if (await coPilotBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await coPilotBtn.click();
-    }
-    // Also add a data-testid for reliability
-    const testIdBtn = page.locator('[data-testid="co-pilot-toggle"]');
-    if (await testIdBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await testIdBtn.click();
-    }
+    const toggleBtn = page.getByTestId('co-pilot-toggle');
+    await expect(toggleBtn).toBeVisible({ timeout: 10000 });
+    await toggleBtn.click();
 
-    await page.waitForTimeout(500);
-    // Check if a panel with textarea appeared
-    const panel = page.locator('[class*="panel"], [class*="sidebar"]').first();
-    if (await panel.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const input = panel.locator('textarea').first();
-      if (await input.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await input.fill('What page is this?');
-        await page.keyboard.press('Enter');
-      }
-    }
+    const textarea = page.getByPlaceholder('Ask anything...');
+    await expect(textarea).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('No endpoint')).toHaveCount(0);
+
+    const message = `co-pilot flow test ${Date.now()}`;
+    await textarea.fill(message);
+    await page.keyboard.press('Enter');
+
+    // User message renders as a conversation bubble (the textarea still holds
+    // the text, so match the last occurrence)…
+    await expect(page.getByText(message).last()).toBeVisible({ timeout: 5000 });
+    // …and the mock LLM echo streams into the panel
+    const response = page.getByText(/Mock response to: co-pilot flow test/).first();
+    await expect(response).toBeVisible({ timeout: 20000 });
+
+    await request.delete(`${API_URL}/llm-endpoints/${ep.id}`).catch(() => {});
   });
 });

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
 import { debugExecute } from './helpers/stream';
 import { getAuthCookie } from './helpers/auth';
+import { openNodeConfig } from './helpers/ui';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 const cookie = getAuthCookie() || undefined;
@@ -108,15 +109,15 @@ test.describe('Schedule trigger', () => {
     await deleteFlow(request, flow.id);
   });
 
-  test('schedule flow auto-executes via BullMQ cron', async ({ request }) => {
+  test('schedule flow fires on a real cron (sub-minute) and the execution completes', async ({ request }) => {
     test.setTimeout(120000);
-    const name = uniqueFlowName('ScheduleAuto');
+    const name = uniqueFlowName('ScheduleStrict');
     const res = await createFlow(request, {
       name,
       nodes: [
-        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Cron', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '* * * * *', inputMessage: '{"source":"cron"}' } } },
-        { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Mark', type: 'code', config: { code: 'return { scheduled: true, source: input.source || input.message };' } } },
-        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: ['mark.scheduled', 'mark.source'] } } },
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Cron', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '*/10 * * * * *', inputMessage: '{"source":"cron-strict"}' } } },
+        { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Mark', type: 'code', config: { code: 'return { scheduled: true, source: input.source || input.message || "none", received: input };' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: ['Mark.scheduled', 'Mark.source'] } } },
       ],
       edges: [
         { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
@@ -125,34 +126,133 @@ test.describe('Schedule trigger', () => {
     });
     const flow = await res.json();
 
-    // Wait for the cron (* * * * * fires at :00 each minute) to trigger
-    // Sleep until just past the next minute boundary + 15s for BullMQ to process
-    const now = new Date();
-    const msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 15000;
-    if (msToNextMin > 1000) await new Promise(r => setTimeout(r, Math.min(msToNextMin, 75000)));
+    // Strict wait: poll for a real cron-fired execution (no debug fallback).
+    // The 6-field cron fires every 10 seconds via the BullMQ repeatable job.
+    await expect.poll(async () => {
+      const listRes = await request.get(`${API_URL}/flows/${flow.id}/executions?limit=10`);
+      if (!listRes.ok()) return null;
+      const body = await listRes.json();
+      const list = body.data || [];
+      const scheduled = list.find((e: any) => e.input?.triggerType === 'schedule');
+      return scheduled ? scheduled.status : null;
+    }, {
+      timeout: 90000,
+      intervals: [2000],
+      message: 'No cron-fired execution appeared within 90s — the BullMQ repeatable job did not fire',
+    }).toBe('completed');
 
-    let found = false;
-    for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 1000));
-      const execRes = await request.get(`${API_URL}/flows/${flow.id}/executions`);
-      if (!execRes.ok()) continue;
-      const body = await execRes.json();
-      const execs = body.data || body;
-      if (!Array.isArray(execs)) continue;
-      const scheduled = execs.find((e: any) => e.input?.triggerType === 'schedule');
-      if (scheduled) {
-        found = true;
-        expect(scheduled.status).toBe('completed');
-        break;
-      }
-    }
+    // Fetch the fired execution and assert on the delivered input
+    const listRes = await request.get(`${API_URL}/flows/${flow.id}/executions?limit=10`);
+    const body = await listRes.json();
+    const scheduled = (body.data || []).find((e: any) => e.input?.triggerType === 'schedule');
+    expect(scheduled).toBeDefined();
+    expect(scheduled.status).toBe('completed');
+    expect(scheduled.input).toMatchObject({ triggerType: 'schedule' });
+    expect(scheduled.input.timestamp).toBeDefined();
 
-    if (!found) {
-      // BullMQ may not be available in all environments — verify the flow is at least valid
-      const events = await debugExecute(flow.id, { triggerType: 'schedule', timestamp: new Date().toISOString() }, cookie);
-      const completed = events.find(e => e.type === 'execution.completed');
-      expect(completed).toBeDefined();
-    }
+    // The code node echoed the exact input the worker delivered
+    const detailRes = await request.get(`${API_URL}/flows/${flow.id}/executions/${scheduled.id}`);
+    expect(detailRes.ok()).toBe(true);
+    const detail = await detailRes.json();
+    const mark = detail.output?.c1;
+    expect(mark?.scheduled).toBe(true);
+    expect(mark?.received).toMatchObject({ triggerType: 'schedule' });
+
+    await deleteFlow(request, flow.id);
+  });
+
+  test('cron expression and input message can be configured via the editor UI and persist', async ({ page, request }) => {
+    // Start from a manual flow and configure the schedule via the trigger panel
+    const name = uniqueFlowName('ScheduleUI');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Timer', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await res.json();
+    await page.goto(`/flows/${flow.id}/edit`);
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+
+    // Open the trigger config and switch to Schedule
+    await openNodeConfig(page, 'Timer');
+    await page.locator('[data-field-label="Trigger Type"]').click();
+    await page.getByRole('option', { name: 'Schedule' }).click();
+    await expect(page.getByLabel('Cron Expression')).toBeVisible({ timeout: 5000 });
+    await page.getByLabel('Cron Expression').fill('*/30 * * * * *');
+    await page.getByLabel('Input Message').fill('{"task":"ui-configured"}');
+
+    // Close the modal, then save via the editor
+    await page.getByTestId('node-config-modal').getByRole('button', { name: 'Close' }).click();
+    const saveResp = page.waitForResponse(r => r.url().includes(`/api/flows/${flow.id}`) && r.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await saveResp;
+
+    // Reload and reopen — values must be persisted
+    await page.goto(`/flows/${flow.id}/edit`);
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+    await openNodeConfig(page, 'Timer');
+    await expect(page.locator('[data-field-label="Trigger Type"]')).toContainText('Schedule');
+    await expect(page.getByLabel('Cron Expression')).toHaveValue('*/30 * * * * *');
+    await expect(page.getByLabel('Input Message')).toHaveValue('{"task":"ui-configured"}');
+
+    // Server-side check
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.ok()).toBe(true);
+    const saved = await getRes.json();
+    const trigger = saved.nodes.find((n: any) => n.data?.type === 'trigger');
+    expect(trigger.data?.config?.triggerType).toBe('schedule');
+    expect(trigger.data?.config?.cronExpression).toBe('*/30 * * * * *');
+    expect(trigger.data?.config?.inputMessage).toBe('{"task":"ui-configured"}');
+
+    await deleteFlow(request, flow.id);
+  });
+
+  test('schedule trigger converts to manual via the editor UI and persists', async ({ page, request }) => {
+    const name = uniqueFlowName('ScheduleToggleUI');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Timer', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '0 0 1 1 *', inputMessage: '{"task":"ui"}' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Out', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await res.json();
+    await page.goto(`/flows/${flow.id}/edit`);
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+
+    // The trigger panel shows the schedule config
+    await openNodeConfig(page, 'Timer');
+    await expect(page.locator('[data-field-label="Trigger Type"]')).toContainText('Schedule');
+    await expect(page.getByLabel('Cron Expression')).toBeVisible();
+
+    // Convert to manual via the trigger type select
+    await page.locator('[data-field-label="Trigger Type"]').click();
+    await page.getByRole('option', { name: 'Manual' }).click();
+    await expect(page.getByLabel('Input Message')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByLabel('Cron Expression')).toHaveCount(0);
+    await page.getByLabel('Input Message').fill('{"via":"ui"}');
+
+    // Close the modal, then save and reload
+    await page.getByTestId('node-config-modal').getByRole('button', { name: 'Close' }).click();
+    const saveResp = page.waitForResponse(r => r.url().includes(`/api/flows/${flow.id}`) && r.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await saveResp;
+    await page.goto(`/flows/${flow.id}/edit`);
+    await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+
+    // Manual is persisted — cron field is gone
+    await openNodeConfig(page, 'Timer');
+    await expect(page.locator('[data-field-label="Trigger Type"]')).toContainText('Manual');
+    await expect(page.getByLabel('Cron Expression')).toHaveCount(0);
+
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    const saved = await getRes.json();
+    const trigger = saved.nodes.find((n: any) => n.data?.type === 'trigger');
+    expect(trigger.data?.config?.triggerType).toBe('manual');
 
     await deleteFlow(request, flow.id);
   });
