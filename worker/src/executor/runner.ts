@@ -23,6 +23,20 @@ interface RunnerOptions {
   groupsTable?: any;
 }
 
+// Sandbox env comes exclusively from the flow's own env var configuration —
+// client-supplied __env must never reach the sandbox.
+function buildFlowSandboxEnv(flow: FlowDefinition): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (Array.isArray(flow.envVars)) {
+    for (const entry of flow.envVars) {
+      if (entry.type === 'static' || !entry.type) {
+        env[entry.name] = entry.value;
+      }
+    }
+  }
+  return env;
+}
+
 /**
  * Execute a flow with full lifecycle management:
  * - Persists steps to the DB
@@ -44,12 +58,15 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
     // Non-fatal — execution continues without sandbox
   });
 
+  // Client-supplied __env is untrusted — strip it defensively; only the flow's own env vars may reach the sandbox
+  const { __env: _clientEnv, ...safeInput } = (input || {}) as Record<string, unknown>;
+
   // Build execution context with context resolver support
   const executionContext: ExecutionContext = {
     flowNodes: flow.nodes,
     flowEdges: flow.edges,
     sandboxExecutionId: executionId,
-    sandboxEnv: (input as any)?.__env || {},
+    sandboxEnv: buildFlowSandboxEnv(flow),
     getGlobalContext: async () => {
       if (!options.agentStoreTable) return '';
       const [row] = await database.select().from(options.agentStoreTable).where(eqFn(options.agentStoreTable.key, 'global_context')).limit(1);
@@ -77,7 +94,7 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
   try {
     const result = await executor.execute(
       flow,
-      input,
+      safeInput,
       async (nodeId, event) => {
         const d = event.data;
         const nid = (d.nodeId as string) || nodeId;

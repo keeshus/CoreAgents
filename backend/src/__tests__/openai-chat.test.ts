@@ -57,7 +57,7 @@ function makeReq(overrides?: any) {
 }
 
 function makeRes() {
-  return { status: vi.fn().mockReturnThis(), json: vi.fn(), end: vi.fn() };
+  return { status: vi.fn().mockReturnThis(), json: vi.fn(), end: vi.fn(), setHeader: vi.fn() };
 }
 
 // ── Tests ─────────────────────────────────────────────────────
@@ -139,6 +139,32 @@ describe('openai-chat routes', () => {
 
       expect(next).toHaveBeenCalled();
       expect(req.chatFlowId).toBe('flow-1');
+    });
+
+    it('returns 429 with Retry-After when the per-key rate limit is exceeded', async () => {
+      const keyRow = { id: 'rl-key-1', flow_id: 'flow-1', enabled: true, key_hash: 'mocked-hash', expires_at: null, label: 'test' };
+      const deployRow = { flow_id: 'flow-1', enabled: true, model_name: 'gpt-4o', rate_limit: 1 };
+      db.select
+        .mockReturnValueOnce(mockChain([keyRow]))
+        .mockReturnValueOnce(mockChain([deployRow]));
+      db.update.mockReturnValue({ set: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue(undefined) });
+      const req = makeReq({ headers: { authorization: 'Bearer valid-key' } });
+      const res = makeRes();
+      const next = vi.fn();
+
+      const middleware = getMiddleware(router, 'post', '/v1/chat/completions', 0);
+      await middleware(req, res, next);
+      expect(next).toHaveBeenCalledTimes(1);
+
+      // Second request within the window → 429
+      db.select
+        .mockReturnValueOnce(mockChain([keyRow]))
+        .mockReturnValueOnce(mockChain([deployRow]));
+      await middleware(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Rate limit exceeded. Try again later.' });
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+      expect(next).toHaveBeenCalledTimes(1);
     });
   });
 });

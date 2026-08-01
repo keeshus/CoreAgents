@@ -4,6 +4,7 @@ import { db } from '../db/connection.js';
 import { flows, apiDeployments, executions } from '../db/schema.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { authenticateWebhookRequest, enforceWebhookRateLimit } from './webhook-security.js';
 import type { NodeData, FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
@@ -11,12 +12,13 @@ const router = Router();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // POST /api/webhook/:flowId — trigger a flow via webhook (UUID or slug)
-// Optionally pass ?secret=... for verification
+// Auth: X-Webhook-Secret header or Authorization: Bearer <wh_ API key or secret>.
+// ?secret=... is still accepted for backward compatibility, but the header is
+// preferred so the secret does not end up in logs/history.
 router.post(
   '/webhook/:flowId',
   asyncHandler(async (req, res) => {
     let flowId = req.params.flowId as string;
-    const providedSecret = (req.query.secret as string) || '';
 
     // If not a UUID, try resolving as a slug
     if (!UUID_RE.test(flowId)) {
@@ -41,10 +43,20 @@ router.post(
       return;
     }
 
-    // Verify webhook secret if configured
-    const secret = (triggerNode.data as any).config?.webhookSecret;
-    if (secret && secret !== providedSecret) {
-      res.status(401).json({ error: 'Invalid webhook secret' });
+    // Verify credentials (API key or webhook secret) — deployments without
+    // either configured are never publicly triggerable
+    const authError = await authenticateWebhookRequest(req, flowId, flow);
+    if (authError) {
+      res.status(authError.status).json({ error: authError.message });
+      return;
+    }
+
+    // Enforce per-deployment rate limit (keyed by slug, or flowId for UUID calls)
+    const [deployment] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1);
+    const retryAfter = enforceWebhookRateLimit(deployment?.path_slug || flowId, deployment?.rate_limit || 0);
+    if (retryAfter !== null) {
+      res.setHeader('Retry-After', String(retryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
       return;
     }
 

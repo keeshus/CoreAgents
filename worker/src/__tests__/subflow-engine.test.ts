@@ -11,6 +11,7 @@ vi.mock('../sandbox/sidecar-client.js', () => ({
   createSidecarClient: vi.fn(() => ({
     setup: vi.fn(),
     exec: vi.fn(async () => ({ stdout: 'mock', stderr: '', exitCode: 0 })),
+    eval: vi.fn(async () => ({ ok: true, result: true })),
     teardown: vi.fn(),
   })),
 }));

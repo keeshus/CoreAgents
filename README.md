@@ -87,7 +87,7 @@
 
 ### Prerequisites
 
-- **Node.js** 25+
+- **Node.js** 24+ (current LTS)
 - **Docker** + **Docker Compose**
 - An **API key** for at least one LLM provider
 
@@ -130,13 +130,14 @@ cd frontend && npm run dev
 ### Deployment
 
 ```bash
-# Docker Compose (all services)
-docker compose -f docker-compose.prod.yml up -d --build
-
-# Kubernetes
+# Kubernetes (recommended for production)
 helm install core-agents ./helm/core-agents \
+  --set dbPassword=change-me \
   --set anthropicApiKey=sk-ant-... \
   --set openaiApiKey=sk-...
+
+# Docker Compose (local/dev — infrastructure only)
+docker compose up -d --build
 ```
 
 ## 📖 Usage

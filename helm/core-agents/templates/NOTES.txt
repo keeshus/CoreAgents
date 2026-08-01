@@ -21,6 +21,11 @@ Database migrations run automatically via an init container on the backend pod.
 ⚠️  PostgreSQL is disabled. Set postgres.enabled=true or provide an external databaseUrl.
 {{- end }}
 
-{{- if not .Values.anthropicApiKey }}
+{{- if and .Values.postgres.enabled (not .Values.existingSecret) }}
+⚠️  dbPassword was provided at install time and is stored in the chart Secret.
+    Prefer the existingSecret pattern for production credentials.
+{{- end }}
+
+{{- if and (not .Values.anthropicApiKey) (not .Values.existingSecret) }}
 ⚠️  No Anthropic API key set. LLM endpoints using Anthropic will fail until configured.
 {{- end }}

@@ -30,8 +30,15 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-backend
     spec:
+      # Pod-level hardening: run as non-root, restrict to the default seccomp profile
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
         - name: flow-data
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
       initContainers:
         - name: migrate
@@ -44,21 +51,46 @@ spec:
               cd /app && node backend/dist/db/migrate.js
           envFrom:
             - secretRef:
-                name: {{ include "core-agents.fullname" . }}-secret
+                name: {{ include "core-agents.secretName" . }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: backend
           image: "{{ .Values.image.repository }}-backend:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.backend.port }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           env:
             - name: PORT
               value: {{ .Values.backend.port | quote }}
             - name: SIDECAR_URL
               value: "http://localhost:4001"
+            - name: SIDECAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.secretName" . }}
+                  key: sidecar-token
           envFrom:
             - secretRef:
-                name: {{ include "core-agents.fullname" . }}-secret
+                name: {{ include "core-agents.secretName" . }}
           readinessProbe:
             httpGet:
               path: /api/health
@@ -74,6 +106,12 @@ spec:
             - containerPort: 4001
               name: sidecar
           args: ["--ttl-hours=168"]
+          env:
+            - name: SIDECAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.secretName" . }}
+                  key: sidecar-token
           volumeMounts:
             - name: flow-data
               mountPath: /var/flow-data
@@ -81,7 +119,10 @@ spec:
             readOnlyRootFilesystem: true
             runAsUser: 1001
             runAsNonRoot: true
+            # SYS_ADMIN is REQUIRED by the Landlock sandbox (landlock-helper) —
+            # keep it, drop everything else.
             capabilities:
+              add: ["SYS_ADMIN"]
               drop: ["ALL"]
           resources:
             {{- toYaml .Values.sidecar.resources | nindent 12 }}

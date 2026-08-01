@@ -176,6 +176,7 @@ export interface HttpNodeData extends BaseNodeData {
     sslVerify?: boolean;
     hmacSecret?: string;
     hmacHeader?: string;
+    allowPrivate?: boolean;
   };
 }
 

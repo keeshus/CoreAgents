@@ -71,6 +71,10 @@ export function HttpConfig({ config, onChange }: HttpConfigProps) {
             <input type="checkbox" checked={config.sslVerify !== false} onChange={(e) => set('sslVerify', e.target.checked)} className="w-3 h-3 accent-primary" />
             <span className="text-xs text-on-surface-variant">Verify SSL</span>
           </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" checked={config.allowPrivate === true} onChange={(e) => set('allowPrivate', e.target.checked)} className="w-3 h-3 accent-primary" />
+            <span className="text-xs text-on-surface-variant">Allow private/internal addresses (SSRF risk)</span>
+          </div>
           <TextField label="HMAC Secret" value={config.hmacSecret || ''} onChange={(v) => set('hmacSecret', v)} type="password" placeholder="Optional HMAC signing secret" />
           <TextField label="HMAC Header" value={config.hmacHeader || ''} onChange={(v) => set('hmacHeader', v)} placeholder="X-Signature" />
         </div>

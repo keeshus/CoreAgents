@@ -102,6 +102,8 @@ describe('webhook-openapi routes', () => {
     db.select.mockReturnValue(mockChain([]));
     db.insert.mockReturnValue(mockChain());
     db.update.mockReturnValue(mockChain());
+    const { resetRateLimiters } = await import('../routes/webhook-security.js');
+    resetRateLimiters();
     const mod = await import('../routes/webhook-openapi.js');
     router = mod.default;
     req = {
@@ -117,6 +119,7 @@ describe('webhook-openapi routes', () => {
       json: vi.fn(),
       send: vi.fn(),
       end: vi.fn(),
+      setHeader: vi.fn(),
     };
   });
 
@@ -349,6 +352,132 @@ describe('webhook-openapi routes', () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Flow not found' });
+    });
+
+    it('authenticates with the X-Webhook-Secret header', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { 'x-webhook-secret': 'secret123' };
+      req.body = { amount: 100, currency: 'USD' };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const authFlowChain = mockChain([makeWebhookFlow()]);
+      const handlerFlowChain = mockChain([makeWebhookFlow()]);
+      const execChain = mockChain();
+      execChain.returning.mockResolvedValue([{ id: 'exec-1' }]);
+
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(authFlowChain)
+        .mockReturnValueOnce(handlerFlowChain);
+      db.insert.mockReturnValue(execChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(202);
+    });
+
+    it('authenticates with the secret in a non-wh_ Authorization Bearer token', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { authorization: 'Bearer secret123' };
+      req.body = { amount: 100, currency: 'USD' };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const authFlowChain = mockChain([makeWebhookFlow()]);
+      const handlerFlowChain = mockChain([makeWebhookFlow()]);
+      const execChain = mockChain();
+      execChain.returning.mockResolvedValue([{ id: 'exec-1' }]);
+
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(authFlowChain)
+        .mockReturnValueOnce(handlerFlowChain);
+      db.insert.mockReturnValue(execChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(202);
+    });
+
+    it('header secret is preferred over a mismatched query secret', async () => {
+      req.params = { slug: 'my-flow' };
+      req.headers = { 'x-webhook-secret': 'secret123' };
+      req.query = { secret: 'wrong-secret' };
+      req.body = { amount: 100, currency: 'USD' };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const authFlowChain = mockChain([makeWebhookFlow()]);
+      const handlerFlowChain = mockChain([makeWebhookFlow()]);
+      const execChain = mockChain();
+      execChain.returning.mockResolvedValue([{ id: 'exec-1' }]);
+
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(authFlowChain)
+        .mockReturnValueOnce(handlerFlowChain);
+      db.insert.mockReturnValue(execChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(202);
+    });
+
+    it('returns 401 asking to configure auth when the deployment has no secret and no API keys', async () => {
+      req.params = { slug: 'my-flow' };
+      req.body = { amount: 100 };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'my-flow' }]);
+      const authFlowChain = mockChain([makeWebhookFlow({
+        nodes: [{
+          id: 'trigger-1', type: 'trigger',
+          data: { type: 'trigger', config: { triggerType: 'webhook' } }, // no webhookSecret
+        }],
+      })]);
+      const keyChain = mockChain([]); // no API keys
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(authFlowChain)
+        .mockReturnValueOnce(keyChain);
+
+      const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('webhook secret or an API key') }),
+      );
+    });
+
+    it('returns 429 with Retry-After when the deployment rate limit is exceeded', async () => {
+      req.params = { slug: 'rl-flow' };
+      req.headers = { authorization: 'Bearer wh_testkey' };
+      req.body = { amount: 100, currency: 'USD' };
+
+      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'rl-flow', rate_limit: 1 }]);
+      const keyChain = mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]);
+      const flowChain = mockChain([makeWebhookFlow()]);
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain)
+        .mockReturnValueOnce(flowChain);
+      const execChain = mockChain();
+      execChain.returning.mockResolvedValue([{ id: 'exec-1' }]);
+      db.insert.mockReturnValue(execChain);
+
+      // First call passes and enqueues
+      await (async () => {
+        const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+      })();
+
+      // Second call within the window → 429 before any enqueue work
+      db.select
+        .mockReturnValueOnce(deployChain)
+        .mockReturnValueOnce(keyChain);
+      await (async () => {
+        const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+      })();
+
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Rate limit exceeded. Try again later.' });
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
     });
   });
 

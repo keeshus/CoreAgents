@@ -8,6 +8,18 @@ export interface ExecRequest {
   codeFileName?: string;
 }
 
+export interface EvalRequest {
+  executionId: string;
+  code: string;
+  input: unknown;
+}
+
+export interface EvalResponse {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
+
 export interface ExecResponse {
   stdout: string;
   stderr: string;
@@ -18,16 +30,24 @@ export interface ExecResponse {
 export interface SidecarClient {
   setup(executionId: string): Promise<void>;
   exec(request: ExecRequest): Promise<ExecResponse>;
+  eval(request: EvalRequest): Promise<EvalResponse>;
   teardown(executionId: string): Promise<void>;
 }
 
 export function createSidecarClient(sidecarUrl?: string): SidecarClient {
   const baseUrl = sidecarUrl ?? process.env.SIDECAR_URL ?? 'http://localhost:4001';
+  const token = process.env.SIDECAR_TOKEN;
 
   async function request(path: string, body: unknown): Promise<any> {
+    if (!token) {
+      throw new Error('SIDECAR_TOKEN environment variable is not set — refusing to call the sidecar without authentication');
+    }
     const response = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sidecar-token': token,
+      },
       body: JSON.stringify(body),
     });
     const data = await response.json();
@@ -45,6 +65,10 @@ export function createSidecarClient(sidecarUrl?: string): SidecarClient {
 
     async exec(requestBody: ExecRequest): Promise<ExecResponse> {
       return request('/exec', requestBody);
+    },
+
+    async eval(requestBody: EvalRequest): Promise<EvalResponse> {
+      return request('/eval', requestBody);
     },
 
     async teardown(executionId: string): Promise<void> {

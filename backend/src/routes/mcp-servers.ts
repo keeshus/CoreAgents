@@ -96,13 +96,18 @@ router.post(
       return;
     }
 
+    const isAdmin = req.user!.permissions.includes('admin');
     if (groupId) {
-      const isAdmin = req.user!.permissions?.includes('admin');
       const isGroupAdmin = await checkGroupAdmin(req.user!.userId, groupId);
       if (!isAdmin && !isGroupAdmin) {
         res.status(403).json({ error: 'Only group admins can create group-scoped MCP servers' });
         return;
       }
+    } else if (!isAdmin && !req.user!.permissions.includes('mcp:write')) {
+      // Users holding only group-scoped write permission must scope the
+      // server to a group they administer — no app-wide servers.
+      res.status(403).json({ error: 'groupId is required for group-scoped MCP server creation' });
+      return;
     }
 
     const result = await db

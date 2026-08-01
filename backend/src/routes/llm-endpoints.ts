@@ -113,13 +113,18 @@ router.post(
       return;
     }
 
+    const isAdmin = req.user!.permissions.includes('admin');
     if (groupId) {
-      const isAdmin = req.user!.permissions?.includes('admin');
       const isGroupAdmin = await checkGroupAdmin(req.user!.userId, groupId);
       if (!isAdmin && !isGroupAdmin) {
         res.status(403).json({ error: 'Only group admins can create group-scoped endpoints' });
         return;
       }
+    } else if (!isAdmin && !req.user!.permissions.includes('endpoint:write')) {
+      // Users holding only group-scoped write permission must scope the
+      // endpoint to a group they administer — no app-wide endpoints.
+      res.status(403).json({ error: 'groupId is required for group-scoped endpoint creation' });
+      return;
     }
 
     const result = await db

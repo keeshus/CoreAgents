@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { FlowExecutor, HitlPauseError, PauseExecutionError } from '../executor/engine.js';
 import type { FlowDefinition, FlowNode, FlowEdge } from 'core-agents-shared';
 import type { ExecutionContext } from '../executor/engine.js';
@@ -8,27 +8,36 @@ vi.mock('../providers/index.js', () => ({
   callLLM: vi.fn(() => Promise.resolve({ text: 'mock LLM response' })),
 }));
 
-// Mock bash tool to prevent sidecar HTTP calls — execute code via new Function
-vi.mock('../tools/bash.js', () => ({
-  executeCode: vi.fn((_client: any, _executionId: string, code: string, input: unknown) => {
-    return new Function('input', code)(input);
-  }),
-  executeBash: vi.fn(async () => 'mock bash result'),
-  BASH_TOOL_DEFINITION: {
-    name: 'bash',
-    description: 'Mock bash tool',
-    input_schema: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
-  },
-  BASH_SANDBOX_SYSTEM_PROMPT: '\nmock sandbox prompt\n',
-}));
+// Sidecar eval mock — records every condition payload sent to the sandbox
+const { mockEval } = vi.hoisted(() => ({ mockEval: vi.fn() }));
+const { mockDnsLookup } = vi.hoisted(() => ({ mockDnsLookup: vi.fn() }));
 
-// Mock sidecar client to prevent HTTP calls from bash tool handler
+// Mock bash tool to prevent sidecar HTTP calls for the code node; keep the real
+// evaluateCondition so condition nodes exercise the sidecar eval routing
+vi.mock('../tools/bash.js', async () => {
+  const actual = await vi.importActual('../tools/bash.js');
+  return {
+    ...actual,
+    executeCode: vi.fn((_client: any, _executionId: string, code: string, input: unknown) => {
+      return new Function('input', code)(input);
+    }),
+    executeBash: vi.fn(async () => 'mock bash result'),
+  };
+});
+
+// Mock sidecar client to prevent HTTP calls — eval records payloads instead of executing them
 vi.mock('../sandbox/sidecar-client.js', () => ({
   createSidecarClient: vi.fn(() => ({
     setup: vi.fn(async () => {}),
     exec: vi.fn(async () => ({ stdout: 'mocked', stderr: '', exitCode: 0 })),
+    eval: mockEval,
     teardown: vi.fn(async () => {}),
   })),
+}));
+
+// Mock DNS so SSRF validation never performs real lookups
+vi.mock('node:dns/promises', () => ({
+  lookup: mockDnsLookup,
 }));
 
 function makeNode(id: string, nodeType: string, overrides: Record<string, unknown> = {}): FlowNode {
@@ -77,6 +86,10 @@ describe('FlowExecutor', () => {
   beforeEach(() => {
     executor = new FlowExecutor();
     onEvent = vi.fn();
+    mockEval.mockReset();
+    mockEval.mockResolvedValue({ ok: true, result: true });
+    mockDnsLookup.mockReset();
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     context = {
       getEndpoint: vi.fn().mockResolvedValue({
         providerType: 'anthropic' as const,
@@ -507,9 +520,9 @@ describe('FlowExecutor', () => {
       );
       const result = await executor.execute(flow, {}, onEvent, context);
       expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/data', expect.objectContaining({ method: 'GET' }));
-      expect(result.output.http).toHaveProperty('status', 200);
-      expect(result.output.http).toHaveProperty('ok', true);
-      expect(result.output.http.body).toEqual({ data: 'ok' });
+      expect((result.output as any).http).toHaveProperty('status', 200);
+      expect((result.output as any).http).toHaveProperty('ok', true);
+      expect(((result.output as any).http).body).toEqual({ data: 'ok' });
     });
 
     it('executes POST request with body and headers', async () => {
@@ -532,7 +545,7 @@ describe('FlowExecutor', () => {
       expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/data', expect.objectContaining({
         method: 'POST', body: '{"name":"test"}',
       }));
-      expect(result.output.http).toHaveProperty('status', 201);
+      expect((result.output as any).http).toHaveProperty('status', 201);
     });
 
     it('executes PUT request', async () => {
@@ -589,7 +602,7 @@ describe('FlowExecutor', () => {
       );
       const result = await executor.execute(flow, {}, onEvent, context);
       expect(mockFetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'HEAD' }));
-      expect(result.output.http).toHaveProperty('status', 200);
+      expect((result.output as any).http).toHaveProperty('status', 200);
     });
 
     it('applies Basic auth headers', async () => {
@@ -671,7 +684,7 @@ describe('FlowExecutor', () => {
         [],
       );
       const result = await executor.execute(flow, {}, onEvent, context);
-      expect(result.output.http.body).toEqual({ user: 'alice', score: 42 });
+      expect(((result.output as any).http).body).toEqual({ user: 'alice', score: 42 });
     });
 
     it('returns raw text for non-JSON body', async () => {
@@ -685,7 +698,7 @@ describe('FlowExecutor', () => {
         [],
       );
       const result = await executor.execute(flow, {}, onEvent, context);
-      expect(result.output.http.body).toBe('plain text');
+      expect(((result.output as any).http).body).toBe('plain text');
     });
 
     it('throws when URL is empty', async () => {
@@ -704,6 +717,155 @@ describe('FlowExecutor', () => {
       await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('headers must be valid JSON');
     });
 
+    it('blocks requests to private IPs (SSRF)', async () => {
+      mockDnsLookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 }]);
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('private or restricted');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('blocks requests when any resolved IP is private (SSRF)', async () => {
+      mockDnsLookup.mockResolvedValue([
+        { address: '93.184.216.34', family: 4 },
+        { address: '10.1.2.3', family: 4 },
+      ]);
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('private or restricted');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('blocks IPv6 loopback (SSRF)', async () => {
+      mockDnsLookup.mockResolvedValue([{ address: '::1', family: 6 }]);
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('private or restricted');
+    });
+
+    it('blocks IPv4-mapped IPv6 loopback (SSRF)', async () => {
+      mockDnsLookup.mockResolvedValue([{ address: '::ffff:127.0.0.1', family: 6 }]);
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('private or restricted');
+    });
+
+    it('rejects non-http(s) schemes (SSRF)', async () => {
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'file:///etc/passwd' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('unsupported protocol');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid URLs', async () => {
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'not a url' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('invalid URL');
+    });
+
+    it('re-validates DNS on every redirect hop (SSRF)', async () => {
+      mockDnsLookup.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]);
+      mockDnsLookup.mockResolvedValueOnce([{ address: '192.168.1.5', family: 4 }]);
+      mockFetch.mockResolvedValueOnce({
+        status: 302, statusText: 'Found', ok: false,
+        headers: new Map([['location', 'https://internal.example.com/secret']]),
+        text: () => Promise.resolve(''),
+      });
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com/start' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('private or restricted');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('follows redirects up to 5 hops when followRedirects is set', async () => {
+      mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+      mockFetch
+        .mockResolvedValueOnce({
+          status: 302, statusText: 'Found', ok: false,
+          headers: new Map([['location', 'https://api.example.com/v2']]),
+          text: () => Promise.resolve(''),
+        })
+        .mockResolvedValueOnce({
+          status: 200, statusText: 'OK', ok: true,
+          headers: new Map([['content-type', 'application/json']]),
+          text: () => Promise.resolve('{"data":"ok"}'),
+        });
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com/start' } })],
+        [],
+      );
+      const result = await executor.execute(flow, {}, onEvent, context);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect((result.output as any).http).toHaveProperty('status', 200);
+      expect(((result.output as any).http).body).toEqual({ data: 'ok' });
+    });
+
+    it('returns the redirect response itself when followRedirects is off', async () => {
+      mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+      mockFetch.mockResolvedValueOnce({
+        status: 302, statusText: 'Found', ok: false,
+        headers: new Map([['location', 'https://evil.example.com']]),
+        text: () => Promise.resolve(''),
+      });
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com', followRedirects: false } })],
+        [],
+      );
+      const result = await executor.execute(flow, {}, onEvent, context);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect((result.output as any).http).toHaveProperty('status', 302);
+    });
+
+    it('stops after too many redirects', async () => {
+      mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+      mockFetch.mockResolvedValue({
+        status: 302, statusText: 'Found', ok: false,
+        headers: new Map([['location', 'https://api.example.com/loop']]),
+        text: () => Promise.resolve(''),
+      });
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com/start' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('too many redirects');
+      expect(mockFetch).toHaveBeenCalledTimes(6);
+    });
+
+    it('aborts when the response body exceeds 10 MB', async () => {
+      const bigBody = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          controller.enqueue(encoder.encode('x'.repeat(11 * 1024 * 1024)));
+          controller.close();
+        },
+      });
+      mockFetch.mockResolvedValueOnce({
+        status: 200, statusText: 'OK', ok: true,
+        headers: new Map(),
+        body: bigBody,
+        text: () => Promise.resolve(''),
+      });
+      const flow = makeFlow(
+        [makeNode('http', 'http', { config: { url: 'https://api.example.com' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('10 MB limit');
+    }, 15000);
+
     it('times out after configured timeout', async () => {
       mockFetch.mockImplementation(async (_url: string, options: any) => {
         return new Promise((_resolve, reject) => {
@@ -718,6 +880,191 @@ describe('FlowExecutor', () => {
       );
       await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('Aborted');
     }, 10000);
+  });
+
+  describe('condition node sandbox routing', () => {
+    it('routes condition evaluation to the sidecar eval endpoint', async () => {
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('branch', 'condition', { config: { condition: 'input.message === "yes"' } }),
+          makeNode('llm1', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+          makeNode('llm2', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+        ],
+        [
+          makeEdge('e1', 'trigger', 'branch'),
+          makeEdge('e2', 'branch', 'llm1', { sourceHandle: 'output-0' }),
+          makeEdge('e3', 'branch', 'llm2', { sourceHandle: 'output-1' }),
+        ],
+      );
+
+      const result = await executor.execute(flow, { message: 'yes' }, onEvent, context);
+
+      expect(mockEval).toHaveBeenCalledTimes(1);
+      const [request] = mockEval.mock.calls[0];
+      expect(request.executionId).toBe('test-exec-id');
+      expect(request.code).toBe('input.message === "yes"');
+      expect(request.input.message).toBe('yes');
+      expect(result.steps.some(s => s.nodeId === 'llm1')).toBe(true);
+      expect(result.steps.every(s => s.nodeId !== 'llm2')).toBe(true);
+    });
+
+    it('passes injected payloads to the sidecar as data — never executes them in-process', async () => {
+      const payload = `(function(){ require('child_process').execSync('touch /tmp/pwned'); return true })()`;
+      mockEval.mockResolvedValue({ ok: false, error: 'syntax error' });
+
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('branch', 'condition', { config: { condition: '{{input.payload}}', outputLabels: ['true', 'false'] } }),
+        ],
+        [makeEdge('e1', 'trigger', 'branch')],
+      );
+
+      await expect(executor.execute(flow, { payload }, onEvent, context)).rejects.toThrow(
+        'does not match any output label',
+      );
+
+      // The raw payload must arrive at the sidecar untouched — the worker never compiled it
+      expect(mockEval).toHaveBeenCalledTimes(1);
+      const [request] = mockEval.mock.calls[0];
+      expect(request.code).toBe(payload);
+      expect(request.input.payload).toBe(payload);
+    });
+
+    it('fails the node when the sidecar is unreachable (no in-process fallback)', async () => {
+      mockEval.mockRejectedValue(new Error('connection refused'));
+
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('branch', 'condition', { config: { condition: 'input.message === "yes"' } }),
+        ],
+        [makeEdge('e1', 'trigger', 'branch')],
+      );
+
+      await expect(executor.execute(flow, { message: 'yes' }, onEvent, context)).rejects.toThrow(
+        'failed to evaluate condition in sandbox',
+      );
+    });
+
+    it('preserves value mode when the condition is not valid JS', async () => {
+      mockEval.mockResolvedValue({ ok: false, error: 'ReferenceError: active is not defined' });
+
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('branch', 'condition', {
+            config: { condition: '{{input.status}}', outputLabels: ['active', 'inactive'] },
+          }),
+          makeNode('llm1', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+          makeNode('llm2', 'llm-agent', { config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', temperature: 0.7, maxTokens: 1000, responseFormat: 'text' } }),
+        ],
+        [
+          makeEdge('e1', 'trigger', 'branch'),
+          makeEdge('e2', 'branch', 'llm1', { sourceHandle: 'output-0' }),
+          makeEdge('e3', 'branch', 'llm2', { sourceHandle: 'output-1' }),
+        ],
+      );
+
+      const result = await executor.execute(flow, { status: 'active' }, onEvent, context);
+      expect(result.steps.some(s => s.nodeId === 'llm1')).toBe(true);
+      expect(result.steps.every(s => s.nodeId !== 'llm2')).toBe(true);
+    });
+
+    it('throws when the sandbox execution context is missing', async () => {
+      context.sandboxExecutionId = undefined;
+      const flow = makeFlow(
+        [makeNode('branch', 'condition', { config: { condition: 'true' } })],
+        [],
+      );
+      await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('sandbox not available');
+      expect(mockEval).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loop node limits', () => {
+    it('aborts loop sub-executions when the executor is aborted', async () => {
+      const bashMock = await import('../tools/bash.js') as any;
+      bashMock.executeCode.mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return { done: true };
+      });
+
+      const items = Array.from({ length: 100 }, (_, i) => ({ id: i }));
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('loop', 'loop', {
+            config: {
+              itemsField: 'trigger.items',
+              itemVariable: 'item',
+              collectResults: true,
+              subNodes: [makeNode('sub', 'code', { config: { code: 'return input;' } })],
+              subEdges: [],
+            },
+          }),
+        ],
+        [makeEdge('e1', 'trigger', 'loop')],
+      );
+
+      const executePromise = executor.execute(flow, { items }, onEvent, context);
+      setTimeout(() => executor.abort(), 30);
+      const result = await executePromise;
+
+      const loopOutput = result.output.loop as any;
+      expect(loopOutput.count).toBe(100);
+      expect(loopOutput.results.length).toBeLessThan(100);
+
+      bashMock.executeCode.mockImplementation((_client: any, _executionId: string, code: string, input: unknown) => {
+        return new Function('input', code)(input);
+      });
+    }, 15000);
+
+    it('caps loop items at MAX_LOOP_ITEMS', async () => {
+      vi.resetModules();
+      process.env.MAX_LOOP_ITEMS = '3';
+      const { FlowExecutor: ReloadedExecutor } = await import('../executor/engine.js');
+      const items = Array.from({ length: 10 }, (_, i) => ({ id: i }));
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('loop', 'loop', {
+            config: {
+              itemsField: 'trigger.items',
+              itemVariable: 'item',
+              collectResults: true,
+              subNodes: [makeNode('sub', 'output', { config: { inputFields: [] } })],
+              subEdges: [],
+            },
+          }),
+        ],
+        [makeEdge('e1', 'trigger', 'loop')],
+      );
+      const cappedExecutor = new ReloadedExecutor();
+      const result = await cappedExecutor.execute(flow, { items }, vi.fn(), context);
+      const loopOutput = result.output.loop as any;
+      expect(loopOutput.count).toBe(3);
+      expect(loopOutput.results.length).toBe(3);
+      delete process.env.MAX_LOOP_ITEMS;
+    });
+  });
+
+  describe('prototype pollution', () => {
+    it('strips __proto__/constructor keys from untrusted flow input before merging', async () => {
+      const input = JSON.parse('{"message":"hello","__proto__":{"polluted":"PWNED"},"constructor":{"evil":true}}');
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('probe', 'code', { config: { code: 'return { polluted: input.polluted, evil: input.evil };' } }),
+        ],
+        [makeEdge('e1', 'trigger', 'probe')],
+      );
+
+      const result = await executor.execute(flow, input, onEvent, context);
+      expect(result.output.probe).toEqual({ polluted: undefined, evil: undefined });
+      expect(({} as any).polluted).toBeUndefined();
+    });
   });
 
   describe('delay node', () => {

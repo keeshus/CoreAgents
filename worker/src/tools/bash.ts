@@ -163,3 +163,19 @@ export async function executeCode(
 
   return { result: '(no output)' };
 }
+
+/**
+ * Evaluate a flow condition expression inside the sidecar sandbox.
+ * The expression runs as `(function(input){ return <code> })(input)` in a
+ * restricted Node process — never in the worker process.
+ * Returns ok:true with the JSON result, or ok:false with a sanitized error.
+ */
+export async function evaluateCondition(
+  sidecarClient: SidecarClient,
+  executionId: string,
+  code: string,
+  input: unknown,
+): Promise<{ ok: boolean; result?: unknown; error?: string }> {
+  const result = await sidecarClient.eval({ executionId, code, input });
+  return result;
+}

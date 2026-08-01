@@ -1,91 +1,22 @@
 import { Router } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
-import crypto from 'crypto';
 import { db } from '../db/connection.js';
-import { flows, apiDeployments, apiKeys, executions } from '../db/schema.js';
+import { flows, apiDeployments, executions } from '../db/schema.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
+import { authenticateWebhookRequest, enforceWebhookRateLimit } from './webhook-security.js';
 import type { FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
 
-// ── Auth middleware ─────────────────────────────────────────────
-
-async function authenticateWebhookRequest(req: any, flowId: string): Promise<{ status: number; message: string } | null> {
-  let apiKeyValid = false;
-  let secretValid = false;
-
-  const authHeader = req.headers.authorization as string | undefined;
-  if (authHeader?.startsWith('Bearer ')) {
-    const rawKey = authHeader.slice(7).trim();
-    if (rawKey.startsWith('wh_')) {
-      const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-      const [keyRecord] = await db.select()
-        .from(apiKeys)
-        .where(and(eq(apiKeys.key_hash, keyHash), eq(apiKeys.flow_id, flowId))).limit(1);
-      if (keyRecord?.enabled) {
-        apiKeyValid = true;
-        db.update(apiKeys).set({ last_used_at: new Date() }).where(eq(apiKeys.id, keyRecord.id)).catch(() => {});
-      }
-    }
-  }
-
-  const providedSecret = (req.query.secret as string) || '';
-  if (providedSecret) {
-    const [flow] = await db.select().from(flows).where(eq(flows.id, flowId)).limit(1);
-    if (flow) {
-      const nodes = (flow.nodes || []) as any[];
-      const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger');
-      const configuredSecret = triggerNode?.data?.config?.webhookSecret;
-      if (configuredSecret && configuredSecret === providedSecret) {
-        secretValid = true;
-      }
-    }
-  }
-
-  // If no credentials provided, check if the flow requires auth
-  if (!authHeader && !providedSecret) {
-    // If the flow has no webhookSecret configured and no API key required, allow
-    const [flow] = await db.select().from(flows).where(eq(flows.id, flowId)).limit(1);
-    if (flow) {
-      const nodes = (flow.nodes || []) as any[];
-      const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger');
-      const configuredSecret = triggerNode?.data?.config?.webhookSecret;
-      if (!configuredSecret) {
-        const [anyKey] = await db.select({ id: apiKeys.id }).from(apiKeys).where(eq(apiKeys.flow_id, flowId)).limit(1);
-        if (!anyKey) {
-          return null; // No auth configured on this flow — allow
-        }
-      }
-    }
-    return { status: 401, message: 'Authentication required. Provide an API key (Authorization: Bearer wh_...) or a webhook secret (?secret=...).' };
-  }
-
-  // Allow if EITHER method passes (the caller can choose which to use)
-  if (apiKeyValid || secretValid) {
-    return null;
-  }
-
-  // Neither method passed — report the error for the method(s) the caller attempted
-  if (authHeader) {
-    return { status: 401, message: 'Invalid API key' };
-  }
-
-  if (providedSecret) {
-    return { status: 403, message: 'Invalid webhook secret' };
-  }
-
-  return null;
-}
-
 // ── POST /api/webhook/:slug — Named Webhook Execution ──────────
 
-async function resolveWebhookFlow(slugOrId: string): Promise<{ flowId: string; slug: string } | null> {
+async function resolveWebhookFlow(slugOrId: string): Promise<{ flowId: string; slug: string; rateLimit: number } | null> {
   // Try slug lookup first
   const [deployment] = await db.select()
     .from(apiDeployments)
     .where(eq(apiDeployments.path_slug, slugOrId)).limit(1);
-  if (deployment) return { flowId: deployment.flow_id, slug: deployment.path_slug };
+  if (deployment) return { flowId: deployment.flow_id, slug: deployment.path_slug, rateLimit: deployment.rate_limit || 0 };
 
   // Fallback: try as a raw flow UUID (must be valid UUID format)
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)) {
@@ -95,7 +26,7 @@ async function resolveWebhookFlow(slugOrId: string): Promise<{ flowId: string; s
         const [dep] = await db.select()
           .from(apiDeployments)
           .where(eq(apiDeployments.flow_id, flow.id)).limit(1);
-        return { flowId: flow.id, slug: dep?.path_slug || flow.id };
+        return { flowId: flow.id, slug: dep?.path_slug || flow.id, rateLimit: dep?.rate_limit || 0 };
       }
     } catch { /* ignore db errors */ }
   }
@@ -114,9 +45,19 @@ router.post(
       return;
     }
 
+    // Verify credentials (API key or webhook secret) — deployments without
+    // either configured are never publicly triggerable
     const authError = await authenticateWebhookRequest(req, resolved.flowId);
     if (authError) {
       res.status(authError.status).json({ error: authError.message });
+      return;
+    }
+
+    // Enforce per-deployment rate limit (keyed by slug)
+    const retryAfter = enforceWebhookRateLimit(resolved.slug, resolved.rateLimit);
+    if (retryAfter !== null) {
+      res.setHeader('Retry-After', String(retryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
       return;
     }
 
@@ -281,6 +222,9 @@ router.get(
 );
 
 // ── GET /api/openapi.json — OpenAPI Spec Generation ────────────
+// Public by design: it is the discovery document for deployed webhook
+// endpoints. It only exposes slugs, summaries and input schemas — never
+// webhook secrets, API keys, or internal deployment config.
 
 router.get(
   '/openapi.json',
@@ -339,6 +283,7 @@ router.get(
             },
             '400': { description: 'Invalid input or schema validation failed' },
             '401': { description: 'Authentication failed' },
+            '429': { description: 'Rate limit exceeded' },
           },
           security: [{ apiKey: [] }],
         },
@@ -462,17 +407,19 @@ router.get(
 );
 
 // ── GET /api/docs — Swagger UI ──────────────────────────────────
+// Pinned version with SRI integrity hashes so a compromised CDN cannot
+// inject scripts into the docs page.
 
 router.get('/docs', (_req: any, res: any) => {
   res.send(`<!DOCTYPE html>
 <html>
 <head>
   <title>Webhook Flows API — Swagger UI</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.32.11/swagger-ui.css" integrity="sha384-9Q2fpS+xeS4ffJy6CagnwoUl+4ldAYhOs9pgZuEKxypVModhmZFzeMlvVsAjf7uT" crossorigin="anonymous">
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.32.11/swagger-ui-bundle.js" integrity="sha384-vfl/klfTFrIz5urj0HnhcXLAbzPdRHezizfy+XgFB6GqcKkhlk0lS3bIbyB39NLA" crossorigin="anonymous"></script>
   <script>
     SwaggerUIBundle({ url: '/api/openapi.json', dom_id: '#swagger-ui' });
   </script>

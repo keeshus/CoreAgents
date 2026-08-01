@@ -30,12 +30,35 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-frontend
     spec:
+      # Pod-level hardening: run as non-root, restrict to the default seccomp profile
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
       containers:
         - name: frontend
           image: "{{ .Values.image.repository }}-frontend:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.frontend.port }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            # Next.js writes runtime cache entries — overlay an emptyDir on the cache dir
+            - name: next-cache
+              mountPath: /app/frontend/.next/cache
           env:
             - name: NEXT_PUBLIC_API_URL
               valueFrom:

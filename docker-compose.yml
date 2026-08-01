@@ -1,10 +1,11 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    # postgres:17-alpine pinned by digest
+    image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
     container_name: core-agents-db
-    # Remove port mapping for production to avoid direct DB access
+    # Bind to loopback only — DB must not be exposed to the network
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       # WARNING: Change these credentials for any non-local deployment
       POSTGRES_USER: coreagents
@@ -12,6 +13,7 @@ services:
       POSTGRES_DB: coreagents
     volumes:
       - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
       test: pg_isready -U coreagents
       interval: 5s
@@ -19,20 +21,24 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:v1.18.0
+    # qdrant/qdrant:v1.18.0 pinned by digest
+    image: qdrant/qdrant:v1.18.0@sha256:b3063c673f3973877c038eeecc392bad5011f072ee7892b56c9a8e204a3bdea9
     container_name: core-agents-qdrant
+    # Bind to loopback only
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     restart: always
 
   valkey:
-    image: valkey/valkey:7-alpine
+    # valkey/valkey:7-alpine pinned by digest
+    image: valkey/valkey:7-alpine@sha256:211d9cb02395987d3740b11fdbb7be0cb66c5f36a065640ce5753c933700d6cc
     container_name: core-agents-valkey
+    # Bind to loopback only
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: valkey-server --requirepass ${VALKEY_PASSWORD:-dev-valkey}
     restart: always
 
@@ -45,7 +51,9 @@ services:
     cap_add:
       - SYS_ADMIN
     ports:
-      - "4001:4001"
+      - "127.0.0.1:4001:4001"
+    environment:
+      - SIDECAR_TOKEN=${SIDECAR_TOKEN:-dev-sidecar-token-change-me}
     restart: unless-stopped
 
   backend:
@@ -63,7 +71,19 @@ services:
       - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
       - SIDECAR_URL=http://sidecar:4001
+      - SIDECAR_TOKEN=${SIDECAR_TOKEN:-dev-sidecar-token-change-me}
     restart: always
+    # Plain node app: drop all Linux capabilities and reap zombie processes
+    cap_drop:
+      - ALL
+    init: true
+    # node:24-alpine ships no curl/wget — use Node's built-in fetch
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   worker:
     container_name: core-agents-worker
@@ -71,10 +91,14 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     restart: always
+    cap_drop:
+      - ALL
+    init: true
     environment:
       - VALKEY_HOST=valkey
       - VALKEY_PASSWORD=${VALKEY_PASSWORD:-dev-valkey}
       - SIDECAR_URL=http://sidecar:4001
+      - SIDECAR_TOKEN=${SIDECAR_TOKEN:-dev-sidecar-token-change-me}
       - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
     depends_on:
       - valkey
@@ -90,6 +114,9 @@ services:
     environment:
       - NEXT_TELEMETRY_DISABLED=1
     restart: always
+    cap_drop:
+      - ALL
+    init: true
 
 volumes:
   pgdata:

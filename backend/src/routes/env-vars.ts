@@ -6,6 +6,16 @@ import { requirePermission } from '../middleware/auth.js';
 
 const router = Router();
 
+async function canReadGroupEnvVars(user: { userId: string; permissions: string[] }, groupId: string): Promise<boolean> {
+  if (user.permissions.includes('admin')) return true;
+  const hasSecretsRead = user.permissions.includes('secrets:read_group') || user.permissions.includes('secrets:write_group');
+  if (!hasSecretsRead) return false;
+  const [membership] = await db.select().from(groupMembers)
+    .where(and(eq(groupMembers.user_id, user.userId), eq(groupMembers.group_id, groupId)))
+    .limit(1);
+  return !!membership;
+}
+
 router.get('/', requirePermission('admin'), async (req, res) => {
   try {
     let [row] = await db.select().from(appEnvVars).limit(1);
@@ -42,6 +52,10 @@ router.put('/', requirePermission('admin'), async (req, res) => {
 router.get('/groups/:groupId', async (req, res) => {
   try {
     const { groupId } = req.params;
+    const user = (req as any).user;
+    if (!user || !(await canReadGroupEnvVars(user, groupId))) {
+      return res.status(403).json({ error: 'You do not have access to this group\'s env vars' });
+    }
     const [config] = await db.select({ env_vars: groupVaultConfig.env_vars })
       .from(groupVaultConfig)
       .where(eq(groupVaultConfig.group_id, groupId))
