@@ -747,6 +747,16 @@ router.post('/executions/:executionId/approve', asyncHandler(async (req, res) =>
       res.status(403).json({ error: 'You are not assigned to this approval request' });
       return;
     }
+
+    // Assignment type configured but no assignees resolvable (malformed stored
+    // state) — fall back to group membership instead of skipping the check.
+    if (authorizedUserIds.length === 0) {
+      const flowAccessible = req.user!.permissions.includes('admin') || await canAccessFlow(req.user!, approveFlow);
+      if (!flowAccessible) {
+        res.status(403).json({ error: 'You are not authorized to approve this request' });
+        return;
+      }
+    }
   }
 
   // ── Resolve group-to-user for assignees (used by multi) ──
@@ -1164,6 +1174,16 @@ router.post('/executions/:executionId/reject', asyncHandler(async (req, res) => 
     if (authorizedUserIds.length > 0 && !authorizedUserIds.includes(req.user!.userId)) {
       res.status(403).json({ error: 'You are not assigned to this approval request' });
       return;
+    }
+
+    // Assignment type configured but no assignees resolvable (malformed stored
+    // state) — fall back to group membership instead of skipping the check.
+    if (authorizedUserIds.length === 0) {
+      const flowAccessible = req.user!.permissions.includes('admin') || await canAccessFlow(req.user!, rejectFlow);
+      if (!flowAccessible) {
+        res.status(403).json({ error: 'You are not authorized to reject this request' });
+        return;
+      }
     }
   } else if (hitlEntry?.assignmentType === 'multi') {
     const assigneeIds: string[] = hitlEntry.assignees?.userIds || [];

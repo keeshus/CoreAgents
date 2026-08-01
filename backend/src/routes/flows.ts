@@ -33,6 +33,21 @@ async function canAccessFlow(user: { userId: string; permissions: string[] }, fl
   return groupIds.includes(flow.group_id);
 }
 
+// Destructive operations (delete) additionally require owner or group-admin —
+// consistent with execution.ts's canManageFlow policy.
+async function canManageFlow(user: { userId: string; permissions: string[] }, flow: FlowAccessRow | undefined | null): Promise<boolean> {
+  if (!flow) return false;
+  if (user.permissions.includes('admin')) return true;
+  if (flow.created_by === user.userId) return true;
+  if (!flow.group_id) return false;
+  const [membership] = await db
+    .select({ role: groupMembers.role })
+    .from(groupMembers)
+    .where(and(eq(groupMembers.group_id, flow.group_id), eq(groupMembers.user_id, user.userId)))
+    .limit(1);
+  return !!membership && membership.role === 'admin';
+}
+
 // GET /api/flows — list all flows
 router.get(
   '/',
@@ -415,8 +430,8 @@ router.delete(
       res.status(404).json({ error: 'Flow not found' });
       return;
     }
-    if (!(await canAccessFlow(req.user!, existingAccess))) {
-      res.status(403).json({ error: 'You can only delete flows in your own group' });
+    if (!(await canManageFlow(req.user!, existingAccess))) {
+      res.status(403).json({ error: 'You can only delete flows you own or administer' });
       return;
     }
 

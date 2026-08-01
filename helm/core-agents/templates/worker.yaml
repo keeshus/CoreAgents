@@ -61,14 +61,16 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ include "core-agents.secretName" . }}
-          # The worker is a BullMQ consumer with no HTTP server — probe via the
-          # backend health endpoint as a proxy for cluster availability.
+          # The worker is a BullMQ consumer with no HTTP server of its own —
+          # probe the backend Service (same release, cluster-internal DNS) as
+          # a proxy for cluster availability. NOT localhost: the worker pod
+          # does not listen on 3001.
           livenessProbe:
             exec:
               command:
                 - node
                 - -e
-                - fetch('http://localhost:3001/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+                - fetch('http://{{ include "core-agents.fullname" . }}-backend:{{ .Values.backend.port }}/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5

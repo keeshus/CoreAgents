@@ -4,7 +4,7 @@ import { db } from '../db/connection.js';
 import { flows, apiDeployments, executions } from '../db/schema.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
 import { asyncHandler } from '../utils/async-handler.js';
-import { authenticateWebhookRequest, enforceWebhookRateLimit } from './webhook-security.js';
+import { authenticateWebhookRequest, enforceWebhookRateLimit, enforceWebhookIpRateLimit } from './webhook-security.js';
 import type { NodeData, FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
@@ -40,6 +40,15 @@ router.post(
     const triggerNode = nodes.find(n => n.data?.type === 'trigger');
     if (!triggerNode || (triggerNode.data as any).config?.triggerType !== 'webhook') {
       res.status(400).json({ error: 'This flow does not have a webhook trigger' });
+      return;
+    }
+
+    // Per-IP throttle BEFORE authentication — unauthenticated spam must not
+    // burn DB queries at full speed (see webhook-security.ts).
+    const ipRetryAfter = enforceWebhookIpRateLimit(req.ip || '');
+    if (ipRetryAfter !== null) {
+      res.setHeader('Retry-After', String(ipRetryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
       return;
     }
 

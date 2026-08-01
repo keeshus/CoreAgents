@@ -107,6 +107,20 @@ describe('webhook-security helpers', () => {
     });
   });
 
+  describe('enforceWebhookIpRateLimit', () => {
+    it('limits unauthenticated requests per IP', async () => {
+      const { enforceWebhookIpRateLimit, resetRateLimiters } = await import('../routes/webhook-security.js');
+      resetRateLimiters();
+      for (let i = 0; i < 120; i++) {
+        expect(enforceWebhookIpRateLimit('1.2.3.4')).toBeNull();
+      }
+      expect(enforceWebhookIpRateLimit('1.2.3.4')).not.toBeNull();
+      // Different IP is unaffected
+      expect(enforceWebhookIpRateLimit('5.6.7.8')).toBeNull();
+      resetRateLimiters();
+    });
+  });
+
   describe('authenticateWebhookRequest', () => {
     it('rejects deployments with no secret and no API keys', async () => {
       const { authenticateWebhookRequest } = await import('../routes/webhook-security.js');
