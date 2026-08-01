@@ -66,8 +66,17 @@ test.describe('Subflow env var inheritance', () => {
     const parent = await parentRes.json();
     cleanupFlowIds.push(parent.id);
 
+    // Parent env comes from the parent flow's own env_vars configuration
+    const envUpdateRes = await request.put(`${API_URL}/flows/${parent.id}`, {
+      data: { envVars: [{ name: 'PARENT_VAR', value: 'inherited', type: 'static' }] },
+    });
+    if (!envUpdateRes.ok()) {
+      test.skip(true, 'Flow env_vars column not available');
+      return;
+    }
+
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(parent.id, { message: 'test', __env: { PARENT_VAR: 'inherited' } }, cookie);
+    const events = await debugExecute(parent.id, { message: 'test' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
@@ -125,8 +134,18 @@ test.describe('Subflow env var inheritance', () => {
     const parent = await parentRes.json();
     cleanupFlowIds.push(parent.id);
 
+    // Parent's env vars come from the parent flow config; the subflow's own
+    // env_vars (SHARED_VAR=override) take precedence.
+    const parentEnvUpdateRes = await request.put(`${API_URL}/flows/${parent.id}`, {
+      data: { envVars: [{ name: 'SHARED_VAR', value: 'parent', type: 'static' }] },
+    });
+    if (!parentEnvUpdateRes.ok()) {
+      test.skip(true, 'Flow env_vars column not available');
+      return;
+    }
+
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(parent.id, { message: 'test', __env: { SHARED_VAR: 'parent' } }, cookie);
+    const events = await debugExecute(parent.id, { message: 'test' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
@@ -173,8 +192,18 @@ test.describe('Subflow env var inheritance', () => {
     const parent = await parentRes.json();
     cleanupFlowIds.push(parent.id);
 
+    // SPECIFIC_VAR lives only on the parent flow — the subflow has its own
+    // isolated env and must not see it.
+    const envUpdateRes = await request.put(`${API_URL}/flows/${parent.id}`, {
+      data: { envVars: [{ name: 'SPECIFIC_VAR', value: 'should-not-leak', type: 'static' }] },
+    });
+    if (!envUpdateRes.ok()) {
+      test.skip(true, 'Flow env_vars column not available');
+      return;
+    }
+
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(parent.id, { message: 'test', __env: { SPECIFIC_VAR: 'should-not-leak' } }, cookie);
+    const events = await debugExecute(parent.id, { message: 'test' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();

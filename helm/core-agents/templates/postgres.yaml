@@ -45,14 +45,34 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-postgres
     spec:
+      # postgres:*-alpine runs as uid 70 (non-root); fsGroup matches so the PVC is writable
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
           image: {{ .Values.postgres.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: POSTGRES_USER
               value: {{ .Values.dbUser | quote }}
+            {{- if .Values.existingSecret }}
             - name: POSTGRES_PASSWORD
-              value: {{ .Values.dbPassword | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.secretName" . }}
+                  key: postgres-password
+            {{- else }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.dbPassword | required "dbPassword must be set when postgres.enabled=true (or provide existingSecret/databaseUrl)" | quote }}
+            {{- end }}
             - name: POSTGRES_DB
               value: {{ .Values.dbName | quote }}
           ports:
@@ -60,6 +80,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: tmp
+              mountPath: /tmp
+            - name: run
+              mountPath: /var/run/postgresql
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", {{ .Values.dbUser | quote }}]
@@ -71,4 +95,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "core-agents.fullname" . }}-postgres-pvc
+        - name: tmp
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
 {{- end }}

@@ -5,11 +5,20 @@ const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
-function getKek(): Buffer {
+const WEAK_ENCRYPTION_KEYS = [
+  'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+];
+
+export function getKek(): Buffer {
   const hex = process.env.SECRETS_ENCRYPTION_KEY;
   if (!hex || hex.length !== 64) {
     throw new Error(
       'SECRETS_ENCRYPTION_KEY environment variable is required (64 hex chars = 256-bit AES key)'
+    );
+  }
+  if (process.env.NODE_ENV === 'production' && WEAK_ENCRYPTION_KEYS.includes(hex)) {
+    throw new Error(
+      'SECRETS_ENCRYPTION_KEY is a known default value: generate a unique random 64-hex-char key for production'
     );
   }
   return Buffer.from(hex, 'hex');

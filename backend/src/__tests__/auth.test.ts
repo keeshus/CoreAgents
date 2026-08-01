@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Test requirePermission middleware ───────────────────────────────
 
@@ -62,7 +62,7 @@ describe('role permissions', () => {
   const rolePermissions: Record<string, string[]> = {
     admin: ['admin', 'flow:create', 'flow:edit', 'flow:delete', 'flow:read', 'endpoint:read', 'endpoint:write', 'mcp:read', 'mcp:write', 'embedding:read', 'embedding:write', 'store:read', 'store:write', 'document:write', 'knowledge:write', 'chat:create', 'execution:approve', 'group:read', 'group:write'],
     editor: ['flow:create', 'flow:edit', 'flow:read', 'execution:approve', 'endpoint:read', 'mcp:read', 'embedding:read', 'store:read', 'document:write', 'knowledge:write', 'chat:create', 'group:read'],
-    reader: ['execution:approve'],
+    reader: [],
   };
 
   it('admin has all permissions', () => {
@@ -84,8 +84,8 @@ describe('role permissions', () => {
     expect(rolePermissions.editor).not.toContain('group:write');
   });
 
-  it('reader can only approve HITL', () => {
-    expect(rolePermissions.reader).toContain('execution:approve');
+  it('reader has no permissions (read-only default role)', () => {
+    expect(rolePermissions.reader).not.toContain('execution:approve');
     expect(rolePermissions.reader).not.toContain('flow:read');
     expect(rolePermissions.reader).not.toContain('flow:create');
     expect(rolePermissions.reader).not.toContain('flow:edit');
@@ -156,5 +156,46 @@ describe('resolveRoleFromGroups', () => {
   it('returns reader when admin/editor mappings are empty', () => {
     expect(resolveRoleFromGroups(['admin'], [], [])).toBe('reader');
     expect(resolveRoleFromGroups(['editor'], [], [])).toBe('reader');
+  });
+});
+
+// ── Test JWT_SECRET production fail-fast ─────────────────────────────
+
+describe('JWT_SECRET production fail-fast', () => {
+  const originalEnv = process.env.NODE_ENV;
+  const originalSecret = process.env.JWT_SECRET;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalEnv;
+    process.env.JWT_SECRET = originalSecret;
+  });
+
+  it('throws at startup when a known default secret is used in production', async () => {
+    vi.resetModules();
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'dev-secret-change-in-production';
+    await expect(import('../middleware/auth.js')).rejects.toThrow(/JWT_SECRET/);
+  });
+
+  it('throws at startup for known e2e/test default secrets in production', async () => {
+    vi.resetModules();
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'e2e-test-secret';
+    await expect(import('../middleware/auth.js')).rejects.toThrow(/JWT_SECRET/);
+  });
+
+  it('throws when the secret is shorter than 32 characters in production', async () => {
+    vi.resetModules();
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_SECRET = 'too-short-secret';
+    await expect(import('../middleware/auth.js')).rejects.toThrow(/JWT_SECRET/);
+  });
+
+  it('allows dev defaults when NODE_ENV is not production', async () => {
+    vi.resetModules();
+    process.env.NODE_ENV = 'test';
+    process.env.JWT_SECRET = 'dev-secret-change-in-production';
+    const mod = await import('../middleware/auth.js');
+    expect(mod.JWT_SECRET).toBe('dev-secret-change-in-production');
   });
 });

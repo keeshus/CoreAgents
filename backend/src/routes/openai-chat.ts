@@ -4,6 +4,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { flows, chatSessions, chatMessages, chatApiKeys, chatApiDeployments, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, agentContexts, agentStore } from '../db/schema.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { enforceChatRateLimit } from './webhook-security.js';
 import type { OpenAIChatCompletionRequest, OpenAIChatCompletionResponse, OpenAIChatCompletionChunk } from 'core-agents-shared';
 
 // Augment Express Request for custom properties set by our middleware
@@ -63,6 +64,15 @@ async function authenticateApiKey(req: Request, res: Response, next: NextFunctio
   );
   if (!deployment) {
     res.status(400).json({ error: 'Chat API is not enabled for this flow' });
+    return;
+  }
+
+  // Enforce per-API-key rate limit (deployment rate_limit is requests/minute,
+  // 0 falls back to CHAT_RATE_LIMIT_MAX)
+  const retryAfter = enforceChatRateLimit(keyRecord.id, deployment.rate_limit || 0);
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
     return;
   }
 

@@ -356,7 +356,7 @@ test.describe('Groups feature', () => {
 
   // ─── Permission checks ─────────────────────────────────────────────
 
-  test('reader cannot create groups but can access pending executions', async ({ page, request }) => {
+  test('reader cannot create groups and cannot access pending executions', async ({ page, request }) => {
     const readerEmail = `reader-${Date.now()}@test.local`;
     const regRes = await registerUser(request, {
       name: 'Reader Perm Test',
@@ -382,8 +382,10 @@ test.describe('Groups feature', () => {
     });
     expect(gRes.status()).toBe(403);
 
+    // The reader role no longer grants execution:approve (destructive rights),
+    // so the pending list is forbidden for readers.
     const pRes = await page.request.get(`${API_URL}/executions/pending`);
-    expect(pRes.status()).toBe(200);
+    expect(pRes.status()).toBe(403);
   });
 
   // Register a user WITHOUT affecting the request fixture's admin cookie
@@ -712,24 +714,30 @@ async function registerUserClean(email: string, password: string, name: string):
     expect(paused).toBeDefined();
     const executionId = paused?.data?.executionId || paused?.executionId || '';
 
-    // Register a reader user who is in this group
-    const readerEmail = `hitl-member-${Date.now()}@test.local`;
-    const readerData = await registerUserClean(readerEmail, 'Test1234!', 'HITL Member');
-    cleanupUserIds.push(readerData.user.id);
+    // Register a member who is in this group and promote them to editor so
+    // they hold execution:approve (the reader role no longer has it)
+    const memberEmail = `hitl-member-${Date.now()}@test.local`;
+    const memberData = await registerUserClean(memberEmail, 'Test1234!', 'HITL Member');
+    cleanupUserIds.push(memberData.user.id);
+    const allRoles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = allRoles.find((r: any) => r.name === 'editor');
+    if (editorRole) {
+      await request.put(`${API_URL}/users/${memberData.user.id}/role`, { data: { role_id: editorRole.id } });
+    }
 
     // Add member via groups API
     const addMember = await request.post(`${API_URL}/groups/${group.id}/members`, {
-      data: { userId: readerData.user.id },
+      data: { userId: memberData.user.id },
     });
     expect(addMember.status()).toBe(201);
 
-    // Login as reader
+    // Login as the member (editor role)
     await page.goto('/login');
-    await page.getByLabel('Email').fill(readerEmail);
+    await page.getByLabel('Email').fill(memberEmail);
     await page.getByLabel('Password', { exact: true }).fill('Test1234!');
     await page.getByRole('button', { name: /sign.?in/i }).click();
 
-    // Reader should see the pending execution
+    // Member should see the pending execution
     const readerExecIds = await page.evaluate(async (apiUrl) => {
       const res = await fetch(`${apiUrl}/executions/pending`, { credentials: 'include' });
       if (!res.ok) return [];
@@ -738,7 +746,7 @@ async function registerUserClean(email: string, password: string, name: string):
     }, API_URL);
     expect(readerExecIds).toContain(executionId);
 
-    // Register a second reader who is NOT in this group
+    // Register a second user who is NOT in this group and has no approval rights
     const outsiderEmail = `outsider-${Date.now()}@test.local`;
     const outsiderData = await registerUserClean(outsiderEmail, 'Test1234!', 'Outsider');
     cleanupUserIds.push(outsiderData.user.id);
@@ -751,23 +759,21 @@ async function registerUserClean(email: string, password: string, name: string):
     // Verify redirected to /approvals (confirmed login as non-admin)
     await expect(page).toHaveURL(/\/approvals/);
 
-    // Outsider should NOT see the pending execution
+    // Outsider is a reader and must NOT be able to list pending executions at all
     const result = await page.evaluate(async (apiUrl) => {
       const meRes = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' });
       const me = meRes.ok ? await meRes.json() : null;
       const pRes = await fetch(`${apiUrl}/executions/pending`, { credentials: 'include' });
-      const pData = pRes.ok ? await pRes.json() : [];
       return {
         userId: me?.user?.userId,
         role: me?.user?.role,
         groups: me?.user?.groups,
-        execCount: Array.isArray(pData) ? pData.length : -1,
-        execIds: Array.isArray(pData) ? pData.map((e: any) => e.id) : [],
+        pendingStatus: pRes.status,
       };
     }, API_URL);
     expect(result.role).toBe('reader');
     expect(result.groups).toEqual([]);
-    expect(result.execIds).not.toContain(executionId);
+    expect(result.pendingStatus).toBe(403);
 
     // Cleanup: cancel execution
     await request.delete(`${API_URL}/executions/${executionId}`);

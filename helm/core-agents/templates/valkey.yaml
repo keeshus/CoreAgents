@@ -15,18 +15,47 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-valkey
     spec:
+      # valkey:7-alpine ships a non-root `valkey` user (uid 999, gid 1000);
+      # fsGroup matches so the PVC is writable.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: valkey
           image: {{ .Values.valkey.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 6379
+          # Require a password sourced from the chart Secret (see secret.yaml);
+          # $VALKEY_PASSWORD is expanded by sh at runtime from the env var above
+          command:
+            - sh
+            - -c
+            - exec valkey-server --requirepass "$VALKEY_PASSWORD"
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.secretName" . }}
+                  key: valkey-password
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "core-agents.fullname" . }}-valkey-pvc
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

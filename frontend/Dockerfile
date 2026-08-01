@@ -1,5 +1,6 @@
 # ── Core Agents Frontend ─────────────────────────────────────────
-FROM node:25-alpine AS builder
+# node:24-alpine (current LTS) pinned by digest — node:25 is EOL since 2026-03-31
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS builder
 WORKDIR /app
 
 ARG NEXT_PUBLIC_API_URL
@@ -13,7 +14,8 @@ COPY shared/package*.json ./shared/
 COPY shared/tsconfig.json ./shared/
 COPY shared/src ./shared/src/
 COPY frontend/package*.json ./frontend/
-RUN npm install -w shared -w frontend && npm cache clean --force
+# npm ci for reproducible builds (exact versions from package-lock.json)
+RUN npm ci -w shared -w frontend && npm cache clean --force
 
 # Frontend source + build
 COPY frontend/tsconfig.json ./frontend/
@@ -26,7 +28,7 @@ COPY frontend/public ./frontend/public/
 RUN npm run build -w frontend
 
 # ── Production image ───────────────────────────────────────
-FROM node:25-alpine
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./

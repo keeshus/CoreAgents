@@ -1,5 +1,6 @@
 # ── Core Agents Worker ───────────────────────────────────────────
-FROM node:25-alpine AS builder
+# node:24-alpine (current LTS) pinned by digest — node:25 is EOL since 2026-03-31
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS builder
 WORKDIR /app
 
 # Monorepo root config
@@ -16,17 +17,19 @@ COPY backend/drizzle ./backend/drizzle/
 
 # Worker deps
 COPY worker/package*.json ./worker/
-RUN npm install -w shared -w worker -w backend --install-strategy=hoisted && npm cache clean --force
+# npm ci for reproducible builds (exact versions from package-lock.json)
+RUN npm ci -w shared -w worker -w backend --install-strategy=hoisted && npm cache clean --force
 
 # Worker source + build
 COPY worker/tsconfig.build.json ./worker/tsconfig.json
 COPY worker/src ./worker/src/
 COPY backend/src ./backend/src/
 COPY backend/tsconfig.json ./backend/
-RUN cd worker && npx -p typescript tsc && cd .. && npm prune --omit=dev
+# Pin tsc version to match root package-lock.json (typescript 7.0.2)
+RUN cd worker && npx -p typescript@7.0.2 tsc && cd .. && npm prune --omit=dev
 
 # ── Production image ───────────────────────────────────────
-FROM node:25-alpine
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./

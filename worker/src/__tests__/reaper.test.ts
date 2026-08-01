@@ -6,6 +6,7 @@ describe('createReaper', () => {
   const mockSidecarClient: SidecarClient = {
     setup: vi.fn(),
     exec: vi.fn(),
+    eval: vi.fn(),
     teardown: vi.fn(),
   };
 

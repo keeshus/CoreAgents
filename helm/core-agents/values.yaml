@@ -4,13 +4,16 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/kees/core-agents
-  tag: latest
+  # Pinned to the current release version (matches root package.json version) —
+  # never use "latest" in production. IfNotPresent is correct for an immutable tag.
+  tag: 1.0.0
   pullPolicy: IfNotPresent
 
 # ── PostgreSQL ───────────────────────────────────────────────────
 postgres:
   enabled: true  # set false to use an external database
-  image: postgres:17-alpine
+  # postgres:17-alpine pinned by digest
+  image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
   storage: 10Gi
   storageClass: ""
   resources:
@@ -25,13 +28,23 @@ postgres:
 databaseUrl: ""
 
 dbUser: coreagents
-dbPassword: coreagents
+# REQUIRED — chart render fails if unset (or if no databaseUrl/existingSecret is provided).
+# Set via: --set dbPassword=...   or a values file / secret. Never commit a real password.
+# Prefer an out-of-band Kubernetes Secret referenced via `existingSecret`.
+dbPassword: null
 dbName: coreagents
+
+# ── Existing Secret (preferred over inline values) ───────────────
+# Reference an externally-managed Kubernetes Secret (same namespace) containing the keys:
+#   database-url, anthropic-api-key, openai-api-key, valkey-password
+# When set, values.anthropicApiKey / openaiApiKey / dbPassword are ignored.
+existingSecret: ""
 
 # ── Qdrant (Vector Database) ─────────────────────────────────────
 qdrant:
   enabled: true
-  image: qdrant/qdrant:latest
+  # qdrant/qdrant:v1.18.0 pinned by digest (no more floating tags)
+  image: qdrant/qdrant:v1.18.0@sha256:b3063c673f3973877c038eeecc392bad5011f072ee7892b56c9a8e204a3bdea9
   storage: 20Gi
   resources:
     requests:
@@ -42,6 +55,7 @@ qdrant:
       memory: 1Gi
 
 # ── API Keys ─────────────────────────────────────────────────────
+# Optional if `existingSecret` is set. For production, prefer the existingSecret pattern.
 anthropicApiKey: ""
 openaiApiKey: ""
 
@@ -65,8 +79,12 @@ backend:
 # ── Valkey (Redis-compatible queue backend) ──────────────────────
 valkey:
   enabled: true
-  image: valkey/valkey:7-alpine
+  # valkey/valkey:7-alpine pinned by digest
+  image: valkey/valkey:7-alpine@sha256:211d9cb02395987d3740b11fdbb7be0cb66c5f36a065640ce5753c933700d6cc
   storage: 1Gi
+  # Optional: pin a password. If empty, a random 32-char password is generated
+  # into the chart Secret and reused across upgrades (stable via lookup).
+  password: ""
 
 # ── Worker ───────────────────────────────────────────────────────
 worker:
@@ -86,6 +104,9 @@ worker:
 
 # ── Sidecar ──────────────────────────────────────────────────────
 sidecar:
+  # Shared auth token between backend/worker and the sidecar sandbox.
+  # Auto-generated into the Secret if unset; set explicitly for determinism.
+  token: ""
   resources:
     requests:
       cpu: 50m
@@ -122,6 +143,12 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
+  # REQUIRED when ingress.enabled=true — chart render fails if empty (TLS is mandatory).
+  # Example:
+  # tls:
+  #   - hosts:
+  #       - core-agents.local        # ← replace with your real domain
+  #     secretName: core-agents-tls # ← cert-manager / Let's Encrypt secret
   tls: []
 
 # ── Service ──────────────────────────────────────────────────────

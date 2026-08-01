@@ -1,5 +1,6 @@
 # ── Core Agents Frontend (E2E dev mode) ───────────────────────────
-FROM node:25-alpine
+# node:24-alpine (current LTS) pinned by digest — node:25 is EOL since 2026-03-31
+FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3
 
 WORKDIR /app/monorepo
 
@@ -9,7 +10,8 @@ COPY shared/tsconfig.json ./shared/
 COPY shared/src ./shared/src/
 COPY frontend/package*.json ./frontend/
 
-RUN npm install -w shared -w frontend && npm cache clean --force
+# npm ci for reproducible builds (exact versions from package-lock.json)
+RUN npm ci -w shared -w frontend && npm cache clean --force
 
 COPY frontend/tsconfig.json ./frontend/
 COPY frontend/next.config.js ./frontend/

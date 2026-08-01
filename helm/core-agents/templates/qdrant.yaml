@@ -46,19 +46,36 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-qdrant
     spec:
+      # qdrant ships no OS user and starts as root; run as uid 1000 (qdrant's
+      # documented non-root uid). fsGroup matches so the PVC is writable.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: qdrant
           image: {{ .Values.qdrant.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 6333
             - containerPort: 6334
           volumeMounts:
             - name: storage
               mountPath: /qdrant/storage
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.qdrant.resources | nindent 12 }}
       volumes:
         - name: storage
           persistentVolumeClaim:
             claimName: {{ include "core-agents.fullname" . }}-qdrant-pvc
+        - name: tmp
+          emptyDir: {}
 {{- end }}

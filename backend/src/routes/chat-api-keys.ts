@@ -5,6 +5,7 @@ import { db } from '../db/connection.js';
 import { chatApiKeys, chatApiDeployments, flows } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { resolveFlowAccess } from './webhook-security.js';
 
 const router = Router();
 
@@ -16,12 +17,19 @@ function generateApiKey(): string {
   return `ca_${crypto.randomBytes(32).toString('hex')}`;
 }
 
+async function loadFlow(flowId: string): Promise<{ id: string; group_id: string | null; nodes: any } | undefined> {
+  const [flow] = await db.select({ id: flows.id, group_id: flows.group_id, nodes: flows.nodes }).from(flows).where(eq(flows.id, flowId));
+  return flow;
+}
+
 // GET /api/flows/:flowId/chat-api/deployment — Get deployment config
 router.get('/flows/:flowId/chat-api/deployment', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const flowId = req.params.flowId as string;
 
-  const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
+  const flow = await loadFlow(flowId);
   if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+  const accessError = await resolveFlowAccess(req, flow);
+  if ('status' in accessError) { res.status(accessError.status).json({ error: accessError.error }); return; }
 
   const [deployment] = await db.select().from(chatApiDeployments).where(eq(chatApiDeployments.flow_id, flowId));
   res.json(deployment || { flow_id: flowId, enabled: false, model_name: '', rate_limit: 0 });
@@ -32,11 +40,13 @@ router.put('/flows/:flowId/chat-api/deployment', requirePermission('flow:edit'),
   const flowId = req.params.flowId as string;
   const { enabled, model_name, rate_limit } = req.body || {};
 
-  const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
+  const flow = await loadFlow(flowId);
   if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+  const accessError = await resolveFlowAccess(req, flow);
+  if ('status' in accessError) { res.status(accessError.status).json({ error: accessError.error }); return; }
 
   // Verify it's a chat flow
-  const nodes = (flow.nodes || []) as Array<{ data: { type: string; config: Record<string, unknown> } }>;
+  const nodes = (flow?.nodes || []) as Array<{ data: { type: string; config: Record<string, unknown> } }>;
   const triggerNode = nodes.find(n => n.data?.type === 'trigger');
   if (!triggerNode || (triggerNode.data as any).config?.triggerType !== 'chat') {
     res.status(400).json({ error: 'Only chat-triggered flows can have a Chat API deployment' });
@@ -72,6 +82,12 @@ router.put('/flows/:flowId/chat-api/deployment', requirePermission('flow:edit'),
 // GET /api/flows/:flowId/chat-api/keys — List API keys for a flow
 router.get('/flows/:flowId/chat-api/keys', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const flowId = req.params.flowId as string;
+
+  const flow = await loadFlow(flowId);
+  if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+  const accessError = await resolveFlowAccess(req, flow);
+  if ('status' in accessError) { res.status(accessError.status).json({ error: accessError.error }); return; }
+
   const keys = await db.select({
     id: chatApiKeys.id,
     flow_id: chatApiKeys.flow_id,
@@ -91,8 +107,10 @@ router.post('/flows/:flowId/chat-api/keys', requirePermission('flow:edit'), asyn
   const flowId = req.params.flowId as string;
   const { label } = req.body || {};
 
-  const [flow] = await db.select().from(flows).where(eq(flows.id, flowId));
+  const flow = await loadFlow(flowId);
   if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+  const accessError = await resolveFlowAccess(req, flow);
+  if ('status' in accessError) { res.status(accessError.status).json({ error: accessError.error }); return; }
 
   const rawKey = generateApiKey();
   const keyHash = hashApiKey(rawKey);
@@ -124,6 +142,11 @@ router.post('/flows/:flowId/chat-api/keys', requirePermission('flow:edit'), asyn
 router.delete('/flows/:flowId/chat-api/keys/:keyId', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const flowId = req.params.flowId as string;
   const keyId = req.params.keyId as string;
+
+  const flow = await loadFlow(flowId);
+  if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+  const accessError = await resolveFlowAccess(req, flow);
+  if ('status' in accessError) { res.status(accessError.status).json({ error: accessError.error }); return; }
 
   const [existing] = await db.select().from(chatApiKeys).where(
     and(eq(chatApiKeys.id, keyId), eq(chatApiKeys.flow_id, flowId))

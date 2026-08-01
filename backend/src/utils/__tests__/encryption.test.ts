@@ -1,9 +1,43 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import crypto from 'node:crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
+
+describe('SECRETS_ENCRYPTION_KEY production fail-fast', () => {
+  const originalEnv = process.env.NODE_ENV;
+  const originalKey = process.env.SECRETS_ENCRYPTION_KEY;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalEnv;
+    process.env.SECRETS_ENCRYPTION_KEY = originalKey;
+  });
+
+  it('throws for the known default hex key in production', async () => {
+    vi.resetModules();
+    process.env.NODE_ENV = 'production';
+    process.env.SECRETS_ENCRYPTION_KEY = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+    const mod = await import('../encryption.js');
+    expect(() => mod.getKek()).toThrow(/SECRETS_ENCRYPTION_KEY/);
+  });
+
+  it('throws when the key is shorter than 64 hex chars', async () => {
+    vi.resetModules();
+    process.env.NODE_ENV = 'test';
+    process.env.SECRETS_ENCRYPTION_KEY = '0123456789abcdef';
+    const mod = await import('../encryption.js');
+    expect(() => mod.getKek()).toThrow(/SECRETS_ENCRYPTION_KEY/);
+  });
+
+  it('allows the known default when NODE_ENV is not production', async () => {
+    vi.resetModules();
+    process.env.NODE_ENV = 'test';
+    process.env.SECRETS_ENCRYPTION_KEY = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+    const mod = await import('../encryption.js');
+    expect(mod.getKek().length).toBe(KEY_LENGTH);
+  });
+});
 
 describe('encryption core primitives', () => {
   it('encrypts and decrypts with AES-256-GCM correctly', () => {
