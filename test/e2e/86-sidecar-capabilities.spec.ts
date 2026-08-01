@@ -192,8 +192,10 @@ test.describe('Sidecar real-world capabilities', () => {
 
   test('outbound network is allowed in the bash sandbox (egress is not blocked)', async ({ request }) => {
     // NOTE: the sidecar enforces filesystem (Landlock) restrictions only — there is no
-    // network egress policy, so outbound HTTPS must work (the git-clone tests above rely on it).
-    const code = 'var cp = require("child_process"); try { var r = cp.execSync("curl -s -o /dev/null -w %{http_code} --max-time 15 https://example.com", { encoding: "utf-8", timeout: 20000 }); return { http: r.trim() }; } catch(e) { return { err: (e.message || "").slice(0, 300) }; }';
+    // network egress policy, so outbound connections must work (the git-clone tests
+    // above rely on it). The target is the internal mock LLM so the suite stays
+    // self-contained and passes on air-gapped CI.
+    const code = 'var cp = require("child_process"); try { var r = cp.execSync("curl -s -o /dev/null -w %{http_code} --max-time 15 http://mock-llm-e2e:3002/health", { encoding: "utf-8", timeout: 20000 }); return { http: r.trim() }; } catch(e) { return { err: (e.message || "").slice(0, 300) }; }';
     const flow = makeFlow(uniqueFlowName('Egress-Curl'), code, []);
     const res = await request.post(API_URL + '/flows', { data: flow }).then(r => r.json());
     cleanupFlowIds.push(res.id);

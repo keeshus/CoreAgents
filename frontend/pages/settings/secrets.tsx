@@ -133,7 +133,7 @@ export default function SecretsPage() {
   };
 
   const handleReveal = async (id: string) => {
-    const confirmed = await deleteConfirm.confirm({ title: 'Reveal secret?', message: 'Reveal the value? It will be visible for 10 seconds.' });
+    const confirmed = await deleteConfirm.confirm({ title: 'Reveal secret?', message: 'Reveal the value? It will be visible for 10 seconds.', confirmLabel: 'Reveal' });
     if (!confirmed) return;
     try {
       const res = await fetch(`${API_URL}/secrets/${id}/reveal`, { method: 'POST', credentials: 'include' });

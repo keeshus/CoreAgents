@@ -348,10 +348,20 @@ test.describe('/v1/chat/completions execution', () => {
     expect(apiSessions.length).toBeGreaterThanOrEqual(before + 2);
 
     // The newest session (turn 2) has the full multi-turn history:
-    // 2 user messages + 1 assistant history entry + 1 assistant reply
-    const detailRes = await request.get(`${API_URL}/chat/sessions/${apiSessions[0].id}`);
-    expect(detailRes.ok()).toBe(true);
-    const detail = await detailRes.json();
+    // 2 user messages + 1 assistant history entry + 1 assistant reply.
+    // Don't rely on list ordering — pick the session that contains the follow-up.
+    let multiTurnSession: any = null;
+    for (const s of apiSessions) {
+      const sRes = await request.get(`${API_URL}/chat/sessions/${s.id}`);
+      if (!sRes.ok()) continue;
+      const sDetail = await sRes.json();
+      if (sDetail.messages?.some((m: any) => m.content === 'Turn two follow-up')) {
+        multiTurnSession = sDetail;
+        break;
+      }
+    }
+    expect(multiTurnSession, 'a session with the turn-2 follow-up message should exist').toBeDefined();
+    const detail = multiTurnSession;
     expect(detail.messages.length).toBeGreaterThanOrEqual(4);
     const contents = detail.messages.map((m: any) => m.content);
     expect(contents).toContain('Turn two follow-up');

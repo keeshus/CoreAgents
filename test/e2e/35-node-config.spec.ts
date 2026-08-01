@@ -1,34 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
+import { saveFlowViaUi } from './helpers/ui';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
-
-/**
- * Click the editor's Save button and wait for the flow to persist.
- * The editor occasionally loses its save handler after in-canvas edits (see report);
- * re-opening and closing a node's config modal refreshes it, so we retry that way.
- */
-async function saveFlowAndWait(page: any, request: any, flowId: string, isSaved: (flow: any) => boolean, attempts = 6) {
-  for (let i = 0; i < attempts; i++) {
-    await page.getByRole('button', { name: 'Save' }).click();
-    const start = Date.now();
-    while (Date.now() - start < 3000) {
-      const r = await request.get(`${API_URL}/flows/${flowId}`);
-      if (r.ok()) {
-        const f = await r.json();
-        if (isSaved(f)) return;
-      }
-      await page.waitForTimeout(400);
-    }
-    if (i < attempts - 1) {
-      await page.locator('.react-flow__node').first().click();
-      await page.getByTestId('node-config-modal').waitFor({ state: 'visible', timeout: 5000 });
-      await page.keyboard.press('Escape');
-      await page.getByTestId('node-config-modal').waitFor({ state: 'hidden', timeout: 3000 });
-    }
-  }
-  throw new Error('Flow was not saved after multiple attempts');
-}
 
 test.describe('Node configuration modal', () => {
   let flowId: string;
@@ -102,7 +76,7 @@ test.describe('Node configuration modal', () => {
     await expect(modal).not.toBeVisible({ timeout: 3000 });
 
     // Save the flow via the editor's Save button
-    await saveFlowAndWait(page, request, flow.id, (f) => {
+    await saveFlowViaUi(page, request, flow.id, (f) => {
       const node = f.nodes?.find((n: any) => n.id === 'c1');
       return node?.data?.config?.code?.includes('persisted');
     });

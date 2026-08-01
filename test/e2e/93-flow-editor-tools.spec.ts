@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
 import { getAuthCookie } from './helpers/auth';
+import { saveFlowViaUi } from './helpers/ui';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
@@ -31,27 +32,6 @@ test.describe('Flow Editor DOM tools', () => {
   test.afterEach(async ({ request }) => {
     if (flowId) await deleteFlow(request, flowId).catch(() => {});
   });
-
-  /**
-   * Click the Save button in the bottom bar and wait for the PUT to land in the API.
-   * The button's enabled state is driven by a debounced name-uniqueness check that
-   * can race in dev mode (the check request sometimes never fires), so the button
-   * may briefly swap to the disabled variant around the click, silently swallowing
-   * it. Retry the click until the API actually reflects the change.
-   */
-  async function saveFlowViaUi(page: any, expectedNodes: number) {
-    await expect.poll(async () => {
-      const btn = page.getByRole('button', { name: 'Save' });
-      if (await btn.isEnabled().catch(() => false)) {
-        await btn.click({ timeout: 2000 }).catch(() => {});
-      }
-      await page.waitForTimeout(400);
-      const res = await page.request.get(`${API_URL}/flows/${flowId}`);
-      if (!res.ok()) return -1;
-      const flow = await res.json();
-      return flow.nodes?.length;
-    }, { timeout: 15000, message: 'save should persist the canvas to the API' }).toBe(expectedNodes);
-  }
 
   /** Add a node of the given type through the catalog UI (real user path). */
   async function addNodeFromCatalog(page: any, type: string) {
@@ -220,7 +200,7 @@ test.describe('Flow Editor DOM tools', () => {
     await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
     await waitForCanvasSync(page, refBefore);
 
-    await saveFlowViaUi(page, countBefore + 1);
+    await saveFlowViaUi(page, request, flowId, (f) => f.nodes?.length === countBefore + 1);
 
     const flowRes = await request.get(`${API_URL}/flows/${flowId}`);
     const saved = await flowRes.json();

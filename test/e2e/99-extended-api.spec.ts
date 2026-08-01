@@ -323,8 +323,8 @@ test.describe('Cancel execution', () => {
     await expect(cancelBtn).toBeVisible({ timeout: 10000 });
     await cancelBtn.click();
 
-    // Confirm in the dialog (ConfirmDialog confirm button defaults to 'Delete')
-    const confirmBtn = page.getByRole('button', { name: 'Delete' });
+    // Confirm in the dialog (button is labeled 'Cancel execution', not a generic 'Delete')
+    const confirmBtn = page.getByRole('button', { name: 'Cancel execution' });
     await expect(confirmBtn).toBeVisible({ timeout: 5000 });
     await confirmBtn.click();
 

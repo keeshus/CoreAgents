@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerUser, createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
-import { getAuthCookie } from './helpers/auth';
+import { getAuthCookie, getAdminAuthFile } from './helpers/auth';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
@@ -8,15 +8,23 @@ test.describe('Groups feature', () => {
   let createdGroupIds: string[] = [];
   let cleanupUserIds: string[] = [];
 
-  test.afterEach(async ({ request }) => {
-    for (const gId of createdGroupIds) {
-      await request.delete(`${API_URL}/groups/${gId}`).catch(() => {});
+  test.afterEach(async ({ playwright }) => {
+    // The shared `request` fixture may hold a non-admin session if the test
+    // logged the browser in as a reader/editor — admin-only deletes (groups,
+    // users) need a dedicated admin context from the saved auth state.
+    const adminCtx = await playwright.request.newContext({ storageState: getAdminAuthFile() });
+    try {
+      for (const gId of createdGroupIds) {
+        await adminCtx.delete(`${API_URL}/groups/${gId}`).catch(() => {});
+      }
+      createdGroupIds = [];
+      for (const uId of cleanupUserIds) {
+        await adminCtx.delete(`${API_URL}/users/${uId}`).catch(() => {});
+      }
+      cleanupUserIds = [];
+    } finally {
+      await adminCtx.dispose();
     }
-    createdGroupIds = [];
-    for (const uId of cleanupUserIds) {
-      await request.delete(`${API_URL}/users/${uId}`).catch(() => {});
-    }
-    cleanupUserIds = [];
   });
 
   // ─── Settings page navigation ──────────────────────────────────────

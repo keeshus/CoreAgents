@@ -157,6 +157,11 @@ test.describe('Schedule trigger', () => {
     const mark = detail.output?.c1;
     expect(mark?.scheduled).toBe(true);
     expect(mark?.received).toMatchObject({ triggerType: 'schedule' });
+    // GAP PIN: the trigger's configured inputMessage ({"source":"cron-strict"})
+    // is never delivered — schedule-reconciliation.ts enqueues only {flowId} and
+    // worker/src/run.ts falls back to {triggerType:'schedule', timestamp}. If a
+    // future fix wires inputMessage through, this assertion fails loudly.
+    expect(mark?.received?.source).toBeUndefined();
 
     await deleteFlow(request, flow.id);
   });

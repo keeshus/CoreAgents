@@ -394,13 +394,13 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
-  test('parallel node runs sub-nodes concurrently (2s each, well under 4s total)', async ({ request }) => {
+  test('parallel node runs sub-nodes concurrently (overlapping execution, not sequential)', async ({ request }) => {
     const name = uniqueFlowName('ParallelConcTest');
     const res = await createFlow(request, {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'p1', type: 'parallel', position: { x: 300, y: 0 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'SubA', type: 'code', config: { code: 'const end = Date.now() + 2000; while (Date.now() < end) {} return { done: "A" };' } } }, { id: 's2', type: 'code', position: { x: 0, y: 100 }, data: { label: 'SubB', type: 'code', config: { code: 'const end = Date.now() + 2000; while (Date.now() < end) {} return { done: "B" };' } } }], subEdges: [] } } },
+        { id: 'p1', type: 'parallel', position: { x: 300, y: 0 }, data: { label: 'Parallel', type: 'parallel', config: { subNodes: [{ id: 's1', type: 'code', position: { x: 0, y: 0 }, data: { label: 'SubA', type: 'code', config: { code: 'const start = Date.now(); const end = start + 2000; while (Date.now() < end) {} return { done: "A", start };' } } }, { id: 's2', type: 'code', position: { x: 0, y: 100 }, data: { label: 'SubB', type: 'code', config: { code: 'const start = Date.now(); const end = start + 2000; while (Date.now() < end) {} return { done: "B", start };' } } }], subEdges: [] } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Parallel.SubA', 'Parallel.SubB'] } } },
       ],
       edges: [
@@ -409,19 +409,21 @@ test.describe('All node types', () => {
       ],
     });
     const flow = await res.json();
-    // Each sub-node busy-waits 2s. If executed sequentially the flow would take >= 4s;
-    // concurrency means both run in parallel and the total stays near ~2s.
-    const start = Date.now();
+    // Each sub-node busy-waits 2s and records its own start timestamp. If the
+    // engine ran them sequentially, SubB would start >= 2000ms after SubA;
+    // concurrency means their start times overlap. This is an in-band signal,
+    // immune to wall-clock flakiness under 4-stack CPU contention.
     const events = await debugExecute(flow.id, { message: 'go' }, cookie);
-    const elapsedMs = Date.now() - start;
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
     const output = completed!.data?.output;
     expect(output).toBeDefined();
     expect(output.p1?.SubA?.done).toBe('A');
     expect(output.p1?.SubB?.done).toBe('B');
-    expect(elapsedMs).toBeLessThan(4000);
-    expect(elapsedMs).toBeGreaterThanOrEqual(1500);
+    expect(output.p1?.SubA?.start).toBeDefined();
+    expect(output.p1?.SubB?.start).toBeDefined();
+    const overlap = Math.abs(output.p1!.SubB.start - output.p1!.SubA.start);
+    expect(overlap, 'SubB should start while SubA is still running (concurrent)').toBeLessThan(1500);
     await deleteFlow(request, flow.id);
   });
 

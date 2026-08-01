@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { E2E_USER } from './helpers/api';
+import { getAdminAuthFile } from './helpers/auth';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
@@ -62,7 +63,7 @@ test.describe('Auth flows', () => {
 
   // ─── Registration via UI ────────────────────────────────
 
-  test('registers a new user via /register and logs in as them', async ({ page, request }) => {
+  test('registers a new user via /register and logs in as them', async ({ page, request, playwright }) => {
     const email = `e2e-register-${Date.now()}@test.local`;
 
     await page.goto('/register');
@@ -91,7 +92,15 @@ test.describe('Auth flows', () => {
     expect(me.user?.email).toBe(email);
     expect(me.user?.role).toBe('reader');
 
-    // Cleanup — remove the created user (request fixture holds the admin session)
-    await request.delete(`${API_URL}/users/${me.user.userId}`).catch(() => {});
+    // Cleanup — the shared `request` fixture now holds the READER's cookies
+    // (browser signed in as the new user), so DELETE /api/users/:id (admin-only)
+    // would 403. Use a dedicated admin context from the saved auth state instead.
+    const adminCtx = await playwright.request.newContext({ storageState: getAdminAuthFile() });
+    try {
+      const delRes = await adminCtx.delete(`${API_URL}/users/${me.user.userId}`);
+      expect(delRes.ok(), 'admin should be able to delete the test user').toBe(true);
+    } finally {
+      await adminCtx.dispose();
+    }
   });
 });

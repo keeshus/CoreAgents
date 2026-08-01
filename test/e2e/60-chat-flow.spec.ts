@@ -19,10 +19,9 @@ test.describe('Chat flow', () => {
         models: ['mock-gpt-4'],
       },
     });
-    if (llmRes.ok()) {
-      const ep = await llmRes.json();
-      mockEndpointId = ep.id;
-    }
+    expect(llmRes.ok(), 'mock LLM endpoint should be created — every test in this file depends on it').toBe(true);
+    const ep = await llmRes.json();
+    mockEndpointId = ep.id;
   });
 
   test.afterAll(async ({ request }) => {

@@ -507,7 +507,7 @@ test.describe('Secrets management', () => {
 
     // The UI asks for confirmation before revealing
     await expect(page.getByText('Reveal secret?')).toBeVisible();
-    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: 'Reveal' }).click();
 
     // The plaintext value appears on screen
     await expect(page.getByText(/revealed-plaintext-xyz/)).toBeVisible({ timeout: 5000 });
