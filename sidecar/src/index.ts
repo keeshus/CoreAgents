@@ -103,14 +103,11 @@ function execBaseDir(executionId: string): string {
 // workdir must resolve inside the execution sandbox dir (reject path traversal)
 function resolveWorkdir(base: string, workdir?: string): string {
   if (!workdir) return join(base, 'home');
-  if (isAbsolute(workdir)) {
-    const resolved = resolve(workdir);
-    if (resolved !== base && !resolved.startsWith(`${base}/`)) {
-      throw new Error('workdir must resolve inside the execution sandbox directory');
-    }
-    return resolved;
+  const resolved = isAbsolute(workdir) ? resolve(workdir) : resolve(base, 'home', workdir);
+  if (resolved !== base && !resolved.startsWith(`${base}/`)) {
+    throw new Error('workdir must resolve inside the execution sandbox directory');
   }
-  return resolve(base, 'home', workdir);
+  return resolved;
 }
 
 // codeFileName must be a plain filename — no separators or traversal

@@ -4,7 +4,7 @@ import { db } from '../db/connection.js';
 import { flows, apiDeployments, executions } from '../db/schema.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
-import { authenticateWebhookRequest, enforceWebhookRateLimit } from './webhook-security.js';
+import { authenticateWebhookRequest, enforceWebhookRateLimit, enforceWebhookIpRateLimit } from './webhook-security.js';
 import type { FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
@@ -42,6 +42,15 @@ router.post(
     const resolved = await resolveWebhookFlow(slugOrId);
     if (!resolved) {
       res.status(404).json({ error: 'Webhook endpoint not found' });
+      return;
+    }
+
+    // Per-IP throttle BEFORE authentication — unauthenticated spam must not
+    // burn DB queries at full speed (see webhook-security.ts).
+    const ipRetryAfter = enforceWebhookIpRateLimit(req.ip || '');
+    if (ipRetryAfter !== null) {
+      res.setHeader('Retry-After', String(ipRetryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
       return;
     }
 

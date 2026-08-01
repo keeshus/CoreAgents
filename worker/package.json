@@ -16,7 +16,8 @@
     "openai": "^7.1.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "bullmq": "^5.81.3",
-    "ioredis": "^5.11.1"
+    "ioredis": "^5.11.1",
+    "undici": "^6.28.0"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

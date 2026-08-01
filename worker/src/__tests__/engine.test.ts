@@ -1013,7 +1013,9 @@ describe('FlowExecutor', () => {
       const result = await executePromise;
 
       const loopOutput = result.output.loop as any;
-      expect(loopOutput.count).toBe(100);
+      expect(loopOutput.count).toBeLessThan(100);
+      expect(loopOutput.count).toBeGreaterThan(0);
+      expect(loopOutput.aborted).toBe(true);
       expect(loopOutput.results.length).toBeLessThan(100);
 
       bashMock.executeCode.mockImplementation((_client: any, _executionId: string, code: string, input: unknown) => {

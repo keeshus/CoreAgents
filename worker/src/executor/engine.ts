@@ -120,7 +120,10 @@ function isPrivateOrRestrictedIp(ip: string): boolean {
 
 // Validate scheme and resolved IPs for every request/redirect hop.
 // Private/restricted destinations are blocked unless the flow explicitly opts in.
-async function assertSafeFetchUrl(rawUrl: string, allowPrivate: boolean): Promise<URL> {
+// Returns the validated, pinned addresses so the caller can connect to the
+// resolved IP instead of re-resolving DNS (closes the TOCTOU/DNS-rebinding
+// window between validation and connect).
+async function assertSafeFetchUrl(rawUrl: string, allowPrivate: boolean): Promise<{ url: URL; addresses: Array<{ address: string; family: number }> }> {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -144,7 +147,7 @@ async function assertSafeFetchUrl(rawUrl: string, allowPrivate: boolean): Promis
       }
     }
   }
-  return parsed;
+  return { url: parsed, addresses };
 }
 
 // Read the response body with a hard size cap
@@ -1518,6 +1521,30 @@ export class FlowExecutor {
         }
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout);
+        // Validated, pinned IPs for the current hop — written before each
+        // request by assertSafeFetchUrl and read by the dispatcher's lookup.
+        let pinnedAddresses: Array<{ address: string; family: number }> = [];
+        // undici's Agent lets us override the DNS lookup used at connect time,
+        // pinning each request to the IPs validated by assertSafeFetchUrl —
+        // a fast-flux/rebinding domain cannot swap to a private IP after the check.
+        let pinnedDispatcher: any;
+        try {
+          const { Agent } = await import('undici');
+          pinnedDispatcher = new Agent({
+            connect: {
+              // Ignore the hostname — the caller pins the exact validated IPs.
+              lookup: ((hostname: string, opts: unknown, cb: (err: Error | null, addrs?: Array<{ address: string; family: number }>) => void) => {
+                void hostname; void opts;
+                cb(null, pinnedAddresses);
+              }) as any,
+            },
+            connectTimeout: timeout,
+            headersTimeout: timeout,
+            bodyTimeout: timeout,
+          });
+        } catch {
+          pinnedDispatcher = undefined;
+        }
         try {
           // Manual redirect handling — every hop (including the first) is SSRF-checked
           let currentMethod: string = method;
@@ -1525,14 +1552,17 @@ export class FlowExecutor {
           let currentHeaders = fetchHeaders;
           let redirectCount = 0;
           for (;;) {
-            await assertSafeFetchUrl(fetchUrl, allowPrivate === true);
-            const response = await fetch(fetchUrl, {
+            const { addresses } = await assertSafeFetchUrl(fetchUrl, allowPrivate === true);
+            pinnedAddresses = addresses;
+            const fetchOptions: any = {
               method: currentMethod,
               headers: currentHeaders,
               body: currentBody,
               redirect: 'manual',
               signal: controller.signal,
-            });
+            };
+            if (pinnedDispatcher) fetchOptions.dispatcher = pinnedDispatcher;
+            const response = await fetch(fetchUrl, fetchOptions);
             if (followRedirects && REDIRECT_STATUSES.has(response.status)) {
               const location = response.headers.get('location');
               if (redirectCount >= HTTP_MAX_REDIRECTS) {
@@ -1553,8 +1583,12 @@ export class FlowExecutor {
               }
               redirectCount++;
               fetchUrl = new URL(location, fetchUrl).toString();
-              // Per fetch spec: 303 (and 301/302 for POST) switches to GET
-              if (response.status === 303 && currentMethod !== 'GET' && currentMethod !== 'HEAD') {
+              // Per fetch spec: 301/302 switch POST to GET, 303 switches any
+              // non-GET/HEAD to GET; 307/308 always preserve method + body.
+              const switchToGet = response.status === 303
+                ? currentMethod !== 'GET' && currentMethod !== 'HEAD'
+                : (response.status === 301 || response.status === 302) && currentMethod === 'POST';
+              if (switchToGet) {
                 currentMethod = 'GET';
                 currentBody = undefined;
                 const nextHeaders: Record<string, string> = {};
@@ -1580,6 +1614,9 @@ export class FlowExecutor {
           }
         } finally {
           clearTimeout(timer);
+          if (pinnedDispatcher) {
+            pinnedDispatcher.close().catch(() => {});
+          }
         }
       }
 
@@ -1607,8 +1644,10 @@ export class FlowExecutor {
         const results: unknown[] = [];
         const errors: { index: number; error: string }[] = [];
         const subFlowDef = { id: '', name: '', description: '', nodes: subNodes, edges: subEdges, version: 1, createdAt: '', updatedAt: '' };
+        let iteratedCount = 0;
         for (let i = 0; i < cappedItems.length; i++) {
           if (this.abortController.signal.aborted) break;
+          iteratedCount++;
           try {
             const loopInput = { ...(input as Record<string, unknown>), [itemVariable]: cappedItems[i], index: i };
             // Share the parent abort signal so cancellation propagates into loop iterations
@@ -1619,7 +1658,12 @@ export class FlowExecutor {
             errors.push({ index: i, error: err instanceof Error ? err.message : String(err) });
           }
         }
-        return { results: collectResults ? results : undefined, count: cappedItems.length, errors: errors.length > 0 ? errors : undefined };
+        return {
+          results: collectResults ? results : undefined,
+          count: iteratedCount,
+          aborted: this.abortController.signal.aborted,
+          errors: errors.length > 0 ? errors : undefined,
+        };
       }
 
       case 'delay': {

@@ -51,6 +51,8 @@ export class SlidingWindowLimiter {
       if (remaining.length === 0) this.hits.delete(key);
       else this.hits.set(key, remaining);
     }
+    // Only sweep once per window — otherwise every check() pays the O(n) cost
+    this.lastSweep = now;
   }
 }
 
@@ -64,6 +66,10 @@ export const DEFAULT_CHAT_RATE_LIMIT = 100; // requests per minute per API key
 export const webhookMinuteLimiter = new SlidingWindowLimiter(60_000);
 export const webhookHourLimiter = new SlidingWindowLimiter(3_600_000);
 export const chatMinuteLimiter = new SlidingWindowLimiter(60_000);
+// Per-IP throttle applied BEFORE authentication — unauthenticated spam must
+// not burn DB queries (deployment lookup, flow load, key/secret checks) at
+// full speed. Keyed by `ip:<addr>` so it never collides with slug/key keys.
+export const webhookIpMinuteLimiter = new SlidingWindowLimiter(60_000);
 
 export function enforceWebhookRateLimit(slug: string, rateLimit: number): number | null {
   if (rateLimit > 0) {
@@ -71,6 +77,12 @@ export function enforceWebhookRateLimit(slug: string, rateLimit: number): number
   }
   const defaultLimit = parseInt(process.env.WEBHOOK_RATE_LIMIT_DEFAULT || String(DEFAULT_WEBHOOK_RATE_LIMIT), 10);
   return webhookHourLimiter.check(slug, defaultLimit);
+}
+
+export function enforceWebhookIpRateLimit(ip: string): number | null {
+  const limit = parseInt(process.env.WEBHOOK_IP_RATE_LIMIT || '120', 10);
+  if (limit <= 0) return null;
+  return webhookIpMinuteLimiter.check(`ip:${ip}`, limit);
 }
 
 export function enforceChatRateLimit(keyId: string, rateLimit: number): number | null {
@@ -84,6 +96,7 @@ export function enforceChatRateLimit(keyId: string, rateLimit: number): number |
 export function resetRateLimiters(): void {
   webhookMinuteLimiter.reset();
   webhookHourLimiter.reset();
+  webhookIpMinuteLimiter.reset();
   chatMinuteLimiter.reset();
 }
 
