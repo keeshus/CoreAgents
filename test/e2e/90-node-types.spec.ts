@@ -811,9 +811,9 @@ test.describe('All node types', () => {
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
         // First call mints a CyberArk token via the mock auth endpoint (text/plain body)
-        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Token', type: 'http', config: { method: 'POST', url: `${MOCK_CYBERARK_INTERNAL}/api/authn/dev/${CYBERARK_LOGIN}/authenticate`, headers: '{"Content-Type":"text/plain"}', body: CYBERARK_API_KEY, timeout: 5000 } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Token', type: 'http', config: { method: 'POST', url: `${MOCK_CYBERARK_INTERNAL}/api/authn/dev/${CYBERARK_LOGIN}/authenticate`, headers: '{"Content-Type":"text/plain"}', body: CYBERARK_API_KEY, timeout: 5000, allowPrivate: true } } },
         // Second call uses the token from the first call's body in a header template
-        { id: 'h2', type: 'http', position: { x: 600, y: 0 }, data: { label: 'Fetch', type: 'http', config: { method: 'GET', url: `${MOCK_CYBERARK_INTERNAL}/api/secrets/dev/variable/prod%2Fdb%2Fpassword`, headers: '{"Authorization":"Token token=\\"{{input.Token.body}}\\""}', timeout: 5000 } } },
+        { id: 'h2', type: 'http', position: { x: 600, y: 0 }, data: { label: 'Fetch', type: 'http', config: { method: 'GET', url: `${MOCK_CYBERARK_INTERNAL}/api/secrets/dev/variable/prod%2Fdb%2Fpassword`, headers: '{"Authorization":"Token token=\\"{{input.Token.body}}\\""}', timeout: 5000, allowPrivate: true } } },
         { id: 'o1', type: 'output', position: { x: 900, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: ['Fetch.status', 'Fetch.body'] } } },
       ],
       edges: [
@@ -843,9 +843,10 @@ test.describe('All node types', () => {
     const name = uniqueFlowName('HttpHeaderEnvTest');
     const res = await createFlow(request, {
       name,
+      envVars: [{ name: 'CYB_TOKEN', value: token, type: 'static' }],
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetch', type: 'http', config: { method: 'GET', url: `${MOCK_CYBERARK_INTERNAL}/api/secrets/dev/variable/prod%2Fdb%2Fpassword`, headers: '{"Authorization":"Token token=\\"{{env.CYB_TOKEN}}\\""}', timeout: 5000 } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetch', type: 'http', config: { method: 'GET', url: `${MOCK_CYBERARK_INTERNAL}/api/secrets/dev/variable/prod%2Fdb%2Fpassword`, headers: '{"Authorization":"Token token=\\"{{env.CYB_TOKEN}}\\""}', timeout: 5000, allowPrivate: true } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: ['Fetch.status', 'Fetch.body'] } } },
       ],
       edges: [
@@ -854,8 +855,9 @@ test.describe('All node types', () => {
       ],
     });
     const flow = await res.json();
-    // sandboxEnv is populated from the input's __env map
-    const events = await debugExecute(flow.id, { __env: { CYB_TOKEN: token } }, cookie);
+    // The env var comes from the flow's own env_vars config (client-supplied
+    // __env is dropped by the security hardening), so the flow must carry it.
+    const events = await debugExecute(flow.id, {}, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
     const fetchStep = completed!.data?.output?.h1;

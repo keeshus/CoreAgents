@@ -284,11 +284,11 @@ test.describe('Subflow env var inheritance', () => {
     expect(c1out.value).toBeNull();
   });
 
-  // ── Precedence: flow vars vs input __env layer ────────────────────
-  // execution.ts seeds sandboxEnv from __env and then overwrites with the
-  // flow's own envVars — the flow level wins in the subflow child too.
+  // ── Precedence: flow vars are the only sandbox env source ─────────
+  // Client-supplied __env is dropped (security hardening); the flow's own
+  // envVars are the sole sandbox env source, inherited by the subflow child.
 
-  test('flow env var overrides the input env layer in the subflow child', async ({ request }) => {
+  test('flow env var is inherited by the subflow child', async ({ request }) => {
     const subflowRes = await request.post(`${API_URL}/flows`, {
       data: makeSubflow(uniqueFlowName('Subflow-Precedence'), 'return { value: process.env.PRE_VAR || null };'),
     });
@@ -306,7 +306,7 @@ test.describe('Subflow env var inheritance', () => {
     cleanupFlowIds.push(parent.id);
 
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(parent.id, { message: 'test', __env: { PRE_VAR: 'input-base' } }, cookie);
+    const events = await debugExecute(parent.id, { message: 'test' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();

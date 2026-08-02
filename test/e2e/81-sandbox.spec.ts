@@ -557,13 +557,19 @@ test.describe('Sandboxed tool execution', () => {
     const sysPrompt = 'ECHO_SYSTEM_PROMPT\nUse bash. MOCK_TOOL_CALL: bash {"command":"echo \\"DB=[$DATABASE_URL] SAFE=[$MY_SAFE_VAR]\\"","timeout":10000}';
     const flow = llmToolFlow(uniqueFlowName('Sandbox-Bash-Sanitize'), sysPrompt);
     (flow.nodes[1].data.config as any).endpointId = mockEndpointId;
+    // Client-supplied __env is dropped (security hardening) — the sandbox env
+    // comes exclusively from the flow's own env_vars config.
+    flow.envVars = [
+      { name: 'DATABASE_URL', value: 'leak-me-not', type: 'static' },
+      { name: 'MY_SAFE_VAR', value: 'safe-value', type: 'static' },
+    ];
     const flowRes = await request.post(`${API_URL}/flows`, { data: flow });
     expect(flowRes.ok()).toBe(true);
     const created = await flowRes.json();
     cleanupFlowIds.push(created.id);
 
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(created.id, { message: 'run', __env: { DATABASE_URL: 'leak-me-not', MY_SAFE_VAR: 'safe-value' } }, cookie);
+    const events = await debugExecute(created.id, { message: 'run' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();

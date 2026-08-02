@@ -141,12 +141,16 @@ test.describe('Webhook trigger', () => {
   test('rejects POST for a non-webhook flow', async ({ request }) => {
     const flow = await createManualFlow(request);
 
+    // Security hardening: authentication runs before the trigger-type check and
+    // flows without credentials are never publicly triggerable — a manual flow
+    // with no webhook secret or API key is rejected with 401 before the
+    // trigger-type check can return 400.
     const res = await request.post(`${API_URL}/webhook/${flow.id}`, {
       data: { message: 'hello' },
     });
-    expect(res.status()).toBe(400);
+    expect(res.status()).toBe(401);
     const body = await res.json();
-    expect(body.error).toContain('does not have a webhook trigger');
+    expect(body.error).toContain('Authentication required');
 
     await deleteFlow(request, flow.id);
   });
