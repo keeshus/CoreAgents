@@ -11,6 +11,43 @@ import { executionQueue } from '../../../worker/src/queue.js';
 
 const router = Router();
 
+async function getUserGroupIds(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ groupId: groupMembers.group_id })
+    .from(groupMembers)
+    .where(eq(groupMembers.user_id, userId));
+  return rows.map(r => r.groupId);
+}
+
+interface FlowAccessRow {
+  created_by: string | null;
+  group_id: string | null;
+}
+
+async function canAccessFlow(user: { userId: string; permissions: string[] }, flow: FlowAccessRow | undefined | null): Promise<boolean> {
+  if (!flow) return false;
+  if (user.permissions.includes('admin')) return true;
+  if (flow.created_by === user.userId) return true;
+  if (!flow.group_id) return true;
+  const groupIds = await getUserGroupIds(user.userId);
+  return groupIds.includes(flow.group_id);
+}
+
+// Destructive operations (delete) additionally require owner or group-admin —
+// consistent with execution.ts's canManageFlow policy.
+async function canManageFlow(user: { userId: string; permissions: string[] }, flow: FlowAccessRow | undefined | null): Promise<boolean> {
+  if (!flow) return false;
+  if (user.permissions.includes('admin')) return true;
+  if (flow.created_by === user.userId) return true;
+  if (!flow.group_id) return false;
+  const [membership] = await db
+    .select({ role: groupMembers.role })
+    .from(groupMembers)
+    .where(and(eq(groupMembers.group_id, flow.group_id), eq(groupMembers.user_id, user.userId)))
+    .limit(1);
+  return !!membership && membership.role === 'admin';
+}
+
 // GET /api/flows — list all flows
 router.get(
   '/',
@@ -129,8 +166,33 @@ router.get(
       return;
     }
 
-    // Attach personal API key info and path slug to trigger node for webhook flows
     const flowData = result[0];
+    if (!(await canAccessFlow(req.user!, flowData))) {
+      res.status(404).json({ error: 'Flow not found' });
+      return;
+    }
+
+    // env_vars may contain plaintext secret values — expose them only to the
+    // flow owner, group admins, or users with secrets:read on the flow's scope.
+    const isAdmin = req.user?.permissions?.includes('admin');
+    let canViewEnvVars = isAdmin || flowData.created_by === req.user?.userId;
+    if (!canViewEnvVars) {
+      const hasSecretsRead = (req.user?.permissions || []).some(p => p === 'secrets:read' || p === 'secrets:write');
+      if (flowData.group_id) {
+        const [membership] = await db.select({ role: groupMembers.role })
+          .from(groupMembers)
+          .where(and(eq(groupMembers.group_id, flowData.group_id), eq(groupMembers.user_id, req.user!.userId)))
+          .limit(1);
+        canViewEnvVars = !!membership && (membership.role === 'admin' || hasSecretsRead);
+      } else {
+        canViewEnvVars = hasSecretsRead;
+      }
+    }
+    if (!canViewEnvVars) {
+      delete (flowData as any).env_vars;
+    }
+
+    // Attach personal API key info and path slug to trigger node for webhook flows
     const nodes = (flowData.nodes || []) as any[];
     const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'webhook');
     if (triggerNode && req.user) {
@@ -244,6 +306,19 @@ router.put(
     const id = req.params.id as string;
     const { name, description, nodes, edges, group_id, flow_context } = req.body;
 
+    const [existingAccess] = await db.select({
+      created_by: flows.created_by,
+      group_id: flows.group_id,
+    }).from(flows).where(eq(flows.id, id)).limit(1);
+    if (!existingAccess) {
+      res.status(404).json({ error: 'Flow not found' });
+      return;
+    }
+    if (!(await canAccessFlow(req.user!, existingAccess))) {
+      res.status(403).json({ error: 'You can only edit flows in your own group' });
+      return;
+    }
+
     const updateData: Record<string, unknown> = {
       updated_at: new Date(),
     };
@@ -346,6 +421,19 @@ router.delete(
   requirePermission('flow:delete'),
   asyncHandler(async (req, res) => {
     const id = req.params.id as string;
+
+    const [existingAccess] = await db.select({
+      created_by: flows.created_by,
+      group_id: flows.group_id,
+    }).from(flows).where(eq(flows.id, id)).limit(1);
+    if (!existingAccess) {
+      res.status(404).json({ error: 'Flow not found' });
+      return;
+    }
+    if (!(await canManageFlow(req.user!, existingAccess))) {
+      res.status(403).json({ error: 'You can only delete flows you own or administer' });
+      return;
+    }
 
     // ── Remove schedule before deleting ───────────────────────
     const [existingFlow] = await db.select({ nodes: flows.nodes }).from(flows).where(eq(flows.id, id));

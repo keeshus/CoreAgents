@@ -19,8 +19,8 @@
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.5.2",
-    "helmet": "^8.2.0",
+    "express-rate-limit": "^8.6.1",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "neo4j-driver": "^6.2.0",
     "openid-client": "^6.8.4",
@@ -34,11 +34,11 @@
     "@types/express": "^5.0.6",
     "@types/express-rate-limit": "^6.0.2",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.31.10",
-    "tsx": "^4.23.0",
-    "typescript": "^6.0.3",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
 }

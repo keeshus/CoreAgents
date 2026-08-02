@@ -10,13 +10,27 @@ import type {
 import { topologicalSort } from './dag.js';
 import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
 import { randomUUID } from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { BASH_SANDBOX_SYSTEM_PROMPT, BASH_TOOL_DEFINITION } from '../tools/bash.js';
+import { sanitizeUntrustedKeys } from '../tools/sanitize.js';
 
 const slugify = (s: string) =>
   s.toLowerCase()
     .replace(/[\s.]+/g, '_')
     .replace(/[^a-z0-9_-]/g, '')
     .slice(0, 64);
+
+const HTTP_RESPONSE_MAX_BYTES = 10 * 1024 * 1024;
+const HTTP_MAX_REDIRECTS = 5;
+
+// Cap on items a single loop node may iterate — override via MAX_LOOP_ITEMS env
+const MAX_LOOP_ITEMS = (() => {
+  const raw = parseInt(process.env.MAX_LOOP_ITEMS ?? '1000', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 1000;
+})();
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 export class HitlPauseError extends Error {
   public nodeId: string;
@@ -71,6 +85,89 @@ export class FlowStopError extends Error {
 
 export type EventCallback = (nodeId: string, event: SSEEvent) => void | Promise<void>;
 
+// True when the IP is private/loopback/link-local/unspecified/reserved — SSRF must never reach these
+function isPrivateOrRestrictedIp(ip: string): boolean {
+  const lower = ip.toLowerCase();
+  // IPv4-mapped IPv6 (::ffff:a.b.c.d) — check the embedded IPv4
+  if (lower.startsWith('::ffff:')) {
+    const embedded = lower.slice(7);
+    if (embedded.includes('.')) return isPrivateOrRestrictedIp(embedded);
+  }
+  if (isIP(ip) === 4) {
+    const parts = ip.split('.').map(Number);
+    const [a, b] = parts;
+    if (a === 0) return true;                          // 0.0.0.0/8 unspecified
+    if (a === 10) return true;                         // 10.0.0.0/8
+    if (a === 127) return true;                        // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true;           // 169.254.0.0/16 link-local
+    if (a === 172 && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;           // 192.168.0.0/16
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 CGNAT
+    if (a >= 224) return true;                         // multicast + reserved
+    return false;
+  }
+  if (isIP(ip) === 6) {
+    if (lower === '::' || lower === '::1') return true;          // unspecified / loopback
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 ULA
+    if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true; // fe80::/10
+    if (lower.startsWith('ff')) return true;                     // multicast
+    if (lower.startsWith('2001:db8')) return true;               // documentation range
+    if (lower.startsWith('64:ff9b') || lower.startsWith('64:ff9b:1')) return true; // NAT64 well-known
+    return false;
+  }
+  return true; // not parseable as an IP — reject
+}
+
+// Validate scheme and resolved IPs for every request/redirect hop.
+// Private/restricted destinations are blocked unless the flow explicitly opts in.
+// Returns the validated, pinned addresses so the caller can connect to the
+// resolved IP instead of re-resolving DNS (closes the TOCTOU/DNS-rebinding
+// window between validation and connect).
+async function assertSafeFetchUrl(rawUrl: string, allowPrivate: boolean): Promise<{ url: URL; addresses: Array<{ address: string; family: number }> }> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error('HTTP Request node: invalid URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`HTTP Request node: unsupported protocol "${parsed.protocol}" — only http and https are allowed`);
+  }
+  const hostname = parsed.hostname;
+  let addresses: Array<{ address: string; family: number }>;
+  try {
+    addresses = await dnsLookup(hostname, { all: true, verbatim: true });
+  } catch (err) {
+    throw new Error(`HTTP Request node: DNS resolution failed for "${hostname}"`);
+  }
+  if (!allowPrivate) {
+    for (const addr of addresses) {
+      if (isPrivateOrRestrictedIp(addr.address)) {
+        throw new Error(`HTTP Request node: destination "${hostname}" resolves to a private or restricted address — blocked (set allowPrivate to reach internal services)`);
+      }
+    }
+  }
+  return { url: parsed, addresses };
+}
+
+// Read the response body with a hard size cap
+async function readResponseBodyCapped(response: Response): Promise<string> {
+  if (!response.body) return response.text();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > HTTP_RESPONSE_MAX_BYTES) {
+      throw new Error('HTTP Request node: response body exceeds the 10 MB limit');
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf-8');
+}
+
 // Database lookups the executor needs at runtime
 export interface ExecutionContext {
   getEndpoint?: (endpointId: string) => Promise<ResolvedEndpoint | null>;
@@ -101,8 +198,8 @@ export class FlowExecutor {
   private currentRunId = '';
   private currentOptions?: { replayFrom?: string; replayOutputs?: Record<string, unknown>; inputOverride?: Record<string, unknown>; initialIteration?: number };
 
-  constructor() {
-    this.abortController = new AbortController();
+  constructor(abortController?: AbortController) {
+    this.abortController = abortController ?? new AbortController();
   }
 
   abort() {
@@ -126,15 +223,19 @@ export class FlowExecutor {
     }
 
 
+    // Untrusted parsed JSON (webhook/chat bodies) may contain __proto__/constructor/prototype keys —
+    // strip them before any merge or template resolution
+    const sanitizedFlowInput = sanitizeUntrustedKeys(options?.inputOverride || input) as Record<string, unknown>;
+
     // Validate the flow before execution — catch schema/template issues early
     // Skip validation when there are cycles (feedback loops) — cycle ordering is undefined
-    const validationErrors = cycles.length > 0 ? [] : this.compileFlow(sorted, flow.edges, input);
+    const validationErrors = cycles.length > 0 ? [] : this.compileFlow(sorted, flow.edges, sanitizedFlowInput);
     if (validationErrors.length > 0) {
       throw new Error(`Flow compilation failed:\n${validationErrors.join('\n')}`);
     }
 
     const nodeOutputs = new Map<string, unknown>();
-    nodeOutputs.set('__input__', options?.inputOverride || input);
+    nodeOutputs.set('__input__', sanitizedFlowInput);
 
     // If replaying: pre-load saved outputs from previous run, skip nodes before HITL
     const replayFrom = options?.replayFrom;
@@ -605,7 +706,7 @@ export class FlowExecutor {
     // First, spread __input__ fields so flags like _approved are accessible
     const flowInput = nodeOutputs.get('__input__') as Record<string, unknown> | undefined;
     if (flowInput && typeof flowInput === 'object') {
-      Object.assign(accumulated, flowInput);
+      Object.assign(accumulated, sanitizeUntrustedKeys(flowInput));
     }
     // Then add all node outputs (overwrite __input__ keys with same name)
     for (const [key, value] of nodeOutputs) {
@@ -860,7 +961,7 @@ export class FlowExecutor {
             // structured_output is a carrier for the output schema, not a real tool
             if (tc.name === 'structured_output') {
               structuredOutputUsed = true;
-              Object.assign(result, tc.input as Record<string, unknown>);
+              Object.assign(result, sanitizeUntrustedKeys(tc.input as Record<string, unknown>));
               executedTools.push({ name: tc.name, input: tc.input, result: 'used as node output' });
               break;
             }
@@ -1002,7 +1103,7 @@ export class FlowExecutor {
         if (!structuredOutputUsed && finalContent && config.responseFormat === 'json_object') {
           try {
             const parsed = JSON.parse(finalContent);
-            if (typeof parsed === 'object' && parsed !== null) Object.assign(result, parsed);
+            if (typeof parsed === 'object' && parsed !== null) Object.assign(result, sanitizeUntrustedKeys(parsed));
           } catch {}
         }
   return result;
@@ -1093,13 +1194,30 @@ export class FlowExecutor {
           if (rawCondition && rawCondition.trim()) {
             // Resolve {{input.var}} templates to actual values
             const resolved = await resolveTemplate(rawCondition, input, context);
-            // Try evaluating as JS expression first
+            // Evaluate the expression in the sidecar sandbox — never in this process
             let result: unknown;
             try {
-              result = new Function('input', `return ${resolved}`)(inputObj);
-            } catch {
-              // JS evaluation failed — treat resolved string as the value itself
-              result = resolved;
+              if (!context.sandboxExecutionId) {
+                throw new Error('Condition node: sandbox not available — cannot evaluate condition securely. Ensure the sidecar is running and execution has a sandbox context.');
+              }
+              const { evaluateCondition } = await import('../tools/bash.js');
+              const { createSidecarClient } = await import('../sandbox/sidecar-client.js');
+              const sidecarClient = createSidecarClient();
+              const evalResult = await evaluateCondition(
+                sidecarClient,
+                context.sandboxExecutionId,
+                resolved,
+                inputObj ?? {},
+              );
+              if (evalResult.ok) {
+                result = evalResult.result;
+              } else {
+                // Sandbox evaluation failed (syntax/runtime error) — legacy behavior:
+                // treat the resolved string as the value itself
+                result = resolved;
+              }
+            } catch (err) {
+              throw new Error(`Condition node: failed to evaluate condition in sandbox: ${err instanceof Error ? err.message : String(err)}`);
             }
             const strVal = String(result).trim();
             // Try to match the value against an output label
@@ -1392,14 +1510,14 @@ export class FlowExecutor {
 
       case 'http': {
         const config = (nodeData as any).config || {};
-        const { method = 'GET', url = '', headers = '', body = '', authType = 'none', authUsername, authPassword, authToken, authKeyName, authKeyValue, followRedirects = true, timeout = 30000, sslVerify = true, hmacSecret, hmacHeader } = config;
+        const { method = 'GET', url = '', headers = '', body = '', authType = 'none', authUsername, authPassword, authToken, authKeyName, authKeyValue, followRedirects = true, timeout = 30000, sslVerify = true, hmacSecret, hmacHeader, allowPrivate = false } = config;
         if (!url) throw new Error('HTTP Request node: URL is required');
-        const fetchUrl = await resolveTemplate(url, input, context);
+        let fetchUrl = await resolveTemplate(url, input, context);
         const fetchHeaders: Record<string, string> = {};
         if (headers) {
           try {
             const parsed = JSON.parse(await resolveTemplate(headers, input, context));
-            Object.assign(fetchHeaders, parsed);
+            Object.assign(fetchHeaders, sanitizeUntrustedKeys(parsed));
           } catch { throw new Error('HTTP Request node: headers must be valid JSON'); }
         }
         if (authType === 'basic' && authUsername && authPassword) {
@@ -1421,26 +1539,102 @@ export class FlowExecutor {
         }
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout);
+        // Validated, pinned IPs for the current hop — written before each
+        // request by assertSafeFetchUrl and read by the dispatcher's lookup.
+        let pinnedAddresses: Array<{ address: string; family: number }> = [];
+        // undici's Agent lets us override the DNS lookup used at connect time,
+        // pinning each request to the IPs validated by assertSafeFetchUrl —
+        // a fast-flux/rebinding domain cannot swap to a private IP after the check.
+        let pinnedDispatcher: any;
         try {
-          const response = await fetch(fetchUrl, {
-            method,
-            headers: fetchHeaders,
-            body: fetchBody,
-            redirect: followRedirects ? 'follow' : 'manual',
-            signal: controller.signal,
+          const { Agent } = await import('undici');
+          pinnedDispatcher = new Agent({
+            connect: {
+              // Ignore the hostname — the caller pins the exact validated IPs.
+              lookup: ((hostname: string, opts: unknown, cb: (err: Error | null, addrs?: Array<{ address: string; family: number }>) => void) => {
+                void hostname; void opts;
+                cb(null, pinnedAddresses);
+              }) as any,
+            },
+            connectTimeout: timeout,
+            headersTimeout: timeout,
+            bodyTimeout: timeout,
           });
-          const responseBody = await response.text();
-          let parsedBody: unknown;
-          try { parsedBody = JSON.parse(responseBody); } catch { parsedBody = responseBody; }
-          return {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries()),
-            body: parsedBody,
-            ok: response.ok,
-          };
+        } catch {
+          pinnedDispatcher = undefined;
+        }
+        try {
+          // Manual redirect handling — every hop (including the first) is SSRF-checked
+          let currentMethod: string = method;
+          let currentBody: string | undefined = fetchBody;
+          let currentHeaders = fetchHeaders;
+          let redirectCount = 0;
+          for (;;) {
+            const { addresses } = await assertSafeFetchUrl(fetchUrl, allowPrivate === true);
+            pinnedAddresses = addresses;
+            const fetchOptions: any = {
+              method: currentMethod,
+              headers: currentHeaders,
+              body: currentBody,
+              redirect: 'manual',
+              signal: controller.signal,
+            };
+            if (pinnedDispatcher) fetchOptions.dispatcher = pinnedDispatcher;
+            const response = await fetch(fetchUrl, fetchOptions);
+            if (followRedirects && REDIRECT_STATUSES.has(response.status)) {
+              const location = response.headers.get('location');
+              if (redirectCount >= HTTP_MAX_REDIRECTS) {
+                throw new Error(`HTTP Request node: too many redirects (max ${HTTP_MAX_REDIRECTS})`);
+              }
+              if (!location) {
+                // No location header — return the redirect response itself
+                const redirectBody = await readResponseBodyCapped(response);
+                let parsedBody: unknown;
+                try { parsedBody = JSON.parse(redirectBody); } catch { parsedBody = redirectBody; }
+                return {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: Object.fromEntries(response.headers.entries()),
+                  body: parsedBody,
+                  ok: response.ok,
+                };
+              }
+              redirectCount++;
+              fetchUrl = new URL(location, fetchUrl).toString();
+              // Per fetch spec: 301/302 switch POST to GET, 303 switches any
+              // non-GET/HEAD to GET; 307/308 always preserve method + body.
+              const switchToGet = response.status === 303
+                ? currentMethod !== 'GET' && currentMethod !== 'HEAD'
+                : (response.status === 301 || response.status === 302) && currentMethod === 'POST';
+              if (switchToGet) {
+                currentMethod = 'GET';
+                currentBody = undefined;
+                const nextHeaders: Record<string, string> = {};
+                for (const [k, v] of Object.entries(currentHeaders)) {
+                  if (k.toLowerCase() !== 'content-type' && k.toLowerCase() !== 'content-length') {
+                    nextHeaders[k] = v;
+                  }
+                }
+                currentHeaders = nextHeaders;
+              }
+              continue;
+            }
+            const responseBody = await readResponseBodyCapped(response);
+            let parsedBody: unknown;
+            try { parsedBody = JSON.parse(responseBody); } catch { parsedBody = responseBody; }
+            return {
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers.entries()),
+              body: parsedBody,
+              ok: response.ok,
+            };
+          }
         } finally {
           clearTimeout(timer);
+          if (pinnedDispatcher) {
+            pinnedDispatcher.close().catch(() => {});
+          }
         }
       }
 
@@ -1461,20 +1655,33 @@ export class FlowExecutor {
         };
         const items = loopResolve(input, itemsField);
         if (!Array.isArray(items)) throw new Error(`Loop node: "${itemsField}" is not an array`);
+        const cappedItems = items.slice(0, MAX_LOOP_ITEMS);
+        if (cappedItems.length < items.length) {
+          console.warn(`Loop node: "${itemsField}" has ${items.length} items — capped at MAX_LOOP_ITEMS=${MAX_LOOP_ITEMS}`);
+        }
         const results: unknown[] = [];
         const errors: { index: number; error: string }[] = [];
         const subFlowDef = { id: '', name: '', description: '', nodes: subNodes, edges: subEdges, version: 1, createdAt: '', updatedAt: '' };
-        for (let i = 0; i < items.length; i++) {
+        let iteratedCount = 0;
+        for (let i = 0; i < cappedItems.length; i++) {
+          if (this.abortController.signal.aborted) break;
+          iteratedCount++;
           try {
-            const loopInput = { ...(input as Record<string, unknown>), [itemVariable]: items[i], index: i };
-            const subExecutor = new FlowExecutor();
+            const loopInput = { ...(input as Record<string, unknown>), [itemVariable]: cappedItems[i], index: i };
+            // Share the parent abort signal so cancellation propagates into loop iterations
+            const subExecutor = new FlowExecutor(this.abortController);
             const subResult = await subExecutor.execute(subFlowDef, loopInput, onEvent, context);
             if (collectResults) results.push(subResult.output);
           } catch (err) {
             errors.push({ index: i, error: err instanceof Error ? err.message : String(err) });
           }
         }
-        return { results: collectResults ? results : undefined, count: items.length, errors: errors.length > 0 ? errors : undefined };
+        return {
+          results: collectResults ? results : undefined,
+          count: iteratedCount,
+          aborted: this.abortController.signal.aborted,
+          errors: errors.length > 0 ? errors : undefined,
+        };
       }
 
       case 'delay': {
@@ -1616,7 +1823,7 @@ export class SubFlowExecutor {
       hierarchy: { path: this.parentPath, depth: this.depth },
     });
 
-    const subFlowExecutor = new FlowExecutor();
+    const subFlowExecutor = new FlowExecutor(this.abortController);
 
     const wrappedOnEvent: EventCallback = async (nodeId, event) => {
       const fullNodeId = this.parentPath ? `${this.parentPath}:${nodeId}` : nodeId;

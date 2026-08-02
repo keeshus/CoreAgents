@@ -9,6 +9,7 @@ describe('createSandboxManager', () => {
     mockSidecarClient = {
       setup: vi.fn().mockResolvedValue(undefined),
       exec: vi.fn(),
+      eval: vi.fn(),
       teardown: vi.fn().mockResolvedValue(undefined),
     };
   });

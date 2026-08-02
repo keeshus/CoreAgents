@@ -17,6 +17,43 @@ const router = Router();
 // In-memory registry of active executors for cancellation
 const activeExecutors = new Map<string, FlowExecutor>();
 
+interface FlowScopeRow {
+  created_by: string | null;
+  group_id: string | null;
+}
+
+async function getUserGroupIds(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ groupId: groupMembers.group_id })
+    .from(groupMembers)
+    .where(eq(groupMembers.user_id, userId));
+  return rows.map(r => r.groupId);
+}
+
+// Mirrors the list-endpoint visibility rule: admins, flow owners, unassigned
+// flows (no group), and members of the flow's group can access.
+async function canAccessFlow(user: { userId: string; permissions: string[] }, flow: FlowScopeRow | undefined | null): Promise<boolean> {
+  if (!flow) return false;
+  if (user.permissions.includes('admin')) return true;
+  if (flow.created_by === user.userId) return true;
+  if (!flow.group_id) return true;
+  const groupIds = await getUserGroupIds(user.userId);
+  return groupIds.includes(flow.group_id);
+}
+
+// Destructive operations additionally require group-admin / flow-owner.
+async function canManageFlow(user: { userId: string; permissions: string[] }, flow: FlowScopeRow | undefined | null): Promise<boolean> {
+  if (!flow) return false;
+  if (user.permissions.includes('admin')) return true;
+  if (flow.created_by === user.userId) return true;
+  if (!flow.group_id) return false;
+  const [membership] = await db.select({ role: groupMembers.role })
+    .from(groupMembers)
+    .where(and(eq(groupMembers.group_id, flow.group_id), eq(groupMembers.user_id, user.userId)))
+    .limit(1);
+  return !!membership && membership.role === 'admin';
+}
+
 // GET /api/executions/pending — list executions awaiting approval (for approvals page)
 router.get('/executions/pending', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
   const isAdmin = req.user?.permissions?.includes('admin');
@@ -106,7 +143,9 @@ router.get('/executions/:id', requirePermission('execution:approve'), asyncHandl
     pending_hitls: executions.pending_hitls,
   }).from(executions).where(eq(executions.id, id)).limit(1);
   if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
-  const [flow] = await db.select({ name: flows.name }).from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+  const [flow] = await db.select({ name: flows.name, created_by: flows.created_by, group_id: flows.group_id })
+    .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+  if (!(await canAccessFlow(req.user!, flow))) { res.status(404).json({ error: 'Execution not found' }); return; }
   const steps = await db.select().from(executionSteps).where(eq(executionSteps.execution_id, id)).orderBy(executionSteps.started_at);
   res.json({ ...exec, flow_name: flow?.name || 'Unknown', steps });
 }));
@@ -114,6 +153,15 @@ router.get('/executions/:id', requirePermission('execution:approve'), asyncHandl
 // POST /api/executions/:executionId/cancel — cancel a running execution
 router.post('/executions/:executionId/cancel', requirePermission('flow:edit'), asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
+
+  const [exec] = await db.select({ flow_id: executions.flow_id }).from(executions).where(eq(executions.id, executionId)).limit(1);
+  if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
+  const [flow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+    .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+  if (!(await canManageFlow(req.user!, flow))) {
+    res.status(403).json({ error: 'Only the flow owner or a group admin can cancel executions' });
+    return;
+  }
 
   // Abort in-process if available
   const executor = activeExecutors.get(executionId);
@@ -150,6 +198,20 @@ router.post(
   asyncHandler(async (req, res) => {
     const flowId = req.params.flowId as string;
     const { input = {}, nodes: canvasNodes, edges: canvasEdges } = req.body;
+
+    // Strip client-supplied sandbox env: the execution environment must come
+    // exclusively from the flow's own env_vars configuration.
+    if (input && typeof input === 'object') {
+      delete (input as any).__env;
+    }
+
+    // The target flow must be in the requester's scope (own group / unassigned).
+    const [scopeFlow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+      .from(flows).where(eq(flows.id, flowId)).limit(1);
+    if (!(await canAccessFlow(req.user!, scopeFlow))) {
+      res.status(404).json({ error: 'Flow not found' });
+      return;
+    }
 
     // SSE headers ------------------------------------------------
     res.setHeader('Content-Type', 'text/event-stream');
@@ -632,7 +694,7 @@ router.post(
 
 // ── POST /api/executions/:executionId/approve — approve HITL and resume flow ──
 
-router.post('/executions/:executionId/approve', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
+router.post('/executions/:executionId/approve', asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
   const { feedback = '', decision = 'approved', data: userData = {}, hitlNodeId } = req.body || {};
 
@@ -648,6 +710,29 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
   if (!hitlEntry) { res.status(400).json({ error: 'No pending HITL found' }); return; }
 
   const userId = req.user!.userId;
+
+  // Resolve the execution's flow for group scoping
+  const [approveFlow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+    .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+
+  // Validate `decision` against the buttons configured on the HITL node
+  const validDecisions = (hitlEntry.buttons || [])
+    .map((b: any) => b?.value)
+    .filter((v: unknown): v is string => typeof v === 'string' && v.length > 0);
+  if (validDecisions.length > 0 && !validDecisions.includes(decision)) {
+    res.status(400).json({ error: `Invalid decision. Valid options: ${validDecisions.join(', ')}` });
+    return;
+  }
+
+  // When no assignment is configured, require at least membership of the
+  // flow's group. Configured assignments are enforced by the checks below.
+  if (!hitlEntry.assignmentType) {
+    const flowAccessible = req.user!.permissions.includes('admin') || await canAccessFlow(req.user!, approveFlow);
+    if (!flowAccessible) {
+      res.status(403).json({ error: 'You are not authorized to approve this request' });
+      return;
+    }
+  }
 
   // Resolve group members for group-type assignments
   if (hitlEntry.assignmentType === 'group' || hitlEntry.assignees?.groupIds?.length) {
@@ -691,6 +776,16 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       res.status(403).json({ error: 'You are not assigned to this approval request' });
       return;
     }
+
+    // Assignment type configured but no assignees resolvable (malformed stored
+    // state) — fall back to group membership instead of skipping the check.
+    if (authorizedUserIds.length === 0) {
+      const flowAccessible = req.user!.permissions.includes('admin') || await canAccessFlow(req.user!, approveFlow);
+      if (!flowAccessible) {
+        res.status(403).json({ error: 'You are not authorized to approve this request' });
+        return;
+      }
+    }
   }
 
   // ── Resolve group-to-user for assignees (used by multi) ──
@@ -717,6 +812,15 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
     if (existing) {
       res.status(400).json({ error: 'You have already responded to this request' });
       return;
+    }
+
+    // Multi-approval with no assignees configured still requires flow access
+    if (!hitlEntry.assignees?.userIds?.length) {
+      const flowAccessible = req.user!.permissions.includes('admin') || await canAccessFlow(req.user!, approveFlow);
+      if (!flowAccessible) {
+        res.status(403).json({ error: 'You are not authorized to approve this request' });
+        return;
+      }
     }
 
     // Check if user is in the resolved assignees list
@@ -1051,6 +1155,15 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
 router.delete('/executions/:executionId', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
 
+  const [exec] = await db.select({ flow_id: executions.flow_id }).from(executions).where(eq(executions.id, executionId)).limit(1);
+  if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
+  const [flow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+    .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+  if (!(await canManageFlow(req.user!, flow))) {
+    res.status(403).json({ error: 'Only the flow owner or a group admin can delete executions' });
+    return;
+  }
+
   // Delete steps first (FK constraint)
   await db.delete(executionSteps).where(eq(executionSteps.execution_id, executionId));
   await db.delete(executions).where(eq(executions.id, executionId));
@@ -1060,12 +1173,65 @@ router.delete('/executions/:executionId', requirePermission('execution:approve')
 
 // ── POST /api/executions/:executionId/reject — reject HITL ──────────────────────
 
-router.post('/executions/:executionId/reject', requirePermission('execution:approve'), asyncHandler(async (req, res) => {
+router.post('/executions/:executionId/reject', asyncHandler(async (req, res) => {
   const executionId = req.params.executionId as string;
 
   const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));
   if (!exec) { res.status(404).json({ error: 'Execution not found' }); return; }
   if (exec.status !== 'awaiting_approval') { res.status(400).json({ error: 'Not awaiting approval' }); return; }
+
+  const pendingHitls = (exec.pending_hitls || []) as any[];
+  const hitlEntry = pendingHitls[0];
+
+  // Resolve the execution's flow for group scoping
+  const [rejectFlow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+    .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+
+  // Authorization: enforce the same rules as approve — assignment checks when
+  // configured, otherwise at least group membership of the flow's group.
+  if (hitlEntry && hitlEntry.assignmentType && hitlEntry.assignmentType !== 'multi') {
+    let authorizedUserIds: string[] = [];
+    if (hitlEntry.assignmentType === 'user' && hitlEntry.assignedUserId) {
+      authorizedUserIds = [hitlEntry.assignedUserId];
+    } else if (hitlEntry.assignmentType === 'role' && hitlEntry.assignedRoleId) {
+      const roleUsers = await db.select({ id: users.id }).from(users).where(eq(users.role_id, hitlEntry.assignedRoleId));
+      authorizedUserIds = roleUsers.map(u => u.id);
+    } else if (hitlEntry.assignmentType === 'group') {
+      const groupId = hitlEntry.assignedGroupId || hitlEntry.assignees?.groupIds?.[0];
+      if (groupId) {
+        const members = await db.select({ userId: groupMembers.user_id })
+          .from(groupMembers)
+          .where(eq(groupMembers.group_id, groupId));
+        authorizedUserIds = members.map(m => m.userId);
+      }
+    }
+    if (authorizedUserIds.length > 0 && !authorizedUserIds.includes(req.user!.userId)) {
+      res.status(403).json({ error: 'You are not assigned to this approval request' });
+      return;
+    }
+
+    // Assignment type configured but no assignees resolvable (malformed stored
+    // state) — fall back to group membership instead of skipping the check.
+    if (authorizedUserIds.length === 0) {
+      const flowAccessible = req.user!.permissions.includes('admin') || await canAccessFlow(req.user!, rejectFlow);
+      if (!flowAccessible) {
+        res.status(403).json({ error: 'You are not authorized to reject this request' });
+        return;
+      }
+    }
+  } else if (hitlEntry?.assignmentType === 'multi') {
+    const assigneeIds: string[] = hitlEntry.assignees?.userIds || [];
+    if (assigneeIds.length > 0 && !assigneeIds.includes(req.user!.userId)) {
+      res.status(403).json({ error: 'You are not assigned to this approval request' });
+      return;
+    }
+  } else {
+    const flowAccessible = req.user!.permissions.includes('admin') || await canAccessFlow(req.user!, rejectFlow);
+    if (!flowAccessible) {
+      res.status(403).json({ error: 'You are not authorized to reject this request' });
+      return;
+    }
+  }
 
   await db.update(executions)
     .set({ status: 'cancelled', error: 'Rejected by user', completed_at: new Date() })
@@ -1082,6 +1248,14 @@ router.get(
     const flowId = req.params.flowId as string;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const offset = parseInt(req.query.offset as string) || 0;
+
+    const [scopeFlow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+      .from(flows).where(eq(flows.id, flowId)).limit(1);
+    if (!(await canAccessFlow(req.user!, scopeFlow))) {
+      res.status(404).json({ error: 'Flow not found' });
+      return;
+    }
+
     const [result, countResult] = await Promise.all([
       db.select().from(executions).where(eq(executions.flow_id, flowId)).orderBy(desc(executions.created_at)).limit(limit).offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(executions).where(eq(executions.flow_id, flowId)),
@@ -1100,6 +1274,9 @@ router.get(
     const executionId = req.params.executionId as string;
     const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));
     if (!exec) { res.status(404).json({ message: 'Execution not found' }); return; }
+    const [flow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+      .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+    if (!(await canAccessFlow(req.user!, flow))) { res.status(404).json({ message: 'Execution not found' }); return; }
     const steps = await db.select().from(executionSteps).where(eq(executionSteps.execution_id, executionId)).orderBy(executionSteps.started_at);
     res.json({ ...exec, steps });
   }),
@@ -1117,6 +1294,13 @@ router.get(
       .from(executions)
       .where(eq(executions.id, executionId));
     if (!exec) {
+      res.status(404).json({ message: 'Execution not found' });
+      return;
+    }
+
+    const [flow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
+      .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
+    if (!(await canAccessFlow(req.user!, flow))) {
       res.status(404).json({ message: 'Execution not found' });
       return;
     }

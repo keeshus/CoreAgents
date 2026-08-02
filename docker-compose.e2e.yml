@@ -40,7 +40,8 @@ services:
     restart: unless-stopped
 
   db-migrate-e2e:
-    image: node:25-alpine
+    # node:24-alpine (current LTS) pinned by digest — node:25 is EOL since 2026-03-31
+    image: node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3
     container_name: core-agents-e2e-migrate
     working_dir: /repo
     volumes:
@@ -70,6 +71,7 @@ services:
       VALKEY_PASSWORD: dev-valkey
       SECRETS_ENCRYPTION_KEY: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
       SIDECAR_URL: http://sidecar-e2e:4001
+      SIDECAR_TOKEN: e2e-sidecar-token
     depends_on:
       postgres-e2e:
         condition: service_healthy
@@ -105,6 +107,7 @@ services:
       VALKEY_PASSWORD: dev-valkey
       SECRETS_ENCRYPTION_KEY: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
       SIDECAR_URL: http://sidecar-e2e:4001
+      SIDECAR_TOKEN: e2e-sidecar-token
     depends_on:
       postgres-e2e:
         condition: service_healthy
@@ -123,8 +126,10 @@ services:
     tmpfs: /var/flow-data
     cap_add:
       - SYS_ADMIN
+    environment:
+      SIDECAR_TOKEN: e2e-sidecar-token
     ports:
-      - "4001:4001"
+      - "127.0.0.1:4001:4001"
 
   mock-llm-e2e:
     build:

@@ -1,18 +1,29 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createSidecarClient } from '../sandbox/sidecar-client.js';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+const AUTH_HEADERS = {
+  'Content-Type': 'application/json',
+  'x-sidecar-token': 'test-sidecar-token',
+};
+
 describe('createSidecarClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.SIDECAR_TOKEN = 'test-sidecar-token';
+  });
+
+  afterEach(() => {
+    delete process.env.SIDECAR_TOKEN;
   });
 
   it('creates a client with default URL when no argument is given', () => {
     const client = createSidecarClient();
     expect(client).toHaveProperty('setup');
     expect(client).toHaveProperty('exec');
+    expect(client).toHaveProperty('eval');
     expect(client).toHaveProperty('teardown');
   });
 
@@ -20,11 +31,19 @@ describe('createSidecarClient', () => {
     const client = createSidecarClient('http://example:4001');
     expect(client).toHaveProperty('setup');
     expect(client).toHaveProperty('exec');
+    expect(client).toHaveProperty('eval');
     expect(client).toHaveProperty('teardown');
   });
 
+  it('throws when SIDECAR_TOKEN is not set', async () => {
+    delete process.env.SIDECAR_TOKEN;
+    const client = createSidecarClient('http://localhost:4001');
+    await expect(client.setup('exec-123')).rejects.toThrow('SIDECAR_TOKEN');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   describe('setup', () => {
-    it('calls POST /setup with executionId', async () => {
+    it('calls POST /setup with executionId and auth token', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({}),
@@ -36,7 +55,7 @@ describe('createSidecarClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:4001/setup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: AUTH_HEADERS,
         body: JSON.stringify({ executionId: 'exec-123' }),
       });
     });
@@ -59,10 +78,33 @@ describe('createSidecarClient', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:4001/exec', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: AUTH_HEADERS,
         body: JSON.stringify({ executionId: 'exec-123', command: 'echo hello', timeout: 30000 }),
       });
       expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe('eval', () => {
+    it('calls POST /eval with code and input', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, result: true }),
+      });
+
+      const client = createSidecarClient('http://localhost:4001');
+      const result = await client.eval({
+        executionId: 'exec-123',
+        code: 'input.x === 1',
+        input: { x: 1 },
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:4001/eval', {
+        method: 'POST',
+        headers: AUTH_HEADERS,
+        body: JSON.stringify({ executionId: 'exec-123', code: 'input.x === 1', input: { x: 1 } }),
+      });
+      expect(result).toEqual({ ok: true, result: true });
     });
   });
 
@@ -79,7 +121,7 @@ describe('createSidecarClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:4001/teardown', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: AUTH_HEADERS,
         body: JSON.stringify({ executionId: 'exec-123' }),
       });
     });

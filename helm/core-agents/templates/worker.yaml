@@ -14,26 +14,67 @@ spec:
       labels:
         app: {{ include "core-agents.fullname" . }}-worker
     spec:
+      # Pod-level hardening: run as non-root, restrict to the default seccomp profile
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
         - name: flow-data
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
       containers:
         - name: worker
           image: "{{ .Values.image.repository }}-worker:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           env:
             - name: VALKEY_HOST
               value: {{ include "core-agents.fullname" . }}-valkey
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.secretName" . }}
+                  key: valkey-password
             - name: SIDECAR_URL
               value: "http://localhost:4001"
+            - name: SIDECAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.secretName" . }}
+                  key: sidecar-token
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "core-agents.fullname" . }}-secret
+                  name: {{ include "core-agents.secretName" . }}
                   key: database-url
           envFrom:
             - secretRef:
-                name: {{ include "core-agents.fullname" . }}-secret
+                name: {{ include "core-agents.secretName" . }}
+          # The worker is a BullMQ consumer with no HTTP server of its own —
+          # probe the backend Service (same release, cluster-internal DNS) as
+          # a proxy for cluster availability. NOT localhost: the worker pod
+          # does not listen on 3001.
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - fetch('http://{{ include "core-agents.fullname" . }}-backend:{{ .Values.backend.port }}/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
         - name: sidecar
@@ -43,6 +84,12 @@ spec:
             - containerPort: 4001
               name: sidecar
           args: ["--ttl-hours=168"]
+          env:
+            - name: SIDECAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "core-agents.secretName" . }}
+                  key: sidecar-token
           volumeMounts:
             - name: flow-data
               mountPath: /var/flow-data
@@ -50,7 +97,10 @@ spec:
             readOnlyRootFilesystem: true
             runAsUser: 1001
             runAsNonRoot: true
+            # SYS_ADMIN is REQUIRED by the Landlock sandbox (landlock-helper) —
+            # keep it, drop everything else.
             capabilities:
+              add: ["SYS_ADMIN"]
               drop: ["ALL"]
           resources:
             {{- toYaml .Values.sidecar.resources | nindent 12 }}

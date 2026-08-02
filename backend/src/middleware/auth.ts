@@ -17,7 +17,29 @@ export function validateUUID(paramName: string) {
   };
 }
 
-const JWT_SECRET: string = process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET environment variable is required'); })();
+const WEAK_JWT_SECRETS = [
+  'dev-secret-change-in-production',
+  'dev-secret-change-me-in-production-abc123',
+  'e2e-test-secret',
+  'test-secret-key-for-unit-tests',
+];
+
+function resolveJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+  if (process.env.NODE_ENV === 'production') {
+    if (WEAK_JWT_SECRETS.includes(secret) || secret.length < 32) {
+      throw new Error(
+        'JWT_SECRET is a known default or too short for production: use a cryptographically random secret of at least 32 characters'
+      );
+    }
+  }
+  return secret;
+}
+
+const JWT_SECRET: string = resolveJwtSecret();
 
 export interface JwtPayload {
   userId: string;

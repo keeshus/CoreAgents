@@ -31,12 +31,19 @@ router.get('/', requirePermission('group:read'), asyncHandler(async (_req, res) 
   res.json(rows);
 }));
 
-// GET /api/groups/:id — single group with members
+// GET /api/groups/:id — single group with members (requires membership)
 router.get('/:id', requirePermission('group:read'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
   const [group] = await db.select().from(groups).where(eq(groups.id, id));
   if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
+  // Non-admins may only view groups they are members of
+  if (!req.user!.permissions.includes('admin')) {
+    const [membership] = await db.select().from(groupMembers).where(
+      and(eq(groupMembers.group_id, id), eq(groupMembers.user_id, req.user!.userId))
+    );
+    if (!membership) { res.status(403).json({ error: 'You are not a member of this group' }); return; }
+  }
   const members = await db
     .select({
       id: groupMembers.id,

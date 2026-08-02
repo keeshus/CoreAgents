@@ -78,3 +78,32 @@ export function sanitizeEnvVars(env: Record<string, string>): Record<string, str
 
   return result;
 }
+
+// Keys that must never be merged from untrusted parsed JSON (prototype pollution)
+const UNSAFE_MERGE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Strip prototype-polluting keys (`__proto__`, `constructor`, `prototype`)
+ * from untrusted parsed JSON before merging it into internal objects.
+ * Mutates in place; leaves non-plain objects (class instances, Maps, ...) untouched.
+ */
+export function sanitizeUntrustedKeys<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      value[i] = sanitizeUntrustedKeys(value[i]);
+    }
+    return value;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return value;
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (UNSAFE_MERGE_KEYS.has(key)) {
+      delete record[key];
+      continue;
+    }
+    record[key] = sanitizeUntrustedKeys(record[key]);
+  }
+  return value;
+}

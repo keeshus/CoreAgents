@@ -60,10 +60,8 @@ router.post('/roles/seed', requirePermission('admin'), asyncHandler(async (_req,
       ],
     },
     {
-      name: 'reader', description: 'Can approve Human-in-the-Loop requests', is_system: true,
-      permissions: [
-        'execution:approve',
-      ],
+      name: 'reader', description: 'Read-only access for regular users', is_system: true,
+      permissions: [],
     },
     {
       name: 'group_admin', description: 'Can manage group members, vault bindings, group secrets, and group-scoped resources', is_system: true,
@@ -190,6 +188,18 @@ router.put('/groups/:id/members/:userId/role', requirePermission('admin', 'group
   const userId = req.params.userId as string;
   const { role } = req.body || {};
   if (!role || !['member', 'admin'].includes(role)) { res.status(400).json({ error: 'role must be "member" or "admin"' }); return; }
+
+  // Non-global-admins (group_admin) may only manage roles in groups they are
+  // members of and in which they hold the admin role themselves.
+  if (!req.user!.permissions.includes('admin')) {
+    const [ownMembership] = await db.select().from(groupMembers).where(
+      and(eq(groupMembers.group_id, groupId), eq(groupMembers.user_id, req.user!.userId))
+    );
+    if (!ownMembership || ownMembership.role !== 'admin') {
+      res.status(403).json({ error: 'Only group admins of this group can change member roles' });
+      return;
+    }
+  }
 
   const [membership] = await db.select().from(groupMembers).where(
     and(eq(groupMembers.group_id, groupId), eq(groupMembers.user_id, userId))

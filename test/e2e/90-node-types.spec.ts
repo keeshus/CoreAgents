@@ -506,7 +506,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://backend-e2e:3001/api/health', timeout: 5000 } } },
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://backend-e2e:3001/api/health', timeout: 5000, allowPrivate: true } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['fetcher.status', 'fetcher.ok'] } } },
       ],
       edges: [
@@ -764,7 +764,9 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'POST', url: 'http://mock-llm-e2e:3002/v1/chat/completions', body: '{"test":true}', headers: '{"Content-Type":"application/json"}', timeout: 5000 } } },
+<<<<<<< HEAD
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'POST', url: 'http://mock-llm-e2e:3002/v1/chat/completions', body: '{"model":"mock","messages":[{"role":"user","content":"hi"}]}', headers: '{"Content-Type":"application/json"}', timeout: 5000, allowPrivate: true } } },
+>>>>>>> refs/rewritten/merge-security-hardening-into-feat-e2e-full-coverage
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
       ],
       edges: [
@@ -1036,7 +1038,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'h1', type: 'http', position: { x: 250, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://backend-e2e:3001/api/health', timeout: 5000 } } },
+        { id: 'h1', type: 'http', position: { x: 250, y: 0 }, data: { label: 'Fetcher', type: 'http', config: { method: 'GET', url: 'http://backend-e2e:3001/api/health', timeout: 5000, allowPrivate: true } } },
         { id: 'm1', type: 'map', position: { x: 500, y: 0 }, data: { label: 'Mapper', type: 'map', config: { fields: [{ name: 'httpStatus', type: 'number', value: 'fetcher.status' }, { name: 'healthy', type: 'boolean', value: 'fetcher.ok' }], mode: 'replace' } } },
         { id: 'o1', type: 'output', position: { x: 750, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
       ],

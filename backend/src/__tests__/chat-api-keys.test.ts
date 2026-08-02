@@ -201,7 +201,9 @@ describe('chat-api-keys routes', () => {
     });
 
     it('returns empty array when no keys exist', async () => {
-      db.select.mockReturnValue(mockChain([]));
+      db.select
+        .mockReturnValueOnce(mockChain([{ id: 'flow-1', name: 'Chat Flow' }]))
+        .mockReturnValueOnce(mockChain([]));
       const req = makeReq({ params: { flowId: 'flow-1' } });
       const res = makeRes();
 
@@ -252,7 +254,9 @@ describe('chat-api-keys routes', () => {
 
   describe('DELETE /flows/:flowId/chat-api/keys/:keyId', () => {
     it('deletes an existing key and returns 204', async () => {
-      db.select.mockReturnValueOnce(mockChain([{ id: 'key-1', flow_id: 'flow-1' }]));
+      db.select
+        .mockReturnValueOnce(mockChain([{ id: 'flow-1', name: 'Chat Flow' }]))
+        .mockReturnValueOnce(mockChain([{ id: 'key-1', flow_id: 'flow-1' }]));
       db.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
       const req = makeReq({ params: { flowId: 'flow-1', keyId: 'key-1' } });
       const res = makeRes();
