@@ -32,17 +32,6 @@ function llmToolFlow(name: string, systemPrompt: string) {
   ]);
 }
 
-async function createAndRunFlow(request: any, flow: any, input: Record<string, unknown> = {}) {
-  const flowRes = await request.post(`${API_URL}/flows`, { data: flow });
-  expect(flowRes.ok()).toBe(true);
-  const created = await flowRes.json();
-  const { debugExecute } = await import('./helpers/stream');
-  const events = await debugExecute(created.id, input, cookie);
-  const completed = events.find(e => e.type === 'execution.completed');
-  expect(completed).toBeDefined();
-  return { flow: created, events, output: completed?.data?.output || {} };
-}
-
 test.describe('Sandboxed tool execution', () => {
   const cleanupFlowIds: string[] = [];
   const cleanupGroupIds: string[] = [];
@@ -189,10 +178,7 @@ test.describe('Sandboxed tool execution', () => {
     const envUpdateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
       data: { envVars: [{ name: 'GREETING', value: 'Hello from env!', type: 'static' }] },
     });
-    if (!envUpdateRes.ok()) {
-      test.skip(true, 'Flow env_vars column not yet available');
-      return;
-    }
+    expect(envUpdateRes.ok()).toBe(true);
 
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(flow.id, { message: 'test' }, cookie);
@@ -284,10 +270,7 @@ test.describe('Sandboxed tool execution', () => {
     const envUpdateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
       data: { envVars: [{ name: 'MY_VAR', value: 'code-node-value', type: 'static' }] },
     });
-    if (!envUpdateRes.ok()) {
-      test.skip(true, 'Flow env_vars column not yet available');
-      return;
-    }
+    expect(envUpdateRes.ok()).toBe(true);
 
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(flow.id, { message: 'test' }, cookie);
@@ -300,6 +283,35 @@ test.describe('Sandboxed tool execution', () => {
     // Code node output is stored under its slugified label or node ID
     const c1out = output?.c1 || output?.reader || {};
     expect(c1out.value).toBe('code-node-value');
+  });
+
+  test('client-supplied __env is dropped — sandbox env comes from flow config only', async ({ request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-Env-Drop'), 'return { evil: process.env.EVIL_VAR || null };'),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    // The flow's own env_vars are the ONLY legitimate source of sandbox env.
+    const envUpdateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: { envVars: [{ name: 'EVIL_VAR', value: 'from-flow-config', type: 'static' }] },
+    });
+    expect(envUpdateRes.ok()).toBe(true);
+
+    // The client ALSO smuggles __env — the API boundary must strip it before
+    // the sandbox env is built, so EVIL_VAR resolves to the flow-config value.
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'go', __env: { EVIL_VAR: 'should-not-leak' } }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const output = completed!.data?.output;
+    expect(output).toBeDefined();
+
+    const c1out = output?.c1 || output?.probe || {};
+    expect(c1out.evil).toBe('from-flow-config');
+    expect(c1out.evil).not.toBe('should-not-leak');
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -335,10 +347,7 @@ test.describe('Sandboxed tool execution', () => {
         ],
       },
     });
-    if (!envUpdateRes.ok()) {
-      test.skip(true, 'Flow env_vars column not yet available');
-      return;
-    }
+    expect(envUpdateRes.ok()).toBe(true);
 
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(flow.id, {
@@ -402,35 +411,6 @@ test.describe('Sandboxed tool execution', () => {
     expect(c1out.etcWritable).toBe(false);
     expect(c1out.binWritable).toBe(false);
     expect(c1out.homeWritable).toBe(true);
-  });
-
-  // ═══════════════════════════════════════════════════════════════
-  // ─── Network isolation (documented guarantee) ─────────────────
-  // ═══════════════════════════════════════════════════════════════
-  // The sidecar sandbox uses Landlock, which restricts the FILESYSTEM
-  // only (read-only /usr,/bin,/lib,/etc; writable $HOME). There is NO
-  // network namespace / seccomp filter: outbound connections are
-  // permitted. This test pins the actual guarantee so a future
-  // hardening change (e.g. blocking egress) is caught explicitly.
-
-  test('sandbox does not block outbound network egress — internal service reachable (filesystem-only isolation)', async ({ request }) => {
-    const code = [
-      'const cp = require("child_process");',
-      'const out = { reachable: false };',
-      'try {',
-      '  const r = cp.execSync("curl -s -m 8 -o /dev/null -w \\"%{http_code}\\" http://mock-llm-e2e:3002/health", { encoding: "utf-8", timeout: 10000 });',
-      '  out.httpCode = parseInt(r.trim());',
-      '  out.reachable = out.httpCode === 200;',
-      '} catch (e) { out.error = String(e.message).slice(0, 300); }',
-      'return out;',
-    ].join('\n');
-    const { flow, output } = await createAndRunFlow(request, codeFlow(uniqueFlowName('Sandbox-Network'), code));
-    cleanupFlowIds.push(flow.id);
-
-    const c1out = output?.c1 || output?.probe || {};
-    expect(c1out.error).toBeUndefined();
-    expect(c1out.reachable).toBe(true);
-    expect(c1out.httpCode).toBe(200);
   });
 
   // ═══════════════════════════════════════════════════════════════

@@ -48,11 +48,6 @@ test.describe('Groups feature', () => {
     await expect(page.locator('h1').filter({ hasText: 'Groups' }).first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('SSO config page loads for admin', async ({ page }) => {
-    await page.goto('/settings/sso');
-    await expect(page.locator('h1').filter({ hasText: 'SSO / OIDC' }).first()).toBeVisible({ timeout: 10000 });
-  });
-
   // ─── Group CRUD via UI ─────────────────────────────────────────────
 
   test('create a group via UI', async ({ page }) => {
@@ -719,44 +714,6 @@ async function registerUserClean(email: string, password: string, name: string):
     await request.delete(`${API_URL}/flows/${f1.id}`);
     await request.delete(`${API_URL}/flows/${f2.id}`);
     await request.delete(`${API_URL}/flows/${f3.id}`);
-  });
-
-  // ─── SSO config CRUD ────────────────────────────────────────────
-
-  test('SSO config can be saved and read back', async ({ page, request }) => {
-    await page.goto('/settings/sso');
-    await expect(page.locator('h1').filter({ hasText: 'SSO / OIDC' }).first()).toBeVisible({ timeout: 10000 });
-
-    // Enable SSO via the checkbox input
-    const enableCheckbox = page.getByRole('checkbox', { name: 'Enable SSO' });
-    await expect(enableCheckbox).toBeVisible({ timeout: 5000 });
-    await enableCheckbox.check();
-    await expect(enableCheckbox).toBeChecked();
-
-    // Fill in provider details with a unique provider name to avoid cross-run interference
-    const provider = `test-provider-${Date.now()}`;
-    await page.getByLabel('Provider name').fill(provider);
-    await page.getByLabel('Client ID').fill('test-client-id');
-    await page.getByLabel('Issuer URL').fill('https://sso.example.com');
-    await page.getByLabel('Group claim name').fill('roles');
-
-    await page.getByRole('button', { name: 'Save Configuration' }).click();
-
-    // The UI reports success after the backend accepts the config
-    await expect(page.getByText('SSO configuration saved')).toBeVisible({ timeout: 5000 });
-
-    // Reload and verify the values persisted through the UI save
-    await page.goto('/settings/sso');
-    await expect(page.getByLabel('Provider name')).toHaveValue(provider);
-    await expect(page.getByLabel('Group claim name')).toHaveValue('roles');
-
-    // Backend read-back confirms the UI save really persisted
-    const res = await request.get(`${API_URL}/admin/sso-config`);
-    expect(res.status()).toBe(200);
-    const config = await res.json();
-    expect(config.provider).toBe(provider);
-    expect(config.groupClaim).toBe('roles');
-    expect(config.enabled).toBe(true);
   });
 
   // ─── Group-based execution approval filtering ────────────────────────

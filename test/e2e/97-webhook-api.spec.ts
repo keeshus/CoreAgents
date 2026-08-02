@@ -102,21 +102,19 @@ test.describe('Webhook API key management', () => {
     expect(flow.personalApiKey.prefix).toMatch(/^wh_/);
   });
 
-  test('POST /api/flows/:flowId/keys/renew creates a new API key', async ({ request }) => {
-    const renewRes = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
-    expect(renewRes.ok()).toBe(true);
-    const keyData = await renewRes.json();
-    expect(keyData.rawKey).toMatch(/^wh_/);
-    expect(keyData.prefix).toMatch(/^wh_/);
-    expect(keyData.createdAt).toBeDefined();
-  });
-
   test('renew replaces existing key and returns a new raw key', async ({ request }) => {
     const res1 = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
+    expect(res1.ok()).toBe(true);
     const key1 = await res1.json();
+    expect(key1.rawKey).toMatch(/^wh_/);
+    expect(key1.prefix).toMatch(/^wh_/);
+    expect(key1.createdAt).toBeDefined();
 
     const res2 = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
     const key2 = await res2.json();
+    expect(key2.rawKey).toMatch(/^wh_/);
+    expect(key2.prefix).toMatch(/^wh_/);
+    expect(key2.createdAt).toBeDefined();
 
     expect(key1.rawKey).not.toBe(key2.rawKey);
   });
@@ -129,12 +127,6 @@ test.describe('Webhook API key management', () => {
     await deleteFlow(request, manualFlow.id);
   });
 
-  test('DELETE /api/flows/:flowId/keys/revoke revokes the key', async ({ request }) => {
-    await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
-    const revokeRes = await request.delete(`${API_URL}/flows/${webhookFlowId}/keys/revoke`);
-    expect(revokeRes.status()).toBe(204);
-  });
-
   test('revoked key cannot be used for auth', async ({ request }) => {
     const renewRes = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
     const { rawKey } = await renewRes.json();
@@ -142,7 +134,8 @@ test.describe('Webhook API key management', () => {
     const deployRes = await request.get(`${API_URL}/flows/${webhookFlowId}/deployment`);
     const { pathSlug } = await deployRes.json();
 
-    await request.delete(`${API_URL}/flows/${webhookFlowId}/keys/revoke`);
+    const revokeRes = await request.delete(`${API_URL}/flows/${webhookFlowId}/keys/revoke`);
+    expect(revokeRes.status()).toBe(204);
 
     const execRes = await fetch(`${API_URL}/webhook/${pathSlug}`, {
       method: 'POST',
@@ -538,6 +531,32 @@ test.describe('Webhook execution via slug with auth', () => {
     expect(second.status).toBe(429);
     expect(second.headers.get('Retry-After')).not.toBeNull();
     const body = await second.json();
+    expect(body.error).toBe('Rate limit exceeded. Try again later.');
+  });
+
+  test('POST /api/webhook/:slug is throttled per-IP before auth (429 + Retry-After)', async () => {
+    // Security hardening: an unauthenticated IP is throttled BEFORE auth so
+    // spam cannot burn DB queries (deployment lookup, flow load, key/secret
+    // checks) at full speed. Default: WEBHOOK_IP_RATE_LIMIT=120 requests/min.
+    // NOTE: this test runs LAST in this describe on purpose — the in-memory
+    // limiter is shared per-process and keyed by IP, so hammering here would
+    // 429 any later webhook-execution calls within the 60s window. The tests
+    // that follow in this file only hit authenticated key/deployment routes,
+    // which are not IP-throttled.
+    const spam = () => fetch(`${API_URL}/webhook/${pathSlug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    let last: Response | null = null;
+    for (let i = 0; i < 130; i++) {
+      last = await spam();
+    }
+
+    expect(last!.status).toBe(429);
+    expect(last!.headers.get('Retry-After')).not.toBeNull();
+    const body = await last!.json();
     expect(body.error).toBe('Rate limit exceeded. Try again later.');
   });
 });

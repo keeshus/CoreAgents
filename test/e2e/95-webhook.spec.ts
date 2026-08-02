@@ -79,6 +79,41 @@ test.describe('Webhook trigger', () => {
     await deleteFlow(request, flow.id);
   });
 
+  test('accepts POST with the X-Webhook-Secret header (preferred over ?secret=)', async ({ request }) => {
+    // Security hardening: the secret can be supplied via the X-Webhook-Secret
+    // request header instead of the ?secret= query param, which leaks the
+    // secret into logs/history.
+    const flow = await createWebhookFlow(request, WEBHOOK_SECRET, '{"message":"string"}');
+
+    const webhookRes = await request.post(`${API_URL}/webhook/${flow.id}`, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: { message: 'hello header' },
+    });
+    expect(webhookRes.status()).toBe(202);
+    const body = await webhookRes.json();
+    expect(body.executionId).toBeDefined();
+    expect(body.status).toBe('queued');
+
+    const exec = await pollExecution(request, body.executionId, 45000);
+    expect(exec.status).toBe('completed');
+
+    await deleteFlow(request, flow.id);
+  });
+
+  test('rejects POST with a wrong X-Webhook-Secret header', async ({ request }) => {
+    const flow = await createWebhookFlow(request, WEBHOOK_SECRET, undefined);
+
+    const res = await request.post(`${API_URL}/webhook/${flow.id}`, {
+      headers: { 'X-Webhook-Secret': 'wrong-secret' },
+      data: { message: 'hello' },
+    });
+    expect(res.status()).toBe(403);
+    const body = await res.json();
+    expect(body.error).toContain('Invalid webhook secret');
+
+    await deleteFlow(request, flow.id);
+  });
+
   test('rejects POST without a secret when the flow requires one', async ({ request }) => {
     const flow = await createWebhookFlow(request, WEBHOOK_SECRET, undefined);
 

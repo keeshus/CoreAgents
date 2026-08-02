@@ -171,7 +171,7 @@ export function getNodeFields(node: any): FieldEntry[] {
 }
 
 /** Returns a plain-text fallback when the node type doesn't produce structured fields. */
-function getNodeRawFallback(node: any): string | null {
+export function getNodeRawFallback(node: any): string | null {
   const type = node?.data?.type;
   const config = node?.data?.config || {};
   if (type === 'code' && !config?.outputSchema) return 'any (determined by return value)';
@@ -181,7 +181,7 @@ function getNodeRawFallback(node: any): string | null {
 
 // ─── Accumulate upstream shape ──────────────────────────────────────────────
 
-function accumulateUpstream(nodeId: string, edges: any[], nodes: any[]): UpstreamNodeShape[] {
+export function accumulateUpstream(nodeId: string, edges: any[], nodes: any[]): UpstreamNodeShape[] {
   const upstreamIds = getUpstreamNodeIds(nodeId, edges);
 
   return upstreamIds.map((id) => {
@@ -199,7 +199,7 @@ function accumulateUpstream(nodeId: string, edges: any[], nodes: any[]): Upstrea
 
 // ─── Render helpers ─────────────────────────────────────────────────────────
 
-function fieldsToLines(fields: FieldEntry[]): string {
+export function fieldsToLines(fields: FieldEntry[]): string {
   const parts = ['{'];
   for (const f of fields) {
     parts.push(`  ${f.name}${f.required ? '' : '?'}: ${f.type},`);

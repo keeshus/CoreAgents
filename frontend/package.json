@@ -17,8 +17,14 @@
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.2",
+<<<<<<< HEAD
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+=======
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.1.1",
+>>>>>>> 8391565 (test: fix all remaining failures, close E2E coverage gaps, remove duplicates)
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"

@@ -117,10 +117,7 @@ test.describe('Subflow env var inheritance', () => {
     const envUpdateRes = await request.put(`${API_URL}/flows/${parent.id}`, {
       data: { envVars: [{ name: 'PARENT_VAR', value: 'inherited', type: 'static' }] },
     });
-    if (!envUpdateRes.ok()) {
-      test.skip(true, 'Flow env_vars column not available');
-      return;
-    }
+    expect(envUpdateRes.ok()).toBe(true);
 
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(parent.id, { message: 'test' }, cookie);
@@ -182,10 +179,7 @@ test.describe('Subflow env var inheritance', () => {
     const parentEnvUpdateRes = await request.put(`${API_URL}/flows/${parent.id}`, {
       data: { envVars: [{ name: 'SHARED_VAR', value: 'parent', type: 'static' }] },
     });
-    if (!parentEnvUpdateRes.ok()) {
-      test.skip(true, 'Flow env_vars column not available');
-      return;
-    }
+    expect(parentEnvUpdateRes.ok()).toBe(true);
 
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(parent.id, { message: 'test' }, cookie);
@@ -223,10 +217,7 @@ test.describe('Subflow env var inheritance', () => {
     const envUpdateRes = await request.put(`${API_URL}/flows/${parent.id}`, {
       data: { envVars: [{ name: 'SPECIFIC_VAR', value: 'should-not-leak', type: 'static' }] },
     });
-    if (!envUpdateRes.ok()) {
-      test.skip(true, 'Flow env_vars column not available');
-      return;
-    }
+    expect(envUpdateRes.ok()).toBe(true);
 
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(parent.id, { message: 'test' }, cookie);

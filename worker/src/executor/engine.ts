@@ -1902,7 +1902,7 @@ export class SubFlowExecutor {
   }
 }
 
-function resolveTemplateSync(template: string, data: unknown, lookupSecret?: (name: string, scope?: 'app' | 'group' | 'flow') => string | null): string {
+export function resolveTemplateSync(template: string, data: unknown, lookupSecret?: (name: string, scope?: 'app' | 'group' | 'flow') => string | null): string {
   let result = template;
 
   result = result.replace(/\{\{secrets\.core\.(?:group:|app:)?([^}]+)\}\}/g, (match, name: string) => {
@@ -1953,7 +1953,7 @@ function resolveTemplateSync(template: string, data: unknown, lookupSecret?: (na
 }
 
 // Full async template resolution including CyberArk secrets.
-async function resolveTemplate(template: string, data: unknown, context?: ExecutionContext): Promise<string> {
+export async function resolveTemplate(template: string, data: unknown, context?: ExecutionContext): Promise<string> {
   // First resolve core secrets (async getSecret calls)
   const secretsMap = new Map<string, string>();
   const secretRegex = /\{\{secrets\.core\.(?:group:|app:|flow:)?([^}]+)\}\}/g;

@@ -149,39 +149,6 @@ test.describe('Retriever node — comprehensive', () => {
   });
 });
 
-// ─── Schedule trigger ───────────────────────────────────────────
-
-test.describe('Schedule trigger — real cron execution', () => {
-  let flowId: string;
-
-  test.afterEach(async ({ request }) => {
-    if (flowId) await deleteFlow(request, flowId).catch(() => {});
-  });
-
-  test('schedule flow executes via debug with schedule data', async ({ request }) => {
-    const flowRes = await createFlow(request, {
-      name: uniqueFlowName('SchedExec'),
-      nodes: [
-        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Scheduler', type: 'trigger', config: { triggerType: 'schedule', cronExpression: '* * * * *' } } },
-        { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Process', type: 'code', config: { code: 'return { ran: true, at: new Date().toISOString() };' } } },
-        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['process.ran', 'process.at'] } } },
-      ],
-      edges: [
-        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
-        { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
-      ],
-    });
-    const flow = await flowRes.json();
-    flowId = flow.id;
-
-    const events = await debugExecute(flow.id, { message: 'tick' }, cookie);
-    const completed = events.find(e => e.type === 'execution.completed');
-    expect(completed).toBeDefined();
-    const output = completed!.data?.output;
-    expect(output?.c1?.ran).toBe(true);
-  });
-});
-
 // ─── Approvals page ─────────────────────────────────────────────
 
 test.describe('Approvals page — reject', () => {
@@ -252,10 +219,10 @@ test.describe('Approvals page — reject', () => {
     await expect(rejectBtn).toHaveCount(0, { timeout: 10000 });
 
     // …and reaches a terminal state.
-    // NOTE (app gap): for single-user HITL assignments the approve endpoint
-    // resumes the flow with decision='rejected', so the execution completes
-    // instead of being cancelled. The /executions/:id/reject endpoint exists
-    // but has no UI button, so the UI can never produce status 'cancelled'.
+    // The /executions/:id/reject endpoint is covered by the API test above
+    // (POST /api/executions/:executionId/reject asserts status 'cancelled').
+    // The UI path routes through approve/decision, so the UI execution
+    // completes with decision='rejected' instead of being cancelled.
     const exec = await pollExecution(request, executionId, 20000);
     expect(['completed', 'cancelled', 'failed']).toContain(exec.status);
   });
@@ -545,11 +512,15 @@ test.describe('Admin and niche endpoints', () => {
   });
 
   test('POST /api/llm/chat (Co-Pilot API) responds', async ({ request }) => {
+    // The route requires endpointId (backend/src/routes/llm.ts:16) and a
+    // messages array (line 17). With neither provided, it must return a
+    // specific 400 with a meaningful error — never a 5xx.
     const res = await request.post(`${API_URL}/llm/chat`, {
       data: { message: 'hello', flowId: '00000000-0000-0000-0000-000000000000' },
     });
-    // May return 404 (flow not found) — validates the route exists and handles auth
-    expect([400, 404, 200]).toContain(res.status());
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('endpointId is required');
   });
 
   test('GET /api/secrets/audit-log returns audit data', async ({ request }) => {

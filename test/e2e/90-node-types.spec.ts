@@ -764,9 +764,7 @@ test.describe('All node types', () => {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
-<<<<<<< HEAD
         { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'POST', url: 'http://mock-llm-e2e:3002/v1/chat/completions', body: '{"model":"mock","messages":[{"role":"user","content":"hi"}]}', headers: '{"Content-Type":"application/json"}', timeout: 5000, allowPrivate: true } } },
->>>>>>> refs/rewritten/merge-security-hardening-into-feat-e2e-full-coverage
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
       ],
       edges: [
@@ -780,6 +778,32 @@ test.describe('All node types', () => {
     expect(completed).toBeDefined();
     expect(completed!.data?.output?.h1?.status).toBe(200);
     expect(completed!.data?.output?.h1?.ok).toBe(true);
+    await deleteFlow(request, flow.id);
+  });
+
+  test('http node blocks private addresses without allowPrivate (SSRF guard)', async ({ request }) => {
+    const name = uniqueFlowName('HttpSsfrTest');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
+        // backend-e2e resolves to a private Docker bridge IP — blocked unless allowPrivate is set
+        { id: 'h1', type: 'http', position: { x: 300, y: 0 }, data: { label: 'H', type: 'http', config: { method: 'GET', url: 'http://backend-e2e:3001/api/health', timeout: 5000, allowPrivate: false } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await res.json();
+    const events = await debugExecute(flow.id, {}, cookie);
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('HTTP Request node: destination "backend-e2e" resolves to a private or restricted address — blocked (set allowPrivate to reach internal services)');
+    const stepFailed = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'h1');
+    expect(stepFailed).toBeDefined();
+    expect(stepFailed!.data?.error).toContain('resolves to a private or restricted address — blocked');
     await deleteFlow(request, flow.id);
   });
 

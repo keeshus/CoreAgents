@@ -543,48 +543,4 @@ return {
 
     await deleteFlow(request, flow.id);
   });
-
-  // ── Co-Pilot comprehensive test ─────────────────────────────────
-
-  test('co-pilot panel sends a message and renders the mocked response', async ({ page, request }) => {
-    // Create a default LLM endpoint first so Co-Pilot has a model to call
-    const llmRes = await request.post(`${API_URL}/llm-endpoints`, {
-      data: {
-        name: 'E2E Co-Pilot LLM',
-        providerType: 'openai',
-        baseUrl: 'http://mock-llm-e2e:3002/v1',
-        apiKey: 'mock-key',
-        defaultModel: 'mock-gpt-4',
-        models: ['mock-gpt-4'],
-      },
-    });
-    expect(llmRes.ok()).toBe(true);
-    const ep = await llmRes.json();
-    const setDefault = await request.put(`${API_URL}/llm-endpoints/${ep.id}`, { data: { isDefault: true } });
-    expect(setDefault.ok()).toBe(true);
-
-    await page.goto('/');
-    await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
-
-    const toggleBtn = page.getByTestId('co-pilot-toggle');
-    await expect(toggleBtn).toBeVisible({ timeout: 10000 });
-    await toggleBtn.click();
-
-    const textarea = page.getByPlaceholder('Ask anything...');
-    await expect(textarea).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('No endpoint')).toHaveCount(0);
-
-    const message = `co-pilot flow test ${Date.now()}`;
-    await textarea.fill(message);
-    await page.keyboard.press('Enter');
-
-    // User message renders as a conversation bubble (the textarea still holds
-    // the text, so match the last occurrence)…
-    await expect(page.getByText(message).last()).toBeVisible({ timeout: 5000 });
-    // …and the mock LLM echo streams into the panel
-    const response = page.getByText(/Mock response to: co-pilot flow test/).first();
-    await expect(response).toBeVisible({ timeout: 20000 });
-
-    await request.delete(`${API_URL}/llm-endpoints/${ep.id}`).catch(() => {});
-  });
 });

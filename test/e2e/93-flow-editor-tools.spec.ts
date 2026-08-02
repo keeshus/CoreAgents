@@ -137,14 +137,6 @@ test.describe('Flow Editor DOM tools', () => {
     expect(json).toContain('"edges":2');
   });
 
-  test('close_node_config closes the config panel', async ({ page }) => {
-    await page.locator('.react-flow__node').first().click();
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
-
-    await page.keyboard.press('Escape');
-    await expect(page.getByTestId('node-config-modal')).not.toBeVisible({ timeout: 3000 });
-  });
-
   test('connect_nodes connects two nodes on the canvas', async ({ page, request }) => {
     const name = uniqueFlowName('ConnectTest');
     const res = await createFlow(request, {
@@ -221,6 +213,12 @@ test.describe('Flow Editor DOM tools', () => {
 
     // Ctrl+Y redoes the add
     await page.keyboard.press('Control+y');
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+
+    // Ctrl+Shift+Z also redoes the add
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore);
+    await page.keyboard.press('Control+Shift+z');
     await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
 
     // Undo/redo toolbar buttons work too
