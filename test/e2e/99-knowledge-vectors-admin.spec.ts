@@ -243,12 +243,29 @@ test.describe('Vector store endpoints', () => {
   });
 
   test('retriever queries an uploaded collection and returns structured results', async ({ request }) => {
+    // Create an LLM endpoint backed by the mock LLM so the uploaded chunks
+    // get real (non-zero) embedding vectors in Postgres.
+    const epRes = await request.post(`${API_URL}/llm-endpoints`, {
+      data: {
+        name: 'E2E KB Embed Endpoint',
+        providerType: 'openai',
+        baseUrl: 'http://mock-llm-e2e:3002/v1',
+        apiKey: 'mock-key',
+        defaultModel: 'text-embedding-ada-002',
+        models: ['text-embedding-ada-002'],
+      },
+    });
+    const embeddingEndpointId = epRes.ok() ? (await epRes.json()).id : undefined;
+
     // Upload a document so the collection has chunks
+    const content = 'Qdrant is a vector database used for similarity search over embeddings. ' +
+      'Chunks are matched by cosine similarity against the query embedding.';
     const upRes = await request.post(`${API_URL}/knowledge/upload`, {
       data: {
         name: 'Vector Search Doc',
-        content: 'Qdrant is a vector database used for similarity search over embeddings.',
+        content,
         collectionName: 'e2e-vector-search',
+        embeddingEndpointId,
       },
     });
     expect(upRes.ok()).toBe(true);
@@ -280,9 +297,14 @@ test.describe('Vector store endpoints', () => {
     expect(Array.isArray(retrieverOutput.chunks)).toBe(true);
     // count is always the length of the returned chunk list
     expect(retrieverOutput.count).toBe(retrieverOutput.chunks.length);
+    // The uploaded chunk TEXT must actually be returned — regression guard:
+    // the search used to hit an empty Qdrant store and return 0 chunks.
+    expect(retrieverOutput.chunks.length).toBeGreaterThanOrEqual(1);
+    expect(retrieverOutput.chunks[0].text).toContain('vector database');
 
     await deleteFlow(request, flow.id);
     await request.delete(`${API_URL}/documents/${docId}`).catch(() => {});
+    if (embeddingEndpointId) await request.delete(`${API_URL}/llm-endpoints/${embeddingEndpointId}`).catch(() => {});
   });
 });
 

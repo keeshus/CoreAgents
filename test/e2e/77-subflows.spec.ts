@@ -394,7 +394,7 @@ test.describe('Subflows feature', () => {
 
   // ─── HITL inside a subflow ───────────────────────────────
 
-  test('subflow with HITL node: parent pauses at the child HITL and the child sub-execution is recorded', async ({ request }) => {
+  test('subflow with HITL node: approval resumes inside the child and the parent completes', async ({ request }) => {
     const childRes = await request.post(`${API_URL}/flows`, {
       data: {
         name: uniqueFlowName('Hitl-Child'),
@@ -433,8 +433,9 @@ test.describe('Subflows feature', () => {
     const parent = await parentRes.json();
     createdFlowIds.push(parent.id);
 
-    const { executeUntilPaused } = await import('./helpers/stream');
-    const { events, executionId } = await executeUntilPaused(parent.id, { text: 'x' }, `token=${getAuthCookie()?.split('=')[1] || ''}`);
+    const adminCookie = `token=${getAuthCookie()?.split('=')[1] || ''}`;
+    const { executeUntilPaused, pollExecution } = await import('./helpers/stream');
+    const { events, executionId } = await executeUntilPaused(parent.id, { text: 'x' }, adminCookie);
     expect(executionId).toBeTruthy();
 
     // The pause is caused by the child's HITL node — its prompt is surfaced as pending
@@ -446,27 +447,43 @@ test.describe('Subflows feature', () => {
     expect(exec.status).toBe('awaiting_approval');
     const pending = Array.isArray(exec.pending_hitls) ? exec.pending_hitls : JSON.parse(exec.pending_hitls || '[]');
     expect(pending[0]?.prompt).toBe('Approve child step?');
+    // The pending HITL is stored with its hierarchical node id (subflow label : child node id)
+    // so the replay can resume INSIDE the child subflow
+    expect(pending[0]?.nodeId).toBe('sub:n3');
 
     // The child flow ran as a sub-execution of the parent
     const subStarted = events.find(e => e.type === 'subflow.started');
     expect(subStarted).toBeDefined();
     const subId = subStarted?.data?.subExecutionId;
     expect(subId).toBeTruthy();
-    const subRes = await request.get(`${API_URL}/executions/${subId}`);
-    expect(subRes.ok()).toBe(true);
-    const sub = await subRes.json();
-    expect(sub.flow_id).toBe(child.id);
 
-    // The child execution record links back to the parent (via the full-row list endpoint)
+    // Approve → the replay must resume inside the child, complete it, and finish the parent
+    const approveRes = await fetch(`${API_URL}/executions/${executionId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ decision: 'approved', hitlNodeId: pending[0]?.nodeId }),
+    });
+    expect(approveRes.ok).toBe(true);
+
+    const completedExec = await pollExecution(request, executionId, 30000);
+    expect(completedExec.status).toBe('completed');
+
+    // The child's output is in the parent result
+    const outStr = typeof completedExec.output === 'string' ? completedExec.output : JSON.stringify(completedExec.output);
+    expect(outStr).toContain('child:x');
+
+    // The replayed child sub-execution completed with the HITL approved
     const childListRes = await request.get(`${API_URL}/flows/${child.id}/executions`);
     expect(childListRes.ok()).toBe(true);
     const childList = await childListRes.json();
-    const subRow = (childList.data || []).find((e: any) => e.id === subId);
-    expect(subRow).toBeDefined();
-    expect(subRow.parent_execution_id).toBe(executionId);
+    const completedSub = (childList.data || []).find((e: any) => e.id !== subId && e.status === 'completed');
+    expect(completedSub).toBeDefined();
+    expect(completedSub.parent_execution_id).toBe(executionId);
+    expect(JSON.stringify(completedSub.output)).toContain('child:x');
 
-    // Clean up the stuck pending execution (resume of a HITL inside a subflow does not complete — see report)
-    await request.post(`${API_URL}/executions/${executionId}/cancel`);
+    // No HITL left pending
+    const pendingAfter = Array.isArray(completedExec.pending_hitls) ? completedExec.pending_hitls : JSON.parse(completedExec.pending_hitls || '[]');
+    expect(pendingAfter).toHaveLength(0);
   });
 
   // ─── Input mapping edge cases ────────────────────────────

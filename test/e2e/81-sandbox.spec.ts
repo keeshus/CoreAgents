@@ -407,41 +407,80 @@ test.describe('Sandboxed tool execution', () => {
   // ═══════════════════════════════════════════════════════════════
   // The sidecar kills the process group after `timeout` ms
   // (default 30s, per-exec max 5min). A runaway code node must NOT
-  // hang the whole execution — it is SIGKILLed and the node yields
-  // "(no output)".
+  // hang the whole execution — it is SIGKILLed and the node FAILS.
 
-  test('code node infinite loop is terminated by the sandbox timeout — execution completes instead of hanging', async ({ request }) => {
-    const { flow, events, output } = await createAndRunFlow(
-      request,
-      codeFlow(uniqueFlowName('Sandbox-Infinite-Loop'), 'while (true) {}', { timeout: 3000 }),
-    );
+  test('code node infinite loop is terminated by the sandbox timeout — execution fails with the kill error', async ({ request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-Infinite-Loop'), 'while (true) {}', { timeout: 3000 }),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
     cleanupFlowIds.push(flow.id);
 
-    const completed = events.find(e => e.type === 'execution.completed');
-    expect(completed!.data?.status).not.toBe('failed');
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
 
-    // The runaway process was killed before writing anything — stdout is empty
-    const c1out = output?.c1 || output?.probe || {};
-    expect(c1out).toEqual({ result: '(no output)' });
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('Code node execution failed with exit code -1');
+
+    const stepFailed = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'c1');
+    expect(stepFailed).toBeDefined();
+    expect(stepFailed!.data?.error).toContain('Code node execution failed');
   });
 
-  test('code node memory exhaustion is contained — execution completes without hanging', async ({ request }) => {
+  test('code node memory exhaustion is contained — execution fails without hanging', async ({ request }) => {
     const code = [
       'const a = [];',
       'while (true) { a.push(new Array(1048576).fill(0)); }',
     ].join('\n');
-    const { flow, events, output } = await createAndRunFlow(
-      request,
-      codeFlow(uniqueFlowName('Sandbox-OOM'), code, { timeout: 8000 }),
-    );
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-OOM'), code, { timeout: 8000 }),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
     cleanupFlowIds.push(flow.id);
 
-    const completed = events.find(e => e.type === 'execution.completed');
-    expect(completed!.data?.status).not.toBe('failed');
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
 
-    // Node aborted (heap exhausted) before producing output
-    const c1out = output?.c1 || output?.probe || {};
-    expect(c1out).toEqual({ result: '(no output)' });
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    // Node aborted (heap exhausted) or was killed by the sandbox — either way the
+    // non-zero exit code fails the code node instead of silently producing no output
+    expect(failed!.data?.error).toContain('Code node execution failed');
+
+    const stepFailed = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'c1');
+    expect(stepFailed).toBeDefined();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Code node exceptions ────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // A throwing code node exits non-zero; the sandbox error must fail the
+  // execution with the original exception surfaced — never "(no output)".
+
+  test('code node exception fails the execution with the error surfaced', async ({ request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-Code-Throw'), 'throw new Error("boom from code node");'),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeUndefined();
+
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('boom from code node');
+
+    const stepFailed = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'c1');
+    expect(stepFailed).toBeDefined();
+    expect(stepFailed!.data?.error).toContain('boom from code node');
   });
 
   test('bash tool command exceeding the sandbox timeout is killed (SIGKILL — no exit code)', async ({ request }) => {

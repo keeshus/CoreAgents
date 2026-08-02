@@ -38,17 +38,43 @@ export interface VectorStore {
 export function createPgvectorStore(db: any): VectorStore {
   return {
     async search(collectionName, queryEmbedding, topK, minScore) {
-      const embeddingStr = `[${queryEmbedding.join(',')}]`;
+      // The embeddings table stores vectors as jsonb arrays; the pgvector
+      // extension is not installed in the default Postgres image, so cosine
+      // similarity is computed with plain SQL instead of the <=> operator.
+      // Zero-length (or all-zero) embeddings get a similarity of 0 so that
+      // minScore=0 returns every chunk while higher thresholds still filter.
+      const queryStr = queryEmbedding.join(',');
       const results = await db.execute(sql`
-        SELECT
-          e.document_id AS "documentId",
-          e.chunk_text AS "chunkText",
-          e.chunk_index AS "chunkIndex",
-          1 - (e.embedding <=> ${embeddingStr}::vector) AS similarity
-        FROM embeddings e
-        JOIN documents d ON d.id = e.document_id
-        WHERE d.collection_name = ${collectionName}
-          AND 1 - (e.embedding <=> ${embeddingStr}::vector) >= ${minScore}
+        WITH q AS (
+          SELECT string_to_array(${queryStr}, ',')::float8[] AS vec
+        ),
+        scored AS (
+          SELECT
+            e.document_id AS "documentId",
+            e.chunk_text AS "chunkText",
+            e.chunk_index AS "chunkIndex",
+            COALESCE(
+              (
+                SELECT sum(a * b)
+                FROM unnest(
+                  ARRAY(SELECT x::float8 FROM jsonb_array_elements_text(e.embedding) AS x),
+                  q.vec
+                ) AS t(a, b)
+              ) / NULLIF(
+                sqrt(
+                  (SELECT sum(a * a) FROM unnest(ARRAY(SELECT x::float8 FROM jsonb_array_elements_text(e.embedding) AS x)) AS t(a))
+                ) * sqrt((SELECT sum(b * b) FROM unnest(q.vec) AS t(b))),
+                0
+              ),
+              0
+            ) AS similarity
+          FROM embeddings e
+          JOIN documents d ON d.id = e.document_id
+          CROSS JOIN q
+          WHERE d.collection_name = ${collectionName}
+        )
+        SELECT * FROM scored
+        WHERE similarity >= ${minScore}
         ORDER BY similarity DESC
         LIMIT ${topK}
       `);
@@ -198,6 +224,36 @@ export function getStore(name: string): VectorStore | undefined {
   return stores.get(name);
 }
 
+export function unregisterStore(name: string): void {
+  stores.delete(name);
+}
+
 export function listStores(): string[] {
   return Array.from(stores.keys());
+}
+
+/**
+ * Best-effort upsert into every registered store except 'pgvector' (whose
+ * data lives in the Postgres embeddings table and is written by the upload
+ * routes directly). Failures are logged and swallowed so an unreachable
+ * external store never breaks document upload.
+ */
+export async function upsertToRegisteredStores(
+  collectionName: string,
+  points: Array<{
+    id: string;
+    embedding: number[];
+    payload: { documentId: string; chunkText: string; chunkIndex: number };
+  }>,
+): Promise<void> {
+  for (const name of listStores()) {
+    if (name === 'pgvector') continue;
+    const store = stores.get(name);
+    if (!store) continue;
+    try {
+      await store.upsert(collectionName, points);
+    } catch (err) {
+      console.warn(`[vector-stores] upsert to "${name}" failed:`, (err as Error).message);
+    }
+  }
 }

@@ -313,8 +313,21 @@ test.describe('Advanced multi-node flows', () => {
 
     const { executeUntilPaused, pollExecution } = await import('./helpers/stream');
 
-    // Pause at HITL 1 → approve → the flow must run through the subflow and the
-    // second HITL and complete. No fallback: completion is mandatory.
+    const waitForStatus = async (executionId: string, status: string, timeoutMs = 30000): Promise<any> => {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const res = await request.get(`${API_URL}/executions/${executionId}`);
+        const exec = await res.json();
+        if (exec.status === status) return exec;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      throw new Error(`Execution ${executionId} did not reach status "${status}" within ${timeoutMs}ms`);
+    };
+
+    const parsePending = (exec: any): any[] => Array.isArray(exec.pending_hitls) ? exec.pending_hitls : JSON.parse(exec.pending_hitls || '[]');
+
+    // Pause at HITL 1 → approve → the flow must pause again at HITL 2 (strict:
+    // the second HITL must NOT be auto-approved by the first approval)
     let { executionId } = await executeUntilPaused(flow.id, { message: 'test' }, cookie);
     expect(executionId).toBeTruthy();
 
@@ -324,11 +337,25 @@ test.describe('Advanced multi-node flows', () => {
     });
     expect(approveRes1.ok).toBe(true);
 
+    // The first approval must leave the execution awaiting the SECOND HITL
+    const execAfterFirst = await waitForStatus(executionId, 'awaiting_approval');
+    const pendingAfterFirst = parsePending(execAfterFirst);
+    expect(pendingAfterFirst).toHaveLength(1);
+    expect(pendingAfterFirst[0]?.nodeId).toBe('h2');
+    expect(pendingAfterFirst[0]?.prompt).toBe('Final approval?');
+
+    // Approve the second HITL → the flow completes
+    const approveRes2 = await fetch(`${API_URL}/executions/${executionId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
+      body: JSON.stringify({ decision: 'approved', hitlNodeId: 'h2' }),
+    });
+    expect(approveRes2.ok).toBe(true);
+
     const exec = await pollExecution(request, executionId, 30000);
     expect(exec.status).toBe('completed');
 
-    // No HITL left pending — the second HITL was resolved too
-    const pending = Array.isArray(exec.pending_hitls) ? exec.pending_hitls : JSON.parse(exec.pending_hitls || '[]');
+    // No HITL left pending
+    const pending = parsePending(exec);
     expect(pending).toHaveLength(0);
 
     // The subflow executed (its steps are recorded with the subflow label prefix)

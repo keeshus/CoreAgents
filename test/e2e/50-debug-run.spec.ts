@@ -126,9 +126,9 @@ test.describe('Debug run', () => {
   });
 
   test('code node errors are displayed in the panel', async ({ page, request }) => {
-    // Template-validation errors are raised by the engine before the sandbox runs the code,
-    // so they propagate through step.failed (runtime throws are swallowed by the sandbox path)
-    const flow = await createCodeFlow(request, '{{input.ghost}}; return input;');
+    // A real throwing code node: the sandbox reports a non-zero exit code, the step
+    // fails, and the error text (with the original exception) surfaces in the panel.
+    const flow = await createCodeFlow(request, 'throw new Error("boom from code node");');
     await page.goto(`/flows/${flow.id}/edit`);
     await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
     await page.getByTestId('debug-btn').click();
@@ -139,7 +139,7 @@ test.describe('Debug run', () => {
 
     // The failing step shows the error message once expanded
     await expandStep(page, 'Compute');
-    await expect(overlay(page).getByText(/not an upstream node/).first()).toBeVisible({ timeout: 5000 });
+    await expect(overlay(page).getByText(/boom from code node/).first()).toBeVisible({ timeout: 5000 });
 
     await deleteFlow(request, flow.id);
   });

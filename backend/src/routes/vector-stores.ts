@@ -5,7 +5,7 @@ import { vectorStores, groupMembers } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import neo4j from 'neo4j-driver';
-import { registerStore, createQdrantStore, createNeo4jStore } from '../vector-stores/index.js';
+import { registerStore, unregisterStore, createQdrantStore, createNeo4jStore, createPgvectorStore } from '../vector-stores/index.js';
 
 const router = Router();
 
@@ -21,8 +21,9 @@ async function checkGroupAdmin(userId: string, groupId: string): Promise<boolean
   return !!member;
 }
 
-// Initialize pgvector fallback
-registerStore('pgvector', createQdrantStore('http://qdrant-e2e:6333'));
+// Initialize pgvector fallback: searches the Postgres embeddings table that
+// document uploads write to (previously misregistered as a Qdrant client).
+registerStore('pgvector', createPgvectorStore(db));
 
 // Load persisted stores on startup
 (async () => {
@@ -261,6 +262,9 @@ router.delete('/vector-stores/:id', requirePermission('store:write', 'store:writ
   }
 
   await db.delete(vectorStores).where(eq(vectorStores.id, id));
+  // Drop the in-memory registration so uploads no longer mirror into a
+  // store that was just deleted from the database.
+  unregisterStore(existing.name);
   res.status(204).send();
 }));
 

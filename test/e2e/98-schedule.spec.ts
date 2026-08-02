@@ -157,11 +157,11 @@ test.describe('Schedule trigger', () => {
     const mark = detail.output?.c1;
     expect(mark?.scheduled).toBe(true);
     expect(mark?.received).toMatchObject({ triggerType: 'schedule' });
-    // GAP PIN: the trigger's configured inputMessage ({"source":"cron-strict"})
-    // is never delivered — schedule-reconciliation.ts enqueues only {flowId} and
-    // worker/src/run.ts falls back to {triggerType:'schedule', timestamp}. If a
-    // future fix wires inputMessage through, this assertion fails loudly.
-    expect(mark?.received?.source).toBeUndefined();
+    // The trigger's configured inputMessage ({"source":"cron-strict"}) IS now
+    // delivered: the repeatable BullMQ job carries it, and the worker merges it
+    // into the execution input alongside the schedule context fields.
+    expect(mark?.received?.source).toBe('cron-strict');
+    expect(mark?.source).toBe('cron-strict');
 
     await deleteFlow(request, flow.id);
   });

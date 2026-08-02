@@ -3,6 +3,7 @@ import { db } from '../db/connection.js';
 import { documents, embeddings } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { requirePermission } from '../middleware/auth.js';
+import { upsertToRegisteredStores } from '../vector-stores/index.js';
 // Inline embedding call to avoid cross-workspace TS rootDir issues.
 // At runtime, tsx resolves this fine; the worker module is available.
 async function generateEmbedding(text: string): Promise<number[]> {
@@ -41,17 +42,26 @@ router.post('/documents/upload', requirePermission('document:write'), asyncHandl
   const chunks = chunkText(content, 500, 50);
 
   // Generate embeddings for each chunk
-  const embeddingPromises = chunks.map(async (chunkText, index) => {
+  const chunkEmbeddings = await Promise.all(chunks.map(async (chunkText) => {
     const embedding = await generateEmbedding(chunkText);
-    return db.insert(embeddings).values({
+    return embedding as any;
+  }));
+
+  if (chunks.length > 0) {
+    await db.insert(embeddings).values(chunks.map((chunkText, index) => ({
       document_id: doc.id,
       chunk_index: index,
       chunk_text: chunkText,
-      embedding: embedding as any,
-    });
-  });
-
-  await Promise.all(embeddingPromises);
+      embedding: chunkEmbeddings[index],
+    })));
+    // Mirror chunks into any user-registered external stores (e.g. Qdrant)
+    // so the retriever finds them whichever store the search path prefers.
+    await upsertToRegisteredStores(collectionName, chunks.map((chunkText, index) => ({
+      id: crypto.randomUUID(),
+      embedding: chunkEmbeddings[index],
+      payload: { documentId: doc.id, chunkText, chunkIndex: index },
+    })));
+  }
 
   res.status(201).json({ ...doc, chunkCount: chunks.length });
 }));

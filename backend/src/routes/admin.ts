@@ -17,6 +17,12 @@ router.post('/users', requirePermission('admin'), asyncHandler(async (req, res) 
     res.status(400).json({ error: 'Email, password, and name are required' });
     return;
   }
+  // Pre-check for duplicate email (mirrors register route in auth.ts)
+  const [existing] = await db.select().from(users).where(eq(users.email, email));
+  if (existing) {
+    res.status(409).json({ error: 'Email already registered' });
+    return;
+  }
   const password_hash = await bcrypt.hash(password, 10);
   const [user] = await db.insert(users).values({ email, password_hash, name, role_id: role_id || null }).returning();
   res.status(201).json({ id: user.id, email: user.email, name: user.name, role_id: user.role_id });

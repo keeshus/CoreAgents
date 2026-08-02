@@ -4,6 +4,7 @@ import { db } from '../db/connection.js';
 import { documents, embeddings, llmEndpoints } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { upsertToRegisteredStores } from '../vector-stores/index.js';
 
 const router = Router();
 
@@ -83,6 +84,13 @@ router.post('/knowledge/upload', requirePermission('knowledge:write'), asyncHand
 
   if (chunkRecords.length > 0) {
     await db.insert(embeddings).values(chunkRecords);
+    // Mirror chunks into any user-registered external stores (e.g. Qdrant)
+    // so the retriever finds them whichever store the search path prefers.
+    await upsertToRegisteredStores(collectionName, chunkRecords.map((c) => ({
+      id: crypto.randomUUID(),
+      embedding: c.embedding as number[],
+      payload: { documentId: doc.id, chunkText: c.chunk_text, chunkIndex: c.chunk_index },
+    })));
   }
 
   res.status(201).json({ ...doc, chunkCount: chunks.length });

@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { eq, and, desc, sql, inArray, isNull, or } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, groupMembers, users, agentContexts, agentStore, secretAccessLog } from '../db/schema.js';
-import { FlowExecutor, HitlPauseError, FlowStopError } from '../../../worker/src/executor/engine.js';
+import { FlowExecutor, HitlPauseError, FlowStopError, PauseExecutionError } from '../../../worker/src/executor/engine.js';
+import { executionQueue } from '../../../worker/src/queue.js';
 import { getStore, listStores } from '../vector-stores/index.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
@@ -568,6 +569,34 @@ router.post(
         return;
       }
 
+      // Handle delay pause — persist resume info and schedule a delayed re-run
+      if (err instanceof PauseExecutionError) {
+        activeExecutors.delete(execId);
+        if (!isDebug) {
+          await db
+            .update(executions)
+            .set({
+              status: 'running',
+              output: { ...err.savedOutputs, _flowSnapshot: flowSnapshot, _delayNodeId: err.nodeId, _delayMs: err.resumeDelay, _delayResumeAt: Date.now() + err.resumeDelay } as any,
+            })
+            .where(eq(executions.id, exec.id));
+          await executionQueue.add(
+            'execute-flow',
+            { flow: flowDef, input: { ...input, __executionId: exec.id, __replayFrom: err.nodeId, __replayOutputs: err.savedOutputs } },
+            { delay: err.resumeDelay, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+          );
+        }
+
+        emitSSE({
+          type: 'execution.paused',
+          executionId: execId,
+          data: { nodeId: err.nodeId, delayMs: err.resumeDelay, resumeAt: Date.now() + err.resumeDelay, message: 'Waiting for delay' },
+          timestamp: new Date().toISOString(),
+        });
+        res.end();
+        return;
+      }
+
       const error = err instanceof Error ? err.message : String(err);
       console.error('Flow execution failed:', error);
       activeExecutors.delete(execId);
@@ -887,6 +916,11 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
   const executor = new FlowExecutor();
   const savedOutputs = hitlEntry.savedOutputs || {};
   const mergedInput = { ...(exec.input || {}), _approved: true, _feedback: feedback, _decision: decision, ...userData };
+  // Node-scoped approval: attach the decision to the exact HITL node being
+  // replayed (keyed by its hierarchical node id, e.g. 'h1' or 'subflow:c3') so
+  // the engine only resumes that node — other HITL nodes further downstream
+  // still pause for their own approval.
+  const replayOutputs = { ...savedOutputs, [`${hitlEntry.nodeId}:__approved`]: { decision, feedback } };
 
   try {
     const persistStep = async (_nodeId: string, event: SSEEvent) => {
@@ -946,7 +980,7 @@ router.post('/executions/:executionId/approve', requirePermission('execution:app
       mergedInput,
       persistStep,
       executionContext,
-      { replayFrom: hitlEntry.nodeId, replayOutputs: savedOutputs, inputOverride: mergedInput, initialIteration: (exec.output as any)?._nextIteration ?? 1 },
+      { replayFrom: hitlEntry.nodeId, replayOutputs, inputOverride: mergedInput, initialIteration: (exec.output as any)?._nextIteration ?? 1 },
     );
 
     // Calculate total paused time (if any)

@@ -142,6 +142,10 @@ test.describe('Retriever node — comprehensive', () => {
     expect(typeof retrieverOutput.count).toBe('number');
     // With no threshold, every chunk in the store passes; count == chunks
     expect(retrieverOutput.count).toBe(retrieverOutput.chunks.length);
+    // Regression guard: uploaded chunks must actually be searchable. The
+    // search used to hit an empty Qdrant store and return 0 chunks.
+    expect(retrieverOutput.count).toBeGreaterThanOrEqual(1);
+    expect(retrieverOutput.chunks[0].text).toContain('Paris is the capital of France');
   });
 });
 

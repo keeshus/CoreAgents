@@ -4,6 +4,7 @@ import { db } from '../db/connection.js';
 import { flows, apiDeployments, executions } from '../db/schema.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { enforceWebhookIpRateLimit } from './webhook-security.js';
 import type { NodeData, FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
@@ -15,6 +16,15 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 router.post(
   '/webhook/:flowId',
   asyncHandler(async (req, res) => {
+    // Per-IP throttle BEFORE any DB work — unauthenticated spam must not
+    // burn flow lookups at full speed (see webhook-security.ts).
+    const ipRetryAfter = enforceWebhookIpRateLimit(req.ip || '');
+    if (ipRetryAfter !== null) {
+      res.setHeader('Retry-After', String(ipRetryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
+      return;
+    }
+
     let flowId = req.params.flowId as string;
     const providedSecret = (req.query.secret as string) || '';
 

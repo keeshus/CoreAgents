@@ -519,6 +519,54 @@ test.describe('Chat flow streaming output', () => {
   });
 });
 
+test.describe('Chat API rate limiting', () => {
+  let chatFlowId: string;
+  let apiKey: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await createFlow(request, {
+      name: uniqueFlowName('ChatRateLimit'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['chat_input.message'] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    chatFlowId = (await res.json()).id;
+
+    // 1 request/minute per API key
+    await request.put(`${API_URL}/flows/${chatFlowId}/chat-api/deployment`, {
+      data: { enabled: true, model_name: 'mock-gpt-4', rate_limit: 1 },
+    });
+
+    const keyRes = await request.post(`${API_URL}/flows/${chatFlowId}/chat-api/keys`, { data: { label: 'Rate Limit Test' } });
+    apiKey = (await keyRes.json()).raw_key;
+  });
+
+  test.afterAll(async ({ request }) => {
+    if (chatFlowId) await deleteFlow(request, chatFlowId).catch(() => {});
+  });
+
+  test('returns 429 with Retry-After after exceeding the per-key limit', async () => {
+    const call = () => fetch(`${OPENAI_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'mock-gpt-4', messages: [{ role: 'user', content: 'ping' }] }),
+    });
+
+    // First request is accepted
+    const first = await call();
+    expect(first.status).toBe(200);
+
+    // Second request within the same minute is throttled
+    const second = await call();
+    expect(second.status).toBe(429);
+    expect(second.headers.get('Retry-After')).not.toBeNull();
+    const body = await second.json();
+    expect(body.error).toBe('Rate limit exceeded. Try again later.');
+  });
+});
+
 test.describe('Chat API deployment settings UI', () => {
   let chatFlowId: string;
 

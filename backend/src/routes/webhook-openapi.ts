@@ -5,6 +5,7 @@ import { db } from '../db/connection.js';
 import { flows, apiDeployments, apiKeys, executions } from '../db/schema.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
+import { enforceWebhookRateLimit, enforceWebhookIpRateLimit } from './webhook-security.js';
 import type { FlowDefinition } from 'core-agents-shared';
 
 const router = Router();
@@ -80,12 +81,12 @@ async function authenticateWebhookRequest(req: any, flowId: string): Promise<{ s
 
 // ── POST /api/webhook/:slug — Named Webhook Execution ──────────
 
-async function resolveWebhookFlow(slugOrId: string): Promise<{ flowId: string; slug: string } | null> {
+async function resolveWebhookFlow(slugOrId: string): Promise<{ flowId: string; slug: string; rateLimit: number } | null> {
   // Try slug lookup first
   const [deployment] = await db.select()
     .from(apiDeployments)
     .where(eq(apiDeployments.path_slug, slugOrId)).limit(1);
-  if (deployment) return { flowId: deployment.flow_id, slug: deployment.path_slug };
+  if (deployment) return { flowId: deployment.flow_id, slug: deployment.path_slug, rateLimit: deployment.rate_limit || 0 };
 
   // Fallback: try as a raw flow UUID (must be valid UUID format)
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId)) {
@@ -95,7 +96,7 @@ async function resolveWebhookFlow(slugOrId: string): Promise<{ flowId: string; s
         const [dep] = await db.select()
           .from(apiDeployments)
           .where(eq(apiDeployments.flow_id, flow.id)).limit(1);
-        return { flowId: flow.id, slug: dep?.path_slug || flow.id };
+        return { flowId: flow.id, slug: dep?.path_slug || flow.id, rateLimit: dep?.rate_limit || 0 };
       }
     } catch { /* ignore db errors */ }
   }
@@ -114,9 +115,28 @@ router.post(
       return;
     }
 
+    // Per-IP throttle BEFORE authentication — unauthenticated spam must not
+    // burn DB queries (deployment lookup, flow load, key/secret checks) at
+    // full speed (see webhook-security.ts).
+    const ipRetryAfter = enforceWebhookIpRateLimit(req.ip || '');
+    if (ipRetryAfter !== null) {
+      res.setHeader('Retry-After', String(ipRetryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
+      return;
+    }
+
     const authError = await authenticateWebhookRequest(req, resolved.flowId);
     if (authError) {
       res.status(authError.status).json({ error: authError.message });
+      return;
+    }
+
+    // Enforce per-deployment rate limit (keyed by slug) after auth — the
+    // limit only counts authenticated, accepted requests.
+    const retryAfter = enforceWebhookRateLimit(resolved.slug, resolved.rateLimit);
+    if (retryAfter !== null) {
+      res.setHeader('Retry-After', String(retryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
       return;
     }
 
@@ -196,6 +216,15 @@ router.get(
       return;
     }
 
+    // Per-IP throttle BEFORE authentication — status polling must not be
+    // hammered without credentials.
+    const ipRetryAfter = enforceWebhookIpRateLimit(req.ip || '');
+    if (ipRetryAfter !== null) {
+      res.setHeader('Retry-After', String(ipRetryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
+      return;
+    }
+
     const authError = await authenticateWebhookRequest(req, deployment.flow_id);
     if (authError) {
       res.status(authError.status).json({ error: authError.message });
@@ -255,6 +284,15 @@ router.get(
       .where(eq(apiDeployments.path_slug, slug)).limit(1);
     if (!deployment) {
       res.status(404).json({ error: 'Webhook endpoint not found' });
+      return;
+    }
+
+    // Per-IP throttle BEFORE authentication — listing must not be hammered
+    // without credentials.
+    const ipRetryAfter = enforceWebhookIpRateLimit(req.ip || '');
+    if (ipRetryAfter !== null) {
+      res.setHeader('Retry-After', String(ipRetryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
       return;
     }
 

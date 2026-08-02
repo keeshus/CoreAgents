@@ -27,6 +27,7 @@ vi.mock('core-agents-shared', () => ({
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a: any, b: any) => ({ op: 'eq', a, b })),
+  ne: vi.fn((a: any, b: any) => ({ op: 'ne', a, b })),
   and: vi.fn((...args: any[]) => ({ op: 'and', args })),
 }));
 
@@ -216,8 +217,10 @@ describe('webhook-api-keys routes', () => {
     it('updates existing deployment', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = { pathSlug: 'updated-slug', rateLimit: 20, summary: 'Updated' };
+      // First select = pathSlug conflict check (empty), second = existing deployment
+      db.select.mockReturnValueOnce(mockChain([]));
       const selectChain = mockChain([{ path_slug: 'old', rate_limit: 5, summary: 'Old' }]);
-      db.select.mockReturnValue(selectChain);
+      db.select.mockReturnValueOnce(selectChain);
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ path_slug: 'updated-slug', rate_limit: 20, summary: 'Updated' }]);
       db.update.mockReturnValue(updateChain);
@@ -249,8 +252,9 @@ describe('webhook-api-keys routes', () => {
       req.params = { flowId: 'flow-1' };
       req.body = { rateLimit: 20 }; // only rateLimit provided, no pathSlug or name
 
+      db.select.mockReturnValueOnce(mockChain([])); // pathSlug conflict check
       const selectChain = mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old summary' }]);
-      db.select.mockReturnValue(selectChain);
+      db.select.mockReturnValueOnce(selectChain);
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ path_slug: 'flow-1', rate_limit: 20, summary: 'Old summary' }]);
       db.update.mockReturnValue(updateChain);
@@ -260,6 +264,34 @@ describe('webhook-api-keys routes', () => {
       expect(db.update).toHaveBeenCalledTimes(1);
       expect(db.insert).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith({ pathSlug: 'flow-1', rateLimit: 20, summary: 'Old summary' });
+    });
+
+    it('returns 409 when path slug is already used by another flow', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { pathSlug: 'taken-slug' };
+      const conflictChain = mockChain([{ flow_id: 'flow-2' }]);
+      db.select.mockReturnValue(conflictChain);
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Path slug already in use' });
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('allows a flow to keep its own path slug (no false conflict)', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { pathSlug: 'my-flow', rateLimit: 5, summary: 'Test flow' };
+      const selectChain = mockChain([]);
+      db.select.mockReturnValue(selectChain);
+      const insertChain = mockChain();
+      insertChain.returning.mockResolvedValue([{ path_slug: 'my-flow', rate_limit: 5, summary: 'Test flow' }]);
+      db.insert.mockReturnValue(insertChain);
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(res.status).toHaveBeenCalledWith(201);
     });
 
     it('falls back to flowId for slug when neither pathSlug nor name is provided (new deployment)', async () => {

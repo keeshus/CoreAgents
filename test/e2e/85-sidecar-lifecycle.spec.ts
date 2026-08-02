@@ -288,20 +288,18 @@ test.describe('Sidecar lifecycle and execution history', () => {
   });
 
   test('mid-flow failure is persisted with status failed and the error shows in the detail view', async ({ page, request }) => {
-    // NOTE: code-node exceptions are swallowed by the sandbox runner (execution completes with
-    // "(no output)"), so a condition-node mismatch is used as the mid-flow runtime failure.
     const flowName = uniqueFlowName('Midflow-Fail');
     const flowRes = await request.post(`${API_URL}/flows`, {
       data: {
         name: flowName,
         nodes: [
           { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-          { id: 'b1', type: 'condition', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'condition', config: { condition: 'input.trigger.decision' } } },
-          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Trigger.decision'] } } },
+          { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Boom', type: 'code', config: { code: 'throw new Error("boom from code node");' } } },
+          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Boom.result'] } } },
         ],
         edges: [
-          { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'b1', targetHandle: 'input-0' },
-          { id: 'e2', source: 'b1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+          { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+          { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
         ],
       },
     });
@@ -316,14 +314,14 @@ test.describe('Sidecar lifecycle and execution history', () => {
     const res = await fetch(`${API_URL}/flows/${flow.id}/execute`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ input: { decision: 'reject' }, _debug: false }),
+      body: JSON.stringify({ input: { message: 'test' }, _debug: false }),
     });
     expect(res.ok).toBe(true);
     const events = await readSSE(res);
 
     const failed = events.find(e => e.type === 'execution.failed');
     expect(failed).toBeDefined();
-    expect(failed?.data?.error).toContain('does not match any output label');
+    expect(failed?.data?.error).toContain('boom from code node');
     const started = events.find(e => e.type === 'execution.started');
     const executionId = (started as any)?.executionId as string;
     expect(executionId).toBeTruthy();
@@ -333,18 +331,18 @@ test.describe('Sidecar lifecycle and execution history', () => {
     expect(execRes.ok()).toBe(true);
     const exec = await execRes.json();
     expect(exec.status).toBe('failed');
-    expect(exec.error).toContain('does not match any output label');
-    const failedStep = exec.steps?.find((s: any) => s.node_id === 'b1');
+    expect(exec.error).toContain('boom from code node');
+    const failedStep = exec.steps?.find((s: any) => s.node_id === 'c1');
     expect(failedStep).toBeDefined();
     expect(failedStep.status).toBe('failed');
-    expect(failedStep.error).toContain('does not match any output label');
+    expect(failedStep.error).toContain('boom from code node');
 
     // Run history list shows the error (truncated to 80 chars), detail view shows the full banner
     await page.goto(`/flows/${flow.id}/executions`);
-    await expect(page.getByText(/Branch condition/).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Code node execution failed/).first()).toBeVisible({ timeout: 10000 });
     await page.locator('div.cursor-pointer', { hasText: 'Failed' }).first().click();
     await expect(page.locator('h1').filter({ hasText: 'Execution Details' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Execution Failed')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(/does not match any output label/).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'Execution Failed' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/boom from code node/).first()).toBeVisible({ timeout: 5000 });
   });
 });

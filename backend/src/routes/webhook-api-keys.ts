@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../db/connection.js';
 import { apiKeys, apiDeployments } from '../db/schema.js';
@@ -104,6 +104,18 @@ router.put(
     const { pathSlug, rateLimit, summary } = req.body;
 
     const slug = pathSlug || generateSlug(req.body.name || flowId);
+
+    // Pre-check: another flow must not already use this path slug (409, not 500)
+    if (slug) {
+      const [slugConflict] = await db.select({ flow_id: apiDeployments.flow_id })
+        .from(apiDeployments)
+        .where(and(eq(apiDeployments.path_slug, slug), ne(apiDeployments.flow_id, flowId)))
+        .limit(1);
+      if (slugConflict) {
+        res.status(409).json({ error: 'Path slug already in use' });
+        return;
+      }
+    }
 
     const [existing] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1)
 

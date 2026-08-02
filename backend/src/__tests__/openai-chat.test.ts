@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { resetRateLimiters } from '../routes/webhook-security.js';
 
 // ── Module mocks ──────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ function makeReq(overrides?: any) {
 }
 
 function makeRes() {
-  return { status: vi.fn().mockReturnThis(), json: vi.fn(), end: vi.fn() };
+  return { status: vi.fn().mockReturnThis(), json: vi.fn(), end: vi.fn(), setHeader: vi.fn() };
 }
 
 // ── Tests ─────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ describe('openai-chat routes', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    resetRateLimiters();
     db = (await import('../db/connection.js')).db;
     const mod = await import('../routes/openai-chat.js');
     router = mod.default;
@@ -139,6 +141,39 @@ describe('openai-chat routes', () => {
 
       expect(next).toHaveBeenCalled();
       expect(req.chatFlowId).toBe('flow-1');
+    });
+
+    it('returns 429 with Retry-After once the per-key rate limit is exceeded', async () => {
+      const keyRecord = { id: 'key-429', flow_id: 'flow-1', enabled: true, key_hash: 'mocked-hash', expires_at: null, label: 'test' };
+      const deployment = { flow_id: 'flow-1', enabled: true, model_name: 'gpt-4o', rate_limit: 1 };
+      db.update.mockReturnValue({ set: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue(undefined) });
+      const req = makeReq({ headers: { authorization: 'Bearer valid-key' } });
+      const res = makeRes();
+      const next = vi.fn();
+      const middleware = getMiddleware(router, 'post', '/v1/chat/completions', 0);
+
+      const run = async () => {
+        db.select
+          .mockReset()
+          .mockReturnValueOnce(mockChain([keyRecord]))
+          .mockReturnValueOnce(mockChain([deployment]));
+        res.status.mockClear();
+        res.json.mockClear();
+        res.setHeader.mockClear();
+        next.mockClear();
+        await middleware(req, res, next);
+      };
+
+      // First request passes the limiter and reaches next()
+      await run();
+      expect(next).toHaveBeenCalled();
+
+      // Second request within the same minute is throttled
+      await run();
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+      expect(res.json).toHaveBeenCalledWith({ error: 'Rate limit exceeded. Try again later.' });
+      expect(next).not.toHaveBeenCalled();
     });
   });
 });

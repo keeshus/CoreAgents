@@ -34,14 +34,14 @@ describe('reconcileSchedules', () => {
   it('adds a repeatable job for a new schedule flow', async () => {
     mockGetRepeatableJobs.mockResolvedValue([]);
     const db = mockDb([
-      { id: 'flow-1', nodes: [{ data: { type: 'trigger', config: { triggerType: 'schedule', cronExpression: '*/5 * * * *' } } }] },
+      { id: 'flow-1', nodes: [{ data: { type: 'trigger', config: { triggerType: 'schedule', cronExpression: '*/5 * * * *', inputMessage: '{"task":"check"}' } } }] },
     ]);
 
     await reconcileSchedules(db, mockFlowsTable, mockEq);
 
     expect(mockAdd).toHaveBeenCalledWith(
       'schedule:flow-1',
-      { flowId: 'flow-1' },
+      { flowId: 'flow-1', inputMessage: { task: 'check' } },
       { repeat: { pattern: '*/5 * * * *' }, jobId: 'schedule:flow-1' },
     );
   });
@@ -59,7 +59,7 @@ describe('reconcileSchedules', () => {
     expect(mockRemoveRepeatable).toHaveBeenCalledWith('schedule:flow-1', { pattern: '0 * * * *' });
     expect(mockAdd).toHaveBeenCalledWith(
       'schedule:flow-1',
-      { flowId: 'flow-1' },
+      expect.objectContaining({ flowId: 'flow-1' }),
       { repeat: { pattern: '*/5 * * * *' }, jobId: 'schedule:flow-1' },
     );
   });

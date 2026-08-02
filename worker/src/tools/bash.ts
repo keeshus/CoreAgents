@@ -125,9 +125,11 @@ export async function executeCode(
   env: Record<string, string>,
   timeout?: number,
 ): Promise<unknown> {
-  // Inject input as a variable, wrap code in an IIFE so `return` works, serialize result
+  // Inject input as a variable, wrap code in an IIFE so `return` works, serialize result.
+  // A code node with no return value must not crash the script — write nothing so the
+  // result falls back to "(no output)" below.
   const serializedInput = JSON.stringify(input);
-  const wrappedCode = `const input = ${serializedInput}; const __run = () => { ${code} }; const __result = __run(); process.stdout.write(JSON.stringify(__result));`;
+  const wrappedCode = `const input = ${serializedInput}; const __run = () => { ${code} }; const __result = __run(); process.stdout.write(JSON.stringify(__result) ?? '');`;
   // Write code as a file on the sidecar and execute it — avoids bash quoting issues
   const fileName = `run_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.js`;
   const nodeCommand = `node ${fileName}`;
@@ -144,7 +146,18 @@ export async function executeCode(
   });
 
   if (result.error) {
-    throw new Error(`Code execution failed: ${result.error}`);
+    throw new Error(`Code node execution failed: ${result.error}`);
+  }
+
+  // A throwing code node / non-zero exit code / sandbox kill must fail the execution
+  // instead of being silently swallowed into "(no output)".
+  if (result.exitCode !== 0) {
+    const detail = [result.stderr, result.stdout].filter(Boolean).join('\n').trim().slice(0, 4000);
+    const exitHint = result.exitCode === -1
+      ? ' (process was killed — possible timeout or resource limit)'
+      : '';
+    const message = `Code node execution failed with exit code ${result.exitCode}${exitHint}`;
+    throw new Error(detail ? `${message}. Details:\n${detail}` : message);
   }
 
   // Debug: log stderr if present

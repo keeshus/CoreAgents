@@ -266,13 +266,12 @@ test.describe('Webhook deployment config', () => {
     });
     const secondFlow = await secondRes.json();
 
-    // path_slug has a UNIQUE constraint in the DB; the route does not pre-check for
-    // conflicts, so the violation surfaces as a 500 via the global error handler.
-    // (App gap: should return 409.)
+    // path_slug has a UNIQUE constraint in the DB; the route now pre-checks for
+    // conflicts and returns a clean 409 (fixed — no more 500 unique violation).
     const secondPut = await request.put(`${API_URL}/flows/${secondFlow.id}/deployment`, {
       data: { pathSlug: 'duplicate-slug-test', rateLimit: 5 },
     });
-    expect(secondPut.status()).toBe(500);
+    expect(secondPut.status()).toBe(409);
 
     // The original deployment keeps its slug and still resolves.
     const keepRes = await request.get(`${API_URL}/flows/${firstFlow.id}/deployment`);
@@ -515,6 +514,31 @@ test.describe('Webhook execution via slug with auth', () => {
       body: JSON.stringify({ message: 'slug-test' }),
     });
     expect(execRes.status).toBe(202);
+  });
+
+  test('POST /api/webhook/:slug enforces per-deployment rate limit (429 + Retry-After)', async ({ request }) => {
+    // Configure the deployment with a 1 request/minute limit
+    const putRes = await request.put(`${API_URL}/flows/${webhookFlowId}/deployment`, {
+      data: { pathSlug, rateLimit: 1 },
+    });
+    expect(putRes.ok()).toBe(true);
+
+    const post = (message: string) => fetch(`${API_URL}/webhook/${pathSlug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rawKey}` },
+      body: JSON.stringify({ message }),
+    });
+
+    // First authenticated request is accepted
+    const first = await post('first');
+    expect(first.status).toBe(202);
+
+    // Second request within the same minute is throttled
+    const second = await post('second');
+    expect(second.status).toBe(429);
+    expect(second.headers.get('Retry-After')).not.toBeNull();
+    const body = await second.json();
+    expect(body.error).toBe('Rate limit exceeded. Try again later.');
   });
 });
 

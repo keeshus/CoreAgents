@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { resetRateLimiters } from '../routes/webhook-security.js';
 
 vi.mock('../db/connection.js', () => ({ db: { select: vi.fn(), insert: vi.fn(), update: vi.fn() } }));
 
@@ -97,6 +98,7 @@ describe('webhook-openapi routes', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    resetRateLimiters();
     db = (await import('../db/connection.js')).db;
     // Set up default chainable mocks for db methods
     db.select.mockReturnValue(mockChain([]));
@@ -117,6 +119,7 @@ describe('webhook-openapi routes', () => {
       json: vi.fn(),
       send: vi.fn(),
       end: vi.fn(),
+      setHeader: vi.fn(),
     };
   });
 
@@ -349,6 +352,44 @@ describe('webhook-openapi routes', () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Flow not found' });
+    });
+
+    it('returns 429 with Retry-After once the per-deployment rate limit is exceeded', async () => {
+      req.params = { slug: 'rate-limited-429' };
+      req.headers = { authorization: 'Bearer wh_testkey' };
+      req.body = { amount: 100, currency: 'USD' };
+
+      const execChain = mockChain();
+      execChain.returning.mockResolvedValue([{ id: 'exec-1' }]);
+      db.insert.mockReturnValue(execChain);
+
+      const run = async () => {
+        db.select
+          .mockReset()
+          .mockReturnValueOnce(mockChain([{ flow_id: 'flow-1', path_slug: 'rate-limited-429', rate_limit: 1 }]))
+          .mockReturnValueOnce(mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]))
+          .mockReturnValueOnce(mockChain([makeWebhookFlow()]));
+        const next = vi.fn();
+        getHandler(router, 'post', '/webhook/:slug')(req, res, next);
+        await new Promise(r => setTimeout(r, 0));
+        if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
+      };
+
+      await run();
+      expect(res.status).toHaveBeenCalledWith(202);
+
+      res.status.mockClear();
+      res.json.mockClear();
+      res.setHeader.mockClear();
+
+      await run();
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+      expect(res.json).toHaveBeenCalledWith({ error: 'Rate limit exceeded. Try again later.' });
+
+      // The 429 path does not consume the flow-lookup mock; drain the queue so
+      // leftover once-implementations cannot leak into later tests.
+      db.select.mockReset();
     });
   });
 

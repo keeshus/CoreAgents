@@ -169,8 +169,9 @@ test.describe('Co-Pilot tools', () => {
     const email = `cp-dup-${Date.now()}@test.local`;
     await request.post(`${API_URL}/users`, { data: { email, password: 'Test1234!', name: 'First' } });
     const res2 = await request.post(`${API_URL}/users`, { data: { email, password: 'Test1234!', name: 'Second' } });
-    // Should return 409 conflict (or 500 if duplicate handling isn't perfect)
-    expect([409, 500]).toContain(res2.status());
+    // Must be a clean 409 conflict (not a 500 unique-violation)
+    expect(res2.status()).toBe(409);
+    expect((await res2.json()).error).toBe('Email already registered');
     // Cleanup: find and delete
     const users = await (await request.get(`${API_URL}/users`)).json();
     const dup = users.find((u: any) => u.email === email);
@@ -945,6 +946,32 @@ test.describe('Co-Pilot tools', () => {
     expect(renewed.createdAt).toBeDefined();
     expect((await request.delete(`${API_URL}/flows/${flow.id}/keys/revoke`)).status()).toBe(204);
     await deleteFlow(request, flow.id);
+  });
+
+  test('webhook_deployment — rejects duplicate pathSlug with 409', async ({ request }) => {
+    const slug = `cp-dup-slug-${Date.now()}`;
+    const webhookNodes = [{ id: 't1', type: 'trigger', data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook' } } },
+      { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } }];
+    const webhookEdges = [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }];
+
+    const flow1 = await (await createFlow(request, { name: uniqueFlowName('CPWebhookSlug1'), nodes: webhookNodes, edges: webhookEdges })).json();
+    const flow2 = await (await createFlow(request, { name: uniqueFlowName('CPWebhookSlug2'), nodes: webhookNodes, edges: webhookEdges })).json();
+
+    // flow1 claims the slug (200 = updated existing auto-deployment, 201 = new)
+    const setRes = await request.put(`${API_URL}/flows/${flow1.id}/deployment`, { data: { pathSlug: slug } });
+    expect([200, 201]).toContain(setRes.status());
+
+    // flow2 tries the same slug → 409 (not a 500 unique violation)
+    const dupRes = await request.put(`${API_URL}/flows/${flow2.id}/deployment`, { data: { pathSlug: slug } });
+    expect(dupRes.status()).toBe(409);
+    expect((await dupRes.json()).error).toBe('Path slug already in use');
+
+    // The same flow may still update its own slug (no false conflict)
+    const ownRes = await request.put(`${API_URL}/flows/${flow1.id}/deployment`, { data: { pathSlug: slug, rateLimit: 3 } });
+    expect(ownRes.ok()).toBe(true);
+
+    await deleteFlow(request, flow1.id);
+    await deleteFlow(request, flow2.id);
   });
 
   // ─── Secrets (additional) ─────────────────────────────────────

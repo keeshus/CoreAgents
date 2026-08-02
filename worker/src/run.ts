@@ -49,7 +49,10 @@ async function main() {
       return;
     }
 
-    const resolvedInput = input || { triggerType: 'schedule', timestamp: new Date().toISOString() };
+    // Direct jobs carry an explicit input; schedule jobs merge the trigger's
+    // configured inputMessage (parsed JSON) with the schedule context fields.
+    const resolvedInput = input
+      || { ...(job.inputMessage || {}), triggerType: 'schedule', timestamp: new Date().toISOString() };
 
     console.log(`Executing flow: ${flowDef.name} (${flowDef.id})${executionId ? ' exec=' + executionId : ''}`);
 

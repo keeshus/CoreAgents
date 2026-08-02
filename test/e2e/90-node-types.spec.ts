@@ -541,6 +541,8 @@ test.describe('All node types', () => {
     const events = await debugExecute(flow.id, {}, cookie);
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
+    // Zero delay returns immediately without pausing
+    expect(completed!.data?.output?.d1?.delayed).toBe(false);
     await deleteFlow(request, flow.id);
   });
 
@@ -904,13 +906,13 @@ test.describe('All node types', () => {
     await deleteFlow(request, flow.id);
   });
 
-  test('delay node with future timestamp raises a pause error instead of waiting', async ({ request }) => {
+  test('delay node with future delay pauses and resumes to completion', async ({ request }) => {
     const name = uniqueFlowName('DelayFutureTsTest');
     const res = await createFlow(request, {
       name,
       nodes: [
         { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'T', type: 'trigger', config: { triggerType: 'manual' } } },
-        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'D', type: 'delay', config: { type: 'timestamp', timestamp: new Date(Date.now() + 3000).toISOString() } } },
+        { id: 'd1', type: 'delay', position: { x: 300, y: 0 }, data: { label: 'D', type: 'delay', config: { type: 'fixed', seconds: 3 } } },
         { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'O', type: 'output', config: { inputFields: [] } } },
       ],
       edges: [
@@ -919,12 +921,33 @@ test.describe('All node types', () => {
       ],
     });
     const flow = await res.json();
-    // Positive delays throw PauseExecutionError which has no resume path in the
-    // runner/SSE layer — the execution fails immediately with the pause message.
-    const events = await debugExecute(flow.id, {}, cookie);
-    const failed = events.find(e => e.type === 'execution.failed');
-    expect(failed).toBeDefined();
-    expect(failed!.data?.error).toContain('Paused: waiting for delay');
+
+    const { readSSE, pollExecution } = await import('./helpers/stream');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (cookie) headers['Cookie'] = cookie;
+    const runRes = await fetch(`${API_URL}/flows/${flow.id}/execute`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ input: {}, _debug: false }),
+    });
+    expect(runRes.ok).toBe(true);
+    const events = await readSSE(runRes);
+    const started = events.find(e => e.type === 'execution.started');
+    expect(started).toBeDefined();
+    const executionId = started?.executionId as string;
+    expect(executionId).toBeTruthy();
+
+    // The delay pauses the execution and schedules a delayed resume (~3s)
+    const paused = events.find(e => e.type === 'execution.paused');
+    expect(paused).toBeDefined();
+    expect(paused?.data?.delayMs).toBeGreaterThanOrEqual(2500);
+
+    const start = Date.now();
+    const exec = await pollExecution(request, executionId, 30000);
+    const elapsed = Date.now() - start;
+    expect(exec.status).toBe('completed');
+    expect(elapsed).toBeGreaterThanOrEqual(2500);
+    expect(JSON.stringify(exec.output)).toContain('delayed');
     await deleteFlow(request, flow.id);
   });
 

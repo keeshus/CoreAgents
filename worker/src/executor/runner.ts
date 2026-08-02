@@ -2,10 +2,11 @@
  * Shared flow execution runner with step persistence and HITL/Stop error handling.
  * Used by the backend SSE endpoint, the BullMQ worker, and webhooks.
  */
-import { FlowExecutor, HitlPauseError, FlowStopError } from './engine.js';
+import { FlowExecutor, HitlPauseError, FlowStopError, PauseExecutionError } from './engine.js';
 import type { ExecutionContext } from './engine.js';
 import type { FlowDefinition, SSEEvent } from 'core-agents-shared';
 import { createSidecarClient, createSandboxManager } from '../sandbox/index.js';
+import { executionQueue } from '../queue.js';
 
 interface RunnerOptions {
   flow: FlowDefinition;
@@ -31,8 +32,17 @@ interface RunnerOptions {
  * - Handles general errors (marks as failed)
  * - On success (marks as completed)
  */
-export async function executeFlowWithPersistence(options: RunnerOptions): Promise<{ status: string; output?: any }> {
+export async function executeFlowWithPersistence(options: RunnerOptions): Promise<{ status: string; output?: any; delayResumeAt?: number }> {
   const { flow, input, executionId, db: database, executionsTable, executionStepsTable, eq: eqFn, and: andFn, onEvent } = options;
+
+  // Delayed re-run metadata injected by the queue job (see PauseExecutionError
+  // handling below): replay from the pause point using the saved outputs.
+  const replayFrom = (input as any)?.__replayFrom as string | undefined;
+  const replayOutputs = (input as any)?.__replayOutputs as Record<string, unknown> | undefined;
+  const flowInput: Record<string, unknown> = { ...input };
+  delete (flowInput as any).__replayFrom;
+  delete (flowInput as any).__replayOutputs;
+  delete (flowInput as any).__executionId;
 
   // Initialize sandbox
   const sidecarClient = createSidecarClient();
@@ -77,7 +87,7 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
   try {
     const result = await executor.execute(
       flow,
-      input,
+      flowInput,
       async (nodeId, event) => {
         const d = event.data;
         const nid = (d.nodeId as string) || nodeId;
@@ -101,6 +111,7 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
         onEvent?.(nodeId, event);
       },
       executionContext,
+      replayFrom ? { replayFrom, replayOutputs: replayOutputs || {} } : undefined,
     );
 
     await database.update(executionsTable).set({
@@ -122,6 +133,30 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
         pending_hitls: JSON.stringify([hitlEntry]) as any,
       }).where(eqFn(executionsTable.id, executionId));
       return { status: 'awaiting_approval' };
+    }
+
+    // Delay pause — persist resume info and schedule a delayed re-run. The
+    // execution stays 'running' (the enum has no 'paused' state); the resume
+    // metadata lives in output and the delayed BullMQ job carries the replay
+    // instructions (__replayFrom / __replayOutputs).
+    if (err instanceof PauseExecutionError) {
+      const resumeAt = Date.now() + err.resumeDelay;
+      await database.update(executionsTable).set({
+        status: 'running',
+        output: { ...err.savedOutputs, _delayNodeId: err.nodeId, _delayMs: err.resumeDelay, _delayResumeAt: resumeAt } as any,
+      }).where(eqFn(executionsTable.id, executionId));
+      await executionQueue.add(
+        'execute-flow',
+        {
+          flow,
+          input: { ...flowInput, __executionId: executionId, __replayFrom: err.nodeId, __replayOutputs: err.savedOutputs },
+        },
+        { delay: err.resumeDelay, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      );
+      await sandboxManager.teardown(executionId).catch(teardownErr => {
+        console.error(`Failed to teardown sandbox for ${executionId}:`, teardownErr);
+      });
+      return { status: 'running', delayResumeAt: resumeAt };
     }
     
     // Teardown sandbox on failure/cancellation (but not HITL)

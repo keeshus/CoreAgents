@@ -241,6 +241,58 @@ describe('FlowExecutor', () => {
     expect(result.steps.find(s => s.nodeId === 'hitl')?.output).toBeDefined();
   });
 
+  it('resumes only the target HITL node via the per-node approval flag when replaying', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('hitl', 'hitl', {
+          config: {
+            prompt: 'Approve this?', displayFields: [], forwardFields: [],
+            buttons: [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }],
+          },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'hitl')],
+    );
+
+    const result = await executor.execute(flow, {}, onEvent, context, {
+      replayFrom: 'hitl',
+      replayOutputs: { 'hitl:__approved': { decision: 'approved', feedback: 'ok' } },
+    });
+    const hitlStep = result.steps.find(s => s.nodeId === 'hitl');
+    expect(hitlStep?.output).toBeDefined();
+    expect(hitlStep?.output?.decision).toBe('approved');
+    expect(hitlStep?.output?.feedback).toBe('ok');
+  });
+
+  it('does not auto-approve a second HITL node when replaying a different one (node-scoped approval)', async () => {
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('hitl1', 'hitl', {
+          config: {
+            prompt: 'First?', displayFields: [], forwardFields: [],
+            buttons: [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }],
+          },
+        }),
+        makeNode('hitl2', 'hitl', {
+          config: {
+            prompt: 'Second?', displayFields: [], forwardFields: [],
+            buttons: [{ label: 'Approve', value: 'approved' }, { label: 'Reject', value: 'rejected' }],
+          },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'hitl1'), makeEdge('e2', 'hitl1', 'hitl2')],
+    );
+
+    await expect(
+      executor.execute(flow, {}, onEvent, context, {
+        replayFrom: 'hitl1',
+        replayOutputs: { 'hitl1:__approved': { decision: 'approved' } },
+      }),
+    ).rejects.toMatchObject({ nodeId: 'hitl2' });
+  });
+
   it('executes all sub-nodes in a parallel node', async () => {
     // Parallel node with non-code sub-nodes (output nodes skip the sidecar import path)
     const subNodes: FlowNode[] = [
@@ -777,6 +829,18 @@ describe('FlowExecutor', () => {
         [],
       );
       const result = await executor.execute(flow, {}, onEvent, context);
+      expect(result.output.delay).toHaveProperty('delayed', false);
+    });
+
+    it('skips the pause when replaying from the delay node (delayed resume)', async () => {
+      const flow = makeFlow(
+        [makeNode('trigger', 'trigger'), makeNode('delay', 'delay', { config: { type: 'fixed', seconds: 5 } })],
+        [makeEdge('e1', 'trigger', 'delay')],
+      );
+      const result = await executor.execute(flow, {}, onEvent, context, {
+        replayFrom: 'delay',
+        replayOutputs: {},
+      });
       expect(result.output.delay).toHaveProperty('delayed', false);
     });
   });

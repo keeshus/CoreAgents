@@ -221,7 +221,7 @@ router.post(
     // ── Schedule hook: register repeatable BullMQ job ────────
     const scheduleCron = getScheduleCron(flowNodes);
     if (scheduleCron) {
-      executionQueue.add(`schedule:${createdFlow.id}`, { flowId: createdFlow.id }, {
+      executionQueue.add(`schedule:${createdFlow.id}`, { flowId: createdFlow.id, inputMessage: getScheduleInputMessage(flowNodes) }, {
         repeat: { pattern: scheduleCron },
         jobId: `schedule:${createdFlow.id}`,
       }).catch(err => console.error(`Failed to register schedule for flow ${createdFlow.id}:`, err));
@@ -322,7 +322,7 @@ router.put(
     }
 
     if (newCron) {
-      executionQueue.add(`schedule:${id}`, { flowId: id }, {
+      executionQueue.add(`schedule:${id}`, { flowId: id, inputMessage: getScheduleInputMessage(flowNodes) }, {
         repeat: { pattern: newCron },
         jobId: `schedule:${id}`,
       }).catch(err => console.error(`Failed to register schedule for flow ${id}:`, err));
@@ -398,6 +398,20 @@ function getScheduleCron(nodes: any[]): string | null {
   );
   const cron = trigger?.data?.config?.cronExpression as string | undefined;
   return cron?.trim() || null;
+}
+
+function getScheduleInputMessage(nodes: any[]): Record<string, unknown> | undefined {
+  const trigger = nodes.find(
+    (n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'schedule'
+  );
+  const raw = trigger?.data?.config?.inputMessage as string | undefined;
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // ── POST /api/flows/validate — compile/validation endpoint ──────────────────

@@ -457,20 +457,26 @@ export class FlowExecutor {
         }
       } catch (err) {
         // If node is paused (HITL or delay), populate saved outputs before re-throwing
-        if (err instanceof PauseExecutionError) {
+        if (err instanceof PauseExecutionError || err instanceof HitlPauseError) {
           const saved: Record<string, unknown> = {};
           for (const [k, v] of nodeOutputs) {
             if (k !== '__input__' && flow.nodes.some(n => n.id === k)) saved[k] = v;
           }
-          throw new PauseExecutionError(err.nodeId, saved, err.resumeDelay);
-        }
-        if (err instanceof HitlPauseError) {
-          const saved: Record<string, unknown> = {};
-          for (const [k, v] of nodeOutputs) {
-            if (k !== '__input__' && flow.nodes.some(n => n.id === k)) saved[k] = v;
+          // Preserve subflow-internal outputs under the subflow label prefix so a
+          // replay can resume inside the child without re-running it. The child's
+          // own saved outputs (keyed by child node ids) are namespaced under the
+          // subflow's prefix, matching the hierarchical pause node id.
+          if (node.data?.type === 'subflow' && err.savedOutputs) {
+            const subLabel = slugify(node.data.label || node.id);
+            for (const [k, v] of Object.entries(err.savedOutputs)) {
+              if (v !== undefined && !(k in saved)) saved[`${subLabel}:${k}`] = v;
+            }
+          }
+          if (err instanceof PauseExecutionError) {
+            throw new PauseExecutionError(err.nodeId, saved, err.resumeDelay);
           }
           const hitlConfig = (node.data as any)?.config || {};
-          throw new HitlPauseError(err.nodeId, saved, hitlConfig.buttons, err.prompt, err.assignmentType, err.assignees, err.requiredApprovals, err.assignedGroupId, err.assignedUserId, err.assignedRoleId);
+          throw new HitlPauseError(err.nodeId, saved, err.buttons || hitlConfig.buttons, err.prompt, err.assignmentType, err.assignees, err.requiredApprovals, err.assignedGroupId, err.assignedUserId, err.assignedRoleId);
         }
         const error = err instanceof Error ? err.message : String(err);
         await onEvent(node.id, {
@@ -1308,7 +1314,19 @@ export class FlowExecutor {
 
       case 'hitl': {
         const inp = input as Record<string, unknown> | undefined;
-        if (inp?._approved) {
+        const replayFrom = this.currentOptions?.replayFrom;
+        const replayOutputs = this.currentOptions?.replayOutputs || {};
+        // Node-scoped approval: only the HITL node targeted by replayFrom may
+        // resume. The decision travels per-node inside replayOutputs (keyed by
+        // the node id) so approving one HITL never auto-passes others downstream.
+        const nodeApproval = replayFrom === node.id
+          ? (replayOutputs[`${node.id}:__approved`] as { decision?: string; feedback?: string } | undefined)
+          : undefined;
+        if (nodeApproval) {
+          return { decision: nodeApproval.decision || 'approved', feedback: nodeApproval.feedback || '', reviewedContent: (inp as any)?._reviewedContent || inp, _iterationCount: (inp as any)?._iterationCount || 0 };
+        }
+        if (inp?._approved && !replayFrom) {
+          // Legacy flow-level approval (no replay context) — kept for direct executes
           return { decision: inp._decision || 'approved', feedback: inp._feedback || '', reviewedContent: inp._reviewedContent || inp, _iterationCount: (inp as any)._iterationCount || 0 };
         }
         // First run: pause for human input with resolved prompt
@@ -1482,6 +1500,12 @@ export class FlowExecutor {
           delayMs = Math.max(0, delayMs);
         }
         if (delayMs > 0) {
+          // On replay (delayed re-run), the delay has already elapsed — skip the
+          // pause and continue execution instead of re-throwing it.
+          const replayFrom = this.currentOptions?.replayFrom;
+          if (replayFrom && replayFrom === node.id) {
+            return { delayed: false };
+          }
           throw new PauseExecutionError(node.id, input as Record<string, unknown>, delayMs);
         }
         return { delayed: false };
@@ -1641,6 +1665,13 @@ export class SubFlowExecutor {
       if (err instanceof HitlPauseError || err instanceof PauseExecutionError || err instanceof FlowStopError) {
         if (context.completeSubExecution && subExecutionId) {
           await context.completeSubExecution(subExecutionId, {}, 'failed', 'Interrupted by HITL/stop');
+        }
+        // Prefix the paused node id with this subflow's hierarchical path (e.g.
+        // 'subLabel:c3') so pause handlers can store a replayable id. The parent
+        // replay machinery routes on this prefix and strips it per level, which
+        // also works for nested subflows.
+        if (this.parentPath && (err instanceof HitlPauseError || err instanceof PauseExecutionError)) {
+          err.nodeId = `${this.parentPath}:${err.nodeId}`;
         }
         throw err;
       }
