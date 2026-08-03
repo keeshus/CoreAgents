@@ -37,12 +37,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Secret name — the chart-created secret, or an external one referenced via
+Values.existingSecret (preferred for production).
+*/}}
+{{- define "core-agents.secretName" -}}
+{{- .Values.existingSecret | default (printf "%s-secret" (include "core-agents.fullname" .)) }}
+{{- end }}
+
+{{/*
 Database URL
 */}}
 {{- define "core-agents.databaseUrl" -}}
 {{- if .Values.databaseUrl }}
 {{- .Values.databaseUrl }}
 {{- else }}
-{{- printf "postgres://%s:%s@%s-postgres:%s/%s" .Values.dbUser .Values.dbPassword (include "core-agents.fullname" .) "5432" .Values.dbName }}
+{{- $dbPassword := .Values.dbPassword | required "dbPassword must be set (or provide databaseUrl / existingSecret)" }}
+{{- printf "postgres://%s:%s@%s-postgres:%s/%s" .Values.dbUser $dbPassword (include "core-agents.fullname" .) "5432" .Values.dbName }}
 {{- end }}
 {{- end }}

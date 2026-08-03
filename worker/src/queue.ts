@@ -22,7 +22,7 @@ export async function enqueueExecution(flow: FlowDefinition, input: Record<strin
 }
 
 export function createExecutionWorker(
-  handler: (job: { flow?: FlowDefinition; input?: Record<string, unknown>; flowId?: string }) => Promise<void>,
+  handler: (job: { flow?: FlowDefinition; input?: Record<string, unknown>; flowId?: string; inputMessage?: Record<string, unknown> }) => Promise<void>,
 ) {
   const worker = new QueueWorker(
     'flow-executions',

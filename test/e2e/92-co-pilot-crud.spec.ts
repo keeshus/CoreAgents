@@ -153,9 +153,15 @@ test.describe('Co-Pilot tools', () => {
     const res = await request.post(`${API_URL}/users`, {
       data: { email, password: 'Test1234!', name: 'CP User' },
     });
-    expect(res.ok()).toBe(true);
+    expect(res.status()).toBe(201);
     const user = await res.json();
     expect(user.email).toBe(email);
+    expect(user.id).toBeDefined();
+
+    // New user shows up in the user list
+    const users = await (await request.get(`${API_URL}/users`)).json();
+    expect(users.some((u: any) => u.email === email)).toBe(true);
+
     await request.delete(`${API_URL}/users/${user.id}`);
   });
 
@@ -163,8 +169,9 @@ test.describe('Co-Pilot tools', () => {
     const email = `cp-dup-${Date.now()}@test.local`;
     await request.post(`${API_URL}/users`, { data: { email, password: 'Test1234!', name: 'First' } });
     const res2 = await request.post(`${API_URL}/users`, { data: { email, password: 'Test1234!', name: 'Second' } });
-    // Should return 409 conflict (or 500 if duplicate handling isn't perfect)
-    expect([409, 500]).toContain(res2.status());
+    // Must be a clean 409 conflict (not a 500 unique-violation)
+    expect(res2.status()).toBe(409);
+    expect((await res2.json()).error).toBe('Email already registered');
     // Cleanup: find and delete
     const users = await (await request.get(`${API_URL}/users`)).json();
     const dup = users.find((u: any) => u.email === email);
@@ -191,13 +198,6 @@ test.describe('Co-Pilot tools', () => {
     expect(updateRes.ok()).toBe(true);
 
     await request.delete(`${API_URL}/users/${user.id}`);
-  });
-
-  test('list_roles', async ({ request }) => {
-    const res = await request.get(`${API_URL}/roles`);
-    expect(res.ok()).toBe(true);
-    const roles = await res.json();
-    expect(roles.some((r: any) => r.name === 'admin')).toBe(true);
   });
 
   // ─── Profile ───────────────────────────────────────────────────
@@ -260,24 +260,62 @@ test.describe('Co-Pilot tools', () => {
     const { executionId } = await executeUntilPaused(flow.id, { message: 'test' }, cookie);
     expect(executionId).toBeTruthy();
 
+    // Assert the persisted execution is awaiting_approval before approving
+    await expect
+      .poll(async () => {
+        const r = await request.get(`${API_URL}/executions/${executionId}`);
+        return r.ok() ? (await r.json()).status : 'unavailable';
+      }, { timeout: 5000 })
+      .toBe('awaiting_approval');
+
+    // The execution is visible in the pending-approvals list
+    const pending = await (await request.get(`${API_URL}/executions/pending`)).json();
+    expect(pending.some((e: any) => e.id === executionId)).toBe(true);
+
     // Approve
     const approveRes = await fetch(`${API_URL}/executions/${executionId}/approve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
       body: JSON.stringify({ decision: 'approved' }),
     });
     expect(approveRes.ok).toBe(true);
+    const approved = await approveRes.json();
+    expect(approved.status).toBe('completed');
+
+    // State transition: awaiting_approval -> completed
     const exec = await pollExecution(request, executionId, 30000);
     expect(exec.status).toBe('completed');
+    expect(exec.pending_hitls).toBeDefined();
+    expect(JSON.stringify(exec.pending_hitls)).not.toContain('awaiting');
+
+    // It is no longer pending
+    const pendingAfter = await (await request.get(`${API_URL}/executions/pending`)).json();
+    expect(pendingAfter.some((e: any) => e.id === executionId)).toBe(false);
+
+    // Approving a second time must fail (not awaiting_approval anymore)
+    const approveAgain = await fetch(`${API_URL}/executions/${executionId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
+      body: JSON.stringify({ decision: 'approved' }),
+    });
+    expect(approveAgain.status).toBe(400);
 
     await deleteFlow(request, flow.id);
   });
 
   // ─── Flows ─────────────────────────────────────────────────────
   test('list_flows', async ({ request }) => {
+    const created = await createFlow(request, { name: uniqueFlowName('CPListFlows') });
+    const flow = await created.json();
+
     const res = await request.get(`${API_URL}/flows`);
     expect(res.ok()).toBe(true);
     const data = await res.json();
     expect(Array.isArray(data.data)).toBe(true);
+    const found = data.data.find((f: any) => f.id === flow.id);
+    expect(found).toBeDefined();
+    expect(found.name).toBe(flow.name);
+    expect(found.created_by_name).toBeDefined();
+
+    await deleteFlow(request, flow.id);
   });
 
   test('search_flows — returns filtered results', async ({ request }) => {
@@ -360,6 +398,28 @@ test.describe('Co-Pilot tools', () => {
     expect(Array.isArray(await res.json())).toBe(true);
   });
 
+  test('get_vault — fetches a single vault by id', async ({ request }) => {
+    const createRes = await request.post(`${API_URL}/secret-vaults`, {
+      data: { name: 'CP-GetVault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'admin', apiKey: 'test-key', groupId: vaultGroupId },
+    });
+    expect(createRes.ok()).toBe(true);
+    const vault = await createRes.json();
+
+    const res = await request.get(`${API_URL}/secret-vaults/${vault.id}`);
+    expect(res.ok()).toBe(true);
+    const single = await res.json();
+    expect(single.id).toBe(vault.id);
+    expect(single.name).toBe('CP-GetVault');
+    expect(single.vault_type).toBe('cyberark');
+    expect(single.base_url).toBe('http://mock-cyberark-e2e:3005');
+
+    // Unknown vault id -> 404
+    const missing = await request.get(`${API_URL}/secret-vaults/00000000-0000-0000-0000-000000000000`);
+    expect(missing.status()).toBe(404);
+
+    await request.delete(`${API_URL}/secret-vaults/${vault.id}`);
+  });
+
   test('create_vault — success', async ({ request }) => {
     const res = await request.post(`${API_URL}/secret-vaults`, {
       data: { name: 'CP-Vault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'admin', apiKey: 'test-key', groupId: vaultGroupId },
@@ -436,9 +496,17 @@ test.describe('Co-Pilot tools', () => {
 
   // ─── Groups ────────────────────────────────────────────────────
   test('list_groups', async ({ request }) => {
+    const created = await request.post(`${API_URL}/groups`, { data: { name: `CP-ListGrp-${Date.now()}` } });
+    expect(created.status()).toBe(201);
+    const group = await created.json();
+
     const res = await request.get(`${API_URL}/groups`);
     expect(res.ok()).toBe(true);
-    expect(Array.isArray(await res.json())).toBe(true);
+    const list = await res.json();
+    expect(Array.isArray(list)).toBe(true);
+    expect(list.some((g: any) => g.id === group.id)).toBe(true);
+
+    await request.delete(`${API_URL}/groups/${group.id}`);
   });
 
   test('create_group — success', async ({ request }) => {
@@ -586,18 +654,30 @@ test.describe('Co-Pilot tools', () => {
       { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
     ] });
     const flow = await flowRes.json();
-    const { executeUntilPaused } = await import('./helpers/stream');
+    const { executeUntilPaused, pollExecution } = await import('./helpers/stream');
     const cookie = (await import('./helpers/auth')).getAuthCookie() || undefined;
     const { executionId } = await executeUntilPaused(flow.id, { message: 'cancel' }, cookie);
-    expect((await fetch(`${API_URL}/executions/${executionId}/cancel`, { method: 'POST', headers: { Cookie: cookie || '' } })).ok).toBe(true);
+    const cancelRes = await fetch(`${API_URL}/executions/${executionId}/cancel`, { method: 'POST', headers: { Cookie: cookie || '' } });
+    expect(cancelRes.ok).toBe(true);
+    const cancelBody = await cancelRes.json();
+    expect(cancelBody.status).toBe('cancelled');
+    const exec = await pollExecution(request, executionId, 15000);
+    expect(exec.status).toBe('cancelled');
     await deleteFlow(request, flow.id);
   });
 
   test('create_flow + delete_flow — creates and deletes', async ({ request }) => {
-    const createRes = await request.post(`${API_URL}/flows`, { data: { name: uniqueFlowName('CPCreate') } });
-    expect(createRes.ok()).toBe(true);
+    const name = uniqueFlowName('CPCreate');
+    const createRes = await request.post(`${API_URL}/flows`, { data: { name } });
+    expect(createRes.status()).toBe(201);
     const flow = await createRes.json();
-    expect((await request.delete(`${API_URL}/flows/${flow.id}`)).ok()).toBe(true);
+    expect(flow.id).toBeDefined();
+    expect(flow.name).toBe(name);
+    expect((await request.delete(`${API_URL}/flows/${flow.id}`)).status()).toBe(204);
+
+    // Deleted flow is gone
+    const gone = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(gone.status()).toBe(404);
   });
 
   test('get_flow_by_id — returns flow', async ({ request }) => {
@@ -605,6 +685,9 @@ test.describe('Co-Pilot tools', () => {
     const flow = await flowRes.json();
     const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
     expect(getRes.ok()).toBe(true);
+    const fetched = await getRes.json();
+    expect(fetched.id).toBe(flow.id);
+    expect(fetched.name).toBe(flow.name);
     await deleteFlow(request, flow.id);
   });
 
@@ -670,7 +753,21 @@ test.describe('Co-Pilot tools', () => {
 
   // ─── Knowledge ────────────────────────────────────────────────
   test('list_knowledge_collections', async ({ request }) => {
-    expect((await request.get(`${API_URL}/knowledge/collections`)).ok()).toBe(true);
+    const upRes = await request.post(`${API_URL}/knowledge/upload`, {
+      data: { name: 'CP ListCol', content: 'collection listing check', collectionName: 'cp-list-col' },
+    });
+    expect(upRes.status()).toBe(201);
+    const doc = await upRes.json();
+
+    const res = await request.get(`${API_URL}/knowledge/collections`);
+    expect(res.ok()).toBe(true);
+    const cols = await res.json();
+    expect(Array.isArray(cols)).toBe(true);
+    const col = cols.find((c: any) => c.collection_name === 'cp-list-col');
+    expect(col).toBeDefined();
+    expect(col.document_count).toBeGreaterThanOrEqual(1);
+
+    await request.delete(`${API_URL}/documents/${doc.id}`);
   });
 
   test('get_knowledge_collection — returns collection', async ({ request }) => {
@@ -682,8 +779,17 @@ test.describe('Co-Pilot tools', () => {
 
   test('upload_knowledge_document — uploads to collection', async ({ request }) => {
     const res = await request.post(`${API_URL}/knowledge/upload`, { data: { name: 'CP UpDoc', content: 'knowledge upload test', collectionName: 'cp-upload' } });
-    expect(res.ok()).toBe(true);
+    expect(res.status()).toBe(201);
     const doc = await res.json();
+    expect(doc.id).toBeDefined();
+    expect(doc.chunkCount).toBeGreaterThan(0);
+
+    // The document is listed in the collection
+    const colRes = await request.get(`${API_URL}/knowledge/collections/cp-upload`);
+    expect(colRes.ok()).toBe(true);
+    const docs = await colRes.json();
+    expect(docs.some((d: any) => d.id === doc.id)).toBe(true);
+
     await request.delete(`${API_URL}/documents/${doc.id}`);
   });
 
@@ -716,10 +822,6 @@ test.describe('Co-Pilot tools', () => {
     expect(roles.some((r: any) => r.name === 'admin')).toBe(true);
   });
 
-  test('seed_roles — seeds default roles', async ({ request }) => {
-    expect([200, 409]).toContain((await request.post(`${API_URL}/roles/seed`)).status());
-  });
-
   test('set_user_groups + update_group_member_role', async ({ request }) => {
     const gRes = await request.post(`${API_URL}/groups`, { data: { name: `CP-AdminGrp-${Date.now()}` } });
     const grp = await gRes.json();
@@ -743,6 +845,34 @@ test.describe('Co-Pilot tools', () => {
   });
 
   // ─── Assignments ──────────────────────────────────────────────
+  // Mounted at /api/assignments per backend/src/index.ts:102
+  test('GET /api/assignments returns the current user\'s assignments', async ({ request }) => {
+    const res = await request.get(`${API_URL}/assignments`);
+    expect(res.status()).toBe(200);
+    const list = await res.json();
+    expect(Array.isArray(list)).toBe(true);
+
+    const pendingRes = await request.get(`${API_URL}/assignments?status=pending`);
+    expect(pendingRes.status()).toBe(200);
+    const pending = await pendingRes.json();
+    expect(Array.isArray(pending)).toBe(true);
+    expect(pending.every((a: any) => a.status === 'pending')).toBe(true);
+  });
+
+  test('POST /api/assignments/:id/decide validates decisions and unknown ids', async ({ request }) => {
+    // Invalid decision is rejected before the assignment lookup
+    const badRes = await request.post(`${API_URL}/assignments/00000000-0000-0000-0000-000000000000/decide`, {
+      data: { status: 'maybe' },
+    });
+    expect(badRes.status()).toBe(400);
+
+    // Valid decision on a non-existent assignment -> 404
+    const missingRes = await request.post(`${API_URL}/assignments/00000000-0000-0000-0000-000000000000/decide`, {
+      data: { status: 'approved' },
+    });
+    expect(missingRes.status()).toBe(404);
+  });
+
   test('list_assignments + decide_assignment — via HITL flow', async ({ request }) => {
     const flowRes = await createFlow(request, { name: uniqueFlowName('CPAssign'), nodes: [
       { id: 't1', type: 'trigger', data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
@@ -756,8 +886,73 @@ test.describe('Co-Pilot tools', () => {
     const { executeUntilPaused, pollExecution } = await import('./helpers/stream');
     const cookie = (await import('./helpers/auth')).getAuthCookie() || undefined;
     const { executionId } = await executeUntilPaused(flow.id, { message: 'test' }, cookie);
-    expect((await fetch(`${API_URL}/executions/${executionId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' }, body: JSON.stringify({ decision: 'go' }) })).ok).toBe(true);
-    await pollExecution(request, executionId, 30000);
+
+    // The paused HITL shows up as a pending execution (assignments are
+    // approved through /executions/:id/approve — see execution.ts)
+    const pending = await (await request.get(`${API_URL}/executions/pending`)).json();
+    expect(pending.some((e: any) => e.id === executionId)).toBe(true);
+
+    // The HITL pause also mirrors into the assignments table — a pending
+    // assignment must exist for the current user
+    const assignments = await (await request.get(`${API_URL}/assignments?status=pending`)).json();
+    const mine = assignments.find((a: any) => a.execution_id === executionId);
+    expect(mine).toBeDefined();
+    expect(mine.status).toBe('pending');
+    expect(mine.hitl_node_id).toBe('h1');
+
+    // Positive path: decide the assignment (approve)
+    const decideRes = await request.post(`${API_URL}/assignments/${mine.id}/decide`, {
+      data: { status: 'approved', feedback: 'looks good' },
+    });
+    expect(decideRes.status()).toBe(200);
+    expect((await decideRes.json()).status).toBe('updated');
+
+    // Assignment is no longer pending, feedback is persisted
+    const after = await (await request.get(`${API_URL}/assignments`)).json();
+    const decided = after.find((a: any) => a.id === mine.id);
+    expect(decided.status).toBe('approved');
+    expect(decided.feedback).toBe('looks good');
+    expect(decided.decided_by_user_id).toBeTruthy();
+
+    // Deciding again must fail (already decided)
+    const againRes = await request.post(`${API_URL}/assignments/${mine.id}/decide`, {
+      data: { status: 'rejected' },
+    });
+    expect(againRes.status()).toBe(400);
+
+    // Reject path on a fresh assignment
+    const rejectFlowRes = await createFlow(request, { name: uniqueFlowName('CPAssignReject'), nodes: [
+      { id: 't1', type: 'trigger', data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+      { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Go', buttons: [{ label: 'Go', value: 'go' }] } } },
+      { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+    ], edges: [
+      { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+      { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+    ] });
+    const rejectFlow = await rejectFlowRes.json();
+    const { executionId: rejectExecId } = await executeUntilPaused(rejectFlow.id, { message: 'test' }, cookie);
+    const assignments2 = await (await request.get(`${API_URL}/assignments?status=pending`)).json();
+    const rejectAssign = assignments2.find((a: any) => a.execution_id === rejectExecId);
+    expect(rejectAssign).toBeDefined();
+    const rejectDecide = await request.post(`${API_URL}/assignments/${rejectAssign.id}/decide`, {
+      data: { status: 'rejected' },
+    });
+    expect(rejectDecide.status()).toBe(200);
+    const after2 = await (await request.get(`${API_URL}/assignments`)).json();
+    expect(after2.find((a: any) => a.id === rejectAssign.id).status).toBe('rejected');
+    await deleteFlow(request, rejectFlow.id);
+
+    // Complete the first flow via the execution-level approve endpoint and
+    // confirm the assignment was marked decided in sync
+    const approveRes = await fetch(`${API_URL}/executions/${executionId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
+      body: JSON.stringify({ decision: 'go' }),
+    });
+    expect(approveRes.ok).toBe(true);
+    const exec = await pollExecution(request, executionId, 30000);
+    expect(exec.status).toBe('completed');
+    const finalAssign = await (await request.get(`${API_URL}/assignments`)).json();
+    expect(finalAssign.find((a: any) => a.id === mine.id).status).toBe('approved');
     await deleteFlow(request, flow.id);
   });
 
@@ -790,9 +985,11 @@ test.describe('Co-Pilot tools', () => {
     expect((await request.put(`${API_URL}/flows/${flow.id}/chat-api/deployment`, { data: { enabled: true, model_name: 'test-model' } })).ok()).toBe(true);
     expect((await request.get(`${API_URL}/flows/${flow.id}/chat-api/keys`)).ok()).toBe(true);
     const keyRes = await request.post(`${API_URL}/flows/${flow.id}/chat-api/keys`, { data: { label: 'CP Key' } });
-    expect(keyRes.ok()).toBe(true);
+    expect(keyRes.status()).toBe(201);
     const key = await keyRes.json();
-    expect((await request.delete(`${API_URL}/flows/${flow.id}/chat-api/keys/${key.id}`)).ok()).toBe(true);
+    expect(key.raw_key).toBeTruthy();
+    expect(key.key_prefix).toBeTruthy();
+    expect((await request.delete(`${API_URL}/flows/${flow.id}/chat-api/keys/${key.id}`)).status()).toBe(204);
     await deleteFlow(request, flow.id);
   });
 
@@ -808,7 +1005,11 @@ test.describe('Co-Pilot tools', () => {
     expect((await request.put(`${API_URL}/flows/${flow.id}/deployment`, { data: { pathSlug: 'cp-webhook', rateLimit: 5, summary: 'CP test' } })).ok()).toBe(true);
     const renewRes = await request.post(`${API_URL}/flows/${flow.id}/keys/renew`);
     expect(renewRes.ok()).toBe(true);
-    expect((await request.delete(`${API_URL}/flows/${flow.id}/keys/revoke`)).ok()).toBe(true);
+    const renewed = await renewRes.json();
+    expect(renewed.rawKey).toMatch(/^wh_/);
+    expect(renewed.prefix).toMatch(/^wh_/);
+    expect(renewed.createdAt).toBeDefined();
+    expect((await request.delete(`${API_URL}/flows/${flow.id}/keys/revoke`)).status()).toBe(204);
     await deleteFlow(request, flow.id);
   });
 

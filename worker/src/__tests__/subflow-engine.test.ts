@@ -11,6 +11,7 @@ vi.mock('../sandbox/sidecar-client.js', () => ({
   createSidecarClient: vi.fn(() => ({
     setup: vi.fn(),
     exec: vi.fn(async () => ({ stdout: 'mock', stderr: '', exitCode: 0 })),
+    eval: vi.fn(async () => ({ ok: true, result: true })),
     teardown: vi.fn(),
   })),
 }));
@@ -215,9 +216,57 @@ describe('SubFlowExecutor — recursive execution', () => {
     );
 
     await expect(executor.execute(flow, { message: 'hello' }, onEvent, context))
-      .rejects.toThrow(HitlPauseError);
+      .rejects.toMatchObject({ nodeId: 'sub:sf-hitl' });
     // Sub-execution should be marked as failed when interrupted by HITL
     expect(context.completeSubExecution).toHaveBeenCalledWith('sub-exec-1', {}, 'failed', 'Interrupted by HITL/stop');
+  });
+
+  it('resumes a HITL inside a subflow via prefixed replayFrom', async () => {
+    const subflowWithHitl: FlowDefinition = {
+      id: 'subflow-hitl',
+      name: 'Subflow HITL',
+      description: '',
+      nodes: [
+        makeNode('sf-trigger', 'trigger', { config: { triggerType: 'subflow' } }),
+        makeNode('sf-hitl', 'hitl', {
+          config: {
+            prompt: 'Approve subflow?',
+            displayFields: [],
+            forwardFields: [],
+            buttons: [{ label: 'Approve', value: 'approved' }],
+          },
+        }),
+        makeNode('sf-output', 'output', { config: { inputFields: [] } }),
+      ],
+      edges: [makeEdge('e1', 'sf-trigger', 'sf-hitl'), makeEdge('e2', 'sf-hitl', 'sf-output')],
+      version: 1,
+      createdAt: '',
+      updatedAt: '',
+    };
+    context.getFlow = vi.fn().mockResolvedValue(subflowWithHitl);
+
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('sub', 'subflow', {
+          config: { subflowId: 'subflow-1', inputMapping: { query: '{{input.trigger.message}}' } },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'sub')],
+    );
+
+    const result = await executor.execute(flow, { message: 'hello' }, onEvent, context, {
+      replayFrom: 'sub:sf-hitl',
+      replayOutputs: {
+        'sub:sf-trigger': { message: 'hello' },
+        'sub:sf-hitl:__approved': { decision: 'approved' },
+      },
+    });
+
+    // The child HITL was approved, the subflow completed and fed the parent
+    expect(context.completeSubExecution).toHaveBeenCalledWith('sub-exec-1', expect.anything(), 'completed');
+    expect(result.steps.some(s => s.nodeId === 'sub')).toBe(true);
+    expect(result.output.sub).toBeDefined();
   });
 
   it('increments currentDepth when nesting subflows', async () => {

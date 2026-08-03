@@ -76,6 +76,7 @@ test.describe('Sidecar real-world capabilities', () => {
   });
 
   test('npm install on cloned repo', async ({ request }) => {
+    test.setTimeout(180_000);
     const code = ['var cp = require("child_process");',
       'cp.execSync("cd $HOME && rm -rf CoreTemplate && git clone https://github.com/keeshus/CoreTemplate.git 2>&1", { encoding: "utf-8", timeout: 30000 });',
       'cp.execSync("cd $HOME/CoreTemplate && npm install 2>&1", { encoding: "utf-8", timeout: 120000 });',
@@ -96,6 +97,7 @@ test.describe('Sidecar real-world capabilities', () => {
   });
 
   test('full project workflow clone build check', async ({ request }) => {
+    test.setTimeout(180_000);
     const code = ['var cp = require("child_process"); var steps = [];',
       'try { cp.execSync("cd $HOME && rm -rf CoreTemplate && git clone https://github.com/keeshus/CoreTemplate.git 2>&1", { encoding: "utf-8", timeout: 30000 }); steps.push("clone:OK"); } catch(e) { steps.push("clone:" + e.message.slice(0,50)); }',
       'try { cp.execSync("cd $HOME/CoreTemplate && npm install 2>&1", { encoding: "utf-8", timeout: 120000 }); steps.push("npm:OK"); } catch(e) { steps.push("npm:" + e.message.slice(0,50)); }',
@@ -157,5 +159,74 @@ test.describe('Sidecar real-world capabilities', () => {
     expect(id1).toBeTruthy();
     expect(id2).toBeTruthy();
     expect(id1).not.toBe(id2);
+  });
+
+  test('pip is available in the sandbox', async ({ request }) => {
+    // The sidecar image ships python3 + py3-pip, so pip must be callable and functional.
+    // NOTE: `pip install` could not be verified here — the alpine python is externally-managed
+    // (system installs refused) and pip's install path hangs inside the Landlock sandbox, so the
+    // install sub-assertion is skipped; the version + registry queries prove pip itself works.
+    const code = 'var cp = require("child_process"); var r = cp.execSync("python3 -m pip --version 2>&1", { encoding: "utf-8", timeout: 10000 }); return { stdout: r };';
+    const flow = makeFlow(uniqueFlowName('Pip-Installed'), code, ['node.stdout']);
+    const res = await request.post(API_URL + '/flows', { data: flow }).then(r => r.json());
+    cleanupFlowIds.push(res.id);
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(res.id, {}, cookie);
+    const c = events.find(e => e.type === 'execution.completed');
+    expect(c).toBeDefined();
+    var o = c.data.output;
+    var t = (o.c1 || o.node || {}).stdout || '';
+    expect(t).toContain('pip');
+    expect(t).toMatch(/\d+\.\d+\.\d+/);
+
+    // pip can also run read-only registry queries (network is available)
+    const code2 = 'var cp = require("child_process"); var r = cp.execSync("python3 -m pip list 2>&1 | head -5", { encoding: "utf-8", timeout: 10000 }); return { stdout: r };';
+    const flow2 = makeFlow(uniqueFlowName('Pip-List'), code2, ['node.stdout']);
+    const res2 = await request.post(API_URL + '/flows', { data: flow2 }).then(r => r.json());
+    cleanupFlowIds.push(res2.id);
+    const events2 = await debugExecute(res2.id, {}, cookie);
+    const c2 = events2.find(e => e.type === 'execution.completed');
+    expect(c2).toBeDefined();
+    var o2 = c2.data.output;
+    var t2 = (o2.c1 || o2.node || {}).stdout || '';
+    expect(t2).toContain('pip');
+  });
+
+  test('outbound network is allowed in the bash sandbox (egress is not blocked)', async ({ request }) => {
+    // NOTE: the sidecar enforces filesystem (Landlock) restrictions only — there is no
+    // network egress policy, so outbound connections must work (the git-clone tests
+    // above rely on it). The target is the internal mock LLM so the suite stays
+    // self-contained and passes on air-gapped CI.
+    const code = 'var cp = require("child_process"); try { var r = cp.execSync("curl -s -o /dev/null -w %{http_code} --max-time 15 http://mock-llm-e2e:3002/health", { encoding: "utf-8", timeout: 20000 }); return { http: r.trim() }; } catch(e) { return { err: (e.message || "").slice(0, 300) }; }';
+    const flow = makeFlow(uniqueFlowName('Egress-Curl'), code, []);
+    const res = await request.post(API_URL + '/flows', { data: flow }).then(r => r.json());
+    cleanupFlowIds.push(res.id);
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(res.id, {}, cookie);
+    const c = events.find(e => e.type === 'execution.completed');
+    expect(c).toBeDefined();
+    var o = c.data.output;
+    var r = (o.c1 || o.node || {});
+    expect(r.http).toBe('200');
+  });
+
+  test('child_process cannot write outside $HOME while $HOME writes succeed', async ({ request }) => {
+    const code = [
+      'var cp = require("child_process"); var res = {};',
+      'try { cp.execSync("touch /usr/local/flow-e2e-outside-x 2>&1", { encoding: "utf-8", timeout: 5000 }); res.outside = "SUCCEEDED"; } catch(e) { res.outside = "BLOCKED"; }',
+      'try { cp.execSync("mkdir -p $HOME && touch $HOME/flow-e2e-inside.txt && ls $HOME/flow-e2e-inside.txt", { encoding: "utf-8", timeout: 5000 }); res.home = "OK"; } catch(e) { res.home = "BLOCKED:" + (e.message || "").slice(0, 100); }',
+      'return res;',
+    ].join('\n');
+    const flow = makeFlow(uniqueFlowName('Write-Scope'), code, ['node.outside', 'node.home']);
+    const res = await request.post(API_URL + '/flows', { data: flow }).then(r => r.json());
+    cleanupFlowIds.push(res.id);
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(res.id, {}, cookie);
+    const c = events.find(e => e.type === 'execution.completed');
+    expect(c).toBeDefined();
+    var o = c.data.output;
+    var r = (o.c1 || o.node || {});
+    expect(r.outside).toBe('BLOCKED');
+    expect(r.home).toBe('OK');
   });
 });

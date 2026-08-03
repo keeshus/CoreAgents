@@ -308,6 +308,74 @@ test.describe('/v1/chat/completions execution', () => {
     expect(lines[lines.length - 1]).toContain('[DONE]');
   });
 
+  test('multi-turn conversation persists sessions with full message history', async ({ request }) => {
+    // Count existing sessions before this test's turns
+    const before = (await (await request.get(`${API_URL}/chat/${chatFlowId}/sessions`)).json()).length;
+
+    // Turn 1
+    const r1 = await fetch(`${OPENAI_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'mock-gpt-4',
+        messages: [{ role: 'user', content: 'Turn one question' }],
+      }),
+    });
+    expect(r1.ok).toBe(true);
+    const d1 = await r1.json();
+    expect(d1.choices[0].message.content).toContain('Hello from Core Agents');
+
+    // Turn 2 — carries the prior assistant reply as conversation history
+    const r2 = await fetch(`${OPENAI_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'mock-gpt-4',
+        messages: [
+          { role: 'user', content: 'Turn one question' },
+          { role: 'assistant', content: d1.choices[0].message.content },
+          { role: 'user', content: 'Turn two follow-up' },
+        ],
+      }),
+    });
+    expect(r2.ok).toBe(true);
+
+    // Each call creates a persisted session
+    const sessionsRes = await request.get(`${API_URL}/chat/${chatFlowId}/sessions`);
+    expect(sessionsRes.ok()).toBe(true);
+    const sessions = await sessionsRes.json();
+    const apiSessions = sessions.filter((s: any) => s.title === 'OpenAI API Call');
+    expect(apiSessions.length).toBeGreaterThanOrEqual(before + 2);
+
+    // The newest session (turn 2) has the full multi-turn history:
+    // 2 user messages + 1 assistant history entry + 1 assistant reply.
+    // Don't rely on list ordering — pick the session that contains the follow-up.
+    let multiTurnSession: any = null;
+    for (const s of apiSessions) {
+      const sRes = await request.get(`${API_URL}/chat/sessions/${s.id}`);
+      if (!sRes.ok()) continue;
+      const sDetail = await sRes.json();
+      if (sDetail.messages?.some((m: any) => m.content === 'Turn two follow-up')) {
+        multiTurnSession = sDetail;
+        break;
+      }
+    }
+    expect(multiTurnSession, 'a session with the turn-2 follow-up message should exist').toBeDefined();
+    const detail = multiTurnSession;
+    expect(detail.messages.length).toBeGreaterThanOrEqual(4);
+    const contents = detail.messages.map((m: any) => m.content);
+    expect(contents).toContain('Turn two follow-up');
+    expect(contents).toContain('Turn one question');
+    const roles = detail.messages.map((m: any) => m.role);
+    expect(roles.filter((r: string) => r === 'user').length).toBeGreaterThanOrEqual(2);
+    expect(roles).toContain('assistant');
+
+    // Cleanup the transient sessions
+    for (const s of apiSessions) {
+      await request.delete(`${API_URL}/chat/sessions/${s.id}`).catch(() => {});
+    }
+  });
+
   test('returns 401 without auth', async () => {
     const res = await fetch(`${OPENAI_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -448,5 +516,116 @@ test.describe('Chat flow streaming output', () => {
     const chunks = lines.map(l => JSON.parse(l.slice(6)));
     const allContent = chunks.map((c: any) => c.choices?.[0]?.delta?.content || '').join('');
     expect(allContent).toContain('Streaming echo');
+  });
+});
+
+test.describe('Chat API rate limiting', () => {
+  let chatFlowId: string;
+  let apiKey: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await createFlow(request, {
+      name: uniqueFlowName('ChatRateLimit'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['chat_input.message'] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    chatFlowId = (await res.json()).id;
+
+    // 1 request/minute per API key
+    await request.put(`${API_URL}/flows/${chatFlowId}/chat-api/deployment`, {
+      data: { enabled: true, model_name: 'mock-gpt-4', rate_limit: 1 },
+    });
+
+    const keyRes = await request.post(`${API_URL}/flows/${chatFlowId}/chat-api/keys`, { data: { label: 'Rate Limit Test' } });
+    apiKey = (await keyRes.json()).raw_key;
+  });
+
+  test.afterAll(async ({ request }) => {
+    if (chatFlowId) await deleteFlow(request, chatFlowId).catch(() => {});
+  });
+
+  test('returns 429 with Retry-After after exceeding the per-key limit', async () => {
+    const call = () => fetch(`${OPENAI_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'mock-gpt-4', messages: [{ role: 'user', content: 'ping' }] }),
+    });
+
+    // First request is accepted
+    const first = await call();
+    expect(first.status).toBe(200);
+
+    // Second request within the same minute is throttled
+    const second = await call();
+    expect(second.status).toBe(429);
+    expect(second.headers.get('Retry-After')).not.toBeNull();
+    const body = await second.json();
+    expect(body.error).toBe('Rate limit exceeded. Try again later.');
+  });
+});
+
+test.describe('Chat API deployment settings UI', () => {
+  let chatFlowId: string;
+
+  test.beforeAll(async ({ request }) => {
+    const res = await createFlow(request, {
+      name: uniqueFlowName('ChatDeployUI'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Chat', type: 'trigger', config: { triggerType: 'chat' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['chat_input.message'] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    chatFlowId = (await res.json()).id;
+  });
+
+  test.afterAll(async ({ request }) => {
+    if (chatFlowId) await deleteFlow(request, chatFlowId).catch(() => {});
+  });
+
+  test('enables deployment and sets model via flow editor ChatApiSettings panel', async ({ page, request }) => {
+    // Deployment starts disabled
+    const initial = await (await request.get(`${API_URL}/flows/${chatFlowId}/chat-api/deployment`)).json();
+    expect(initial.enabled).toBe(false);
+    expect(initial.model_name).toBe('');
+
+    await page.goto(`/flows/${chatFlowId}/edit`);
+    await expect(page.locator('[data-testid="flow-settings-btn"]')).toBeVisible({ timeout: 15000 });
+    await page.locator('[data-testid="flow-settings-btn"]').click();
+
+    // Chat API panel is shown for chat-triggered flows
+    await expect(page.getByText('Chat API (OpenAI-compatible)')).toBeVisible({ timeout: 10000 });
+
+    // Wait for the deployment data to load before interacting (avoids racing
+    // the fetch with the save request)
+    await expect(page.getByPlaceholder('e.g. gpt-4o')).toBeVisible({ timeout: 10000 });
+
+    // Enable the deployment via the toggle
+    const toggle = page.locator('input.toggle');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).not.toBeChecked();
+    await toggle.click();
+    await expect(toggle).toBeChecked({ timeout: 10000 });
+
+    // Model name is persisted on blur
+    await page.getByPlaceholder('e.g. gpt-4o').fill('gpt-4o-ui');
+    await page.getByPlaceholder('e.g. gpt-4o').blur();
+
+    // API reflects the UI changes
+    await expect
+      .poll(async () => {
+        const res = await request.get(`${API_URL}/flows/${chatFlowId}/chat-api/deployment`);
+        const cfg = await res.json();
+        return cfg.enabled && cfg.model_name === 'gpt-4o-ui';
+      }, { timeout: 10000 })
+      .toBe(true);
+
+    const config = await (await request.get(`${API_URL}/flows/${chatFlowId}/chat-api/deployment`)).json();
+    expect(config.enabled).toBe(true);
+    expect(config.model_name).toBe('gpt-4o-ui');
+    expect(config.rate_limit).toBe(0);
   });
 });

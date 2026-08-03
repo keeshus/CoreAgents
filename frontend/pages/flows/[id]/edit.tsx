@@ -279,7 +279,7 @@ export default function FlowEditPage() {
     } finally {
       setSaving(false);
     }
-  }, [flow, nodes, edges, persistFlow]);
+  }, [flow, nodes, edges, persistFlow, hasErrors]);
 
   const handleAddNode = useCallback((type: string, defaultConfig: Record<string, any>) => {
     if (type === 'hitl' && isChatFlow) return;
@@ -691,7 +691,7 @@ export default function FlowEditPage() {
                             ) : (
                               <button
                                 onClick={async () => {
-                                  const confirmed = await revealSecretConfirm.confirm({ message: `Reveal the value of "${s.name}"?` });
+                                  const confirmed = await revealSecretConfirm.confirm({ message: `Reveal the value of "${s.name}"?`, confirmLabel: 'Reveal' });
                                   if (!confirmed) return;
                                   const res = await fetch(`/api/secrets/${s.id}/reveal`, { method: 'POST', credentials: 'include' });
                                   if (res.ok) {

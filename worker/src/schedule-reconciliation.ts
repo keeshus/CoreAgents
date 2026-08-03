@@ -12,6 +12,21 @@ function getCronFromFlow(flow: any): string | null {
   return cron?.trim() || null;
 }
 
+function getInputMessageFromFlow(flow: any): Record<string, unknown> | undefined {
+  const nodes = (flow.nodes || []) as any[];
+  const trigger = nodes.find(
+    (n: any) => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'schedule',
+  );
+  const raw = trigger?.data?.config?.inputMessage as string | undefined;
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function reconcileSchedules(db: any, flowsTable: any, eq: any): Promise<void> {
   try {
     const allFlows = await db.select({ id: flowsTable.id, nodes: flowsTable.nodes }).from(flowsTable);
@@ -32,7 +47,7 @@ export async function reconcileSchedules(db: any, flowsTable: any, eq: any): Pro
           if (bullPattern) {
             await executionQueue.removeRepeatable(`schedule:${flow.id}`, { pattern: bullPattern });
           }
-          await executionQueue.add(`schedule:${flow.id}`, { flowId: flow.id }, {
+          await executionQueue.add(`schedule:${flow.id}`, { flowId: flow.id, inputMessage: getInputMessageFromFlow(flow) }, {
             repeat: { pattern: dbCron },
             jobId: `schedule:${flow.id}`,
           });

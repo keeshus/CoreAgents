@@ -53,6 +53,56 @@ test.describe('Knowledge CRUD', () => {
     expect(docs.some((d: any) => d.id === doc.id)).toBe(true);
   });
 
+  test('upload produces chunks and the collection reports the document', async ({ request }) => {
+    const content = 'Knowledge bases power retrieval. Chunks are indexed with embeddings. ' +
+      'Each chunk stores its original text so retrieval can return context.';
+    const res = await request.post(`${API_URL}/knowledge/upload`, {
+      data: { name: 'Chunk Doc', content, collectionName: 'e2e-chunk-count' },
+    });
+    expect(res.ok()).toBe(true);
+    const data = await res.json();
+    docId = data.id;
+    expect(data.chunkCount).toBeGreaterThan(0);
+
+    // The collection listing reports the document count
+    const colsRes = await request.get(`${API_URL}/knowledge/collections`);
+    expect(colsRes.ok()).toBe(true);
+    const cols = await colsRes.json();
+    const col = cols.find((c: any) => c.collection_name === 'e2e-chunk-count');
+    expect(col).toBeDefined();
+    expect(col.document_count).toBeGreaterThanOrEqual(1);
+
+    // Collection detail lists the uploaded document
+    const colRes = await request.get(`${API_URL}/knowledge/collections/e2e-chunk-count`);
+    expect(colRes.ok()).toBe(true);
+    const docs = await colRes.json();
+    expect(Array.isArray(docs)).toBe(true);
+    expect(docs.some((d: any) => d.id === data.id)).toBe(true);
+  });
+
+  test('delete document removes it from the document list', async ({ request }) => {
+    const upRes = await request.post(`${API_URL}/documents/upload`, {
+      data: { name: 'Delete Me Doc', content: 'This document will be deleted.', collectionName: 'e2e-del-doc' },
+    });
+    expect(upRes.ok()).toBe(true);
+    const doc = await upRes.json();
+    docId = doc.id;
+
+    const before = await (await request.get(`${API_URL}/documents`)).json();
+    expect(before.some((d: any) => d.id === doc.id)).toBe(true);
+
+    const delRes = await request.delete(`${API_URL}/documents/${doc.id}`);
+    expect(delRes.ok()).toBe(true);
+    docId = '';
+
+    const after = await (await request.get(`${API_URL}/documents`)).json();
+    expect(after.some((d: any) => d.id === doc.id)).toBe(false);
+
+    // Deleted document is also gone from its collection
+    const colDocs = await (await request.get(`${API_URL}/knowledge/collections/e2e-del-doc`)).json();
+    expect(colDocs.some((d: any) => d.id === doc.id)).toBe(false);
+  });
+
   test('get collection details', async ({ request }) => {
     const res = await request.post(`${API_URL}/knowledge/upload`, {
       data: { name: 'Col Doc', content: 'For collection.', collectionName: 'e2e-col' },
@@ -191,6 +241,71 @@ test.describe('Vector store endpoints', () => {
     const refreshRes = await request.post(`${API_URL}/vector-stores/${store.id}/refresh`);
     expect(refreshRes.ok()).toBe(true);
   });
+
+  test('retriever queries an uploaded collection and returns structured results', async ({ request }) => {
+    // Create an LLM endpoint backed by the mock LLM so the uploaded chunks
+    // get real (non-zero) embedding vectors in Postgres.
+    const epRes = await request.post(`${API_URL}/llm-endpoints`, {
+      data: {
+        name: 'E2E KB Embed Endpoint',
+        providerType: 'openai',
+        baseUrl: 'http://mock-llm-e2e:3002/v1',
+        apiKey: 'mock-key',
+        defaultModel: 'text-embedding-ada-002',
+        models: ['text-embedding-ada-002'],
+      },
+    });
+    const embeddingEndpointId = epRes.ok() ? (await epRes.json()).id : undefined;
+
+    // Upload a document so the collection has chunks
+    const content = 'Qdrant is a vector database used for similarity search over embeddings. ' +
+      'Chunks are matched by cosine similarity against the query embedding.';
+    const upRes = await request.post(`${API_URL}/knowledge/upload`, {
+      data: {
+        name: 'Vector Search Doc',
+        content,
+        collectionName: 'e2e-vector-search',
+        embeddingEndpointId,
+      },
+    });
+    expect(upRes.ok()).toBe(true);
+    const uploaded = await upRes.json();
+    const docId = uploaded.id;
+    expect(uploaded.chunkCount).toBeGreaterThan(0);
+
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('VectorSearch'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'r1', type: 'retriever', position: { x: 300, y: 0 }, data: { label: 'Retriever', type: 'retriever', config: { collectionName: 'e2e-vector-search', topK: 5, minScore: 0 } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['retriever.count'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'r1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'r1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+      ],
+    });
+    const flow = await flowRes.json();
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'vector database' }, cookie);
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const retrieverOutput = completed?.data?.output?.r1 || {};
+    expect(retrieverOutput.query).toBe('vector database');
+    expect(typeof retrieverOutput.count).toBe('number');
+    expect(Array.isArray(retrieverOutput.chunks)).toBe(true);
+    // count is always the length of the returned chunk list
+    expect(retrieverOutput.count).toBe(retrieverOutput.chunks.length);
+    // The uploaded chunk TEXT must actually be returned — regression guard:
+    // the search used to hit an empty Qdrant store and return 0 chunks.
+    expect(retrieverOutput.chunks.length).toBeGreaterThanOrEqual(1);
+    expect(retrieverOutput.chunks[0].text).toContain('vector database');
+
+    await deleteFlow(request, flow.id);
+    await request.delete(`${API_URL}/documents/${docId}`).catch(() => {});
+    if (embeddingEndpointId) await request.delete(`${API_URL}/llm-endpoints/${embeddingEndpointId}`).catch(() => {});
+  });
 });
 
 // ─── Single-entity GET endpoints ────────────────────────────────
@@ -299,6 +414,7 @@ test.describe('Execution history', () => {
 
 test.describe('Chat sessions', () => {
   let flowId: string;
+  let sessionId: string;
 
   test.beforeAll(async ({ request }) => {
     const res = await createFlow(request, {
@@ -310,34 +426,41 @@ test.describe('Chat sessions', () => {
       edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
     });
     flowId = (await res.json()).id;
+
+    const sessionRes = await request.post(`${API_URL}/chat/${flowId}/sessions`, { data: { title: 'E2E Session' } });
+    expect(sessionRes.ok()).toBe(true);
+    const session = await sessionRes.json();
+    sessionId = session.id;
+    expect(session.id).toBeDefined();
   });
 
   test.afterAll(async ({ request }) => {
     if (flowId) await deleteFlow(request, flowId).catch(() => {});
   });
 
-  let sessionId: string;
-
-  test('POST /api/chat/:flowId/sessions creates a session', async ({ request }) => {
-    const res = await request.post(`${API_URL}/chat/${flowId}/sessions`, { data: { title: 'E2E Session' } });
-    expect(res.ok()).toBe(true);
-    const session = await res.json();
-    sessionId = session.id;
-    expect(session.id).toBeDefined();
-  });
-
   test('GET /api/chat/sessions/:sessionId returns session details', async ({ request }) => {
-    test.skip(!sessionId, 'No session');
+    expect(sessionId).toBeTruthy();
     const res = await request.get(`${API_URL}/chat/sessions/${sessionId}`);
     expect(res.ok()).toBe(true);
     const session = await res.json();
     expect(session.id).toBe(sessionId);
   });
 
+  test('GET /api/chat/:flowId/sessions lists the created session', async ({ request }) => {
+    const res = await request.get(`${API_URL}/chat/${flowId}/sessions`);
+    expect(res.ok()).toBe(true);
+    const sessions = await res.json();
+    expect(Array.isArray(sessions)).toBe(true);
+    expect(sessions.some((s: any) => s.id === sessionId)).toBe(true);
+  });
+
   test('DELETE /api/chat/sessions/:sessionId deletes a session', async ({ request }) => {
-    test.skip(!sessionId, 'No session');
+    expect(sessionId).toBeTruthy();
     const res = await request.delete(`${API_URL}/chat/sessions/${sessionId}`);
     expect(res.status()).toBe(204);
+
+    const gone = await request.get(`${API_URL}/chat/sessions/${sessionId}`);
+    expect(gone.status()).toBe(404);
     sessionId = '';
   });
 });

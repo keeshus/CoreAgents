@@ -11,7 +11,7 @@ import { startReconciliation, stopReconciliation } from './schedule-reconciliati
 async function main() {
   console.log('Worker started, waiting for jobs...');
 
-  const { getDb, flows, executions, executionSteps, agentContexts, agentStore, groups } = await import('core-agents-shared');
+  const { getDb, flows, executions, executionSteps, agentContexts, agentStore, groups, userAssignments } = await import('core-agents-shared');
   const { db } = getDb();
   const { eq, and, inArray } = await import('drizzle-orm');
 
@@ -49,7 +49,10 @@ async function main() {
       return;
     }
 
-    const resolvedInput = input || { triggerType: 'schedule', timestamp: new Date().toISOString() };
+    // Direct jobs carry an explicit input; schedule jobs merge the trigger's
+    // configured inputMessage (parsed JSON) with the schedule context fields.
+    const resolvedInput = input
+      || { ...(job.inputMessage || {}), triggerType: 'schedule', timestamp: new Date().toISOString() };
 
     console.log(`Executing flow: ${flowDef.name} (${flowDef.id})${executionId ? ' exec=' + executionId : ''}`);
 
@@ -77,6 +80,7 @@ async function main() {
       agentContextsTable: agentContexts,
       agentStoreTable: agentStore,
       groupsTable: groups,
+      userAssignmentsTable: userAssignments,
     });
 
     console.log(`Flow ${flowDef.id}: ${result.status} (exec ${execId})`);

@@ -31,6 +31,18 @@ function extractResponse(messages: any[]): string {
       if (match) return match[1].trim().replace(/^["']|["']$/g, '');
     }
   }
+  // Directives may also live in the latest user message (e.g. Co-Pilot panel
+  // tests type them directly into the chat input).
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === 'user' && typeof msg.content === 'string') {
+      if (msg.content.includes('ECHO_SYSTEM_PROMPT')) {
+        return fullPrompt || msg.content;
+      }
+      const respMatch = msg.content.match(/MOCK_RESPONSE:\s*(.+)/s);
+      if (respMatch) return respMatch[1].trim().replace(/^["']|["']$/g, '');
+    }
+  }
   // Otherwise echo last user message
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'user') {
@@ -94,7 +106,8 @@ const server = http.createServer(async (req, res) => {
     let toolArgs: string = '{}';
     let hasToolResults = false;
     for (const msg of messages || []) {
-      if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('Tool result for')) {
+      if (msg.role === 'user' && typeof msg.content === 'string' &&
+          (msg.content.startsWith('Tool result for') || msg.content.startsWith('Tool result ('))) {
         hasToolResults = true;
         break;
       }
@@ -102,6 +115,13 @@ const server = http.createServer(async (req, res) => {
     if (!hasToolResults) {
       for (const msg of messages || []) {
         if (msg.role === 'system' && typeof msg.content === 'string') {
+          const match = msg.content.match(/MOCK_TOOL_CALL:\s*(\S+)(?:\s+({.+}))?/);
+          if (match) {
+            toolToCall = match[1];
+            if (match[2]) toolArgs = match[2];
+          }
+        }
+        if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith('MOCK_TOOL_CALL:')) {
           const match = msg.content.match(/MOCK_TOOL_CALL:\s*(\S+)(?:\s+({.+}))?/);
           if (match) {
             toolToCall = match[1];

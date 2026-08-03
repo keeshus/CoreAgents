@@ -14,6 +14,12 @@ dist
 .env.development.local
 .env.test.local
 .env.production.local
+.env.test
+.env.production
+.env.staging
+*.pem
+*.key
+*.p12
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -23,6 +29,8 @@ example-transaction-files/
 test/e2e/.auth/
 /e2e/
 test-results/
+test-results-e2e-*/
+coverage/
 error
 ponto-key
 gemini-key.claude/

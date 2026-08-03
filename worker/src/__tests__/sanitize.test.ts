@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   sanitizeEnvVars,
+  sanitizeUntrustedKeys,
   ALLOWLISTED_ENV_VARS,
   BLOCKED_ENV_NAMES,
   BLOCKED_ENV_PATTERNS,
@@ -105,5 +106,52 @@ describe('sanitizeEnvVars', () => {
       NODE_ENV: 'production',
     });
     expect(result).toEqual({});
+  });
+});
+
+describe('sanitizeUntrustedKeys', () => {
+  it('strips __proto__ keys at any nesting depth', () => {
+    const input = JSON.parse('{"a":1,"__proto__":{"polluted":true},"nested":{"__proto__":{"x":1},"b":2}}');
+    sanitizeUntrustedKeys(input);
+    expect(input).not.toHaveProperty('__proto__');
+    expect((input as any).nested).not.toHaveProperty('__proto__');
+    expect((input as any).nested.b).toBe(2);
+  });
+
+  it('strips constructor and prototype keys', () => {
+    const input = JSON.parse('{"constructor":{"evil":true},"prototype":{"pwn":1},"ok":42}');
+    sanitizeUntrustedKeys(input);
+    expect(input).not.toHaveProperty('constructor');
+    expect(input).not.toHaveProperty('prototype');
+    expect((input as any).ok).toBe(42);
+  });
+
+  it('does not pollute Object.prototype when merging sanitized data', () => {
+    const input = JSON.parse('{"__proto__":{"polluted":true}}');
+    sanitizeUntrustedKeys(input);
+    expect(({} as any).polluted).toBeUndefined();
+  });
+
+  it('sanitizes arrays recursively', () => {
+    const input = JSON.parse('[{"__proto__":{"polluted":true},"a":1}, {"b":2}]');
+    sanitizeUntrustedKeys(input);
+    expect(input[0]).not.toHaveProperty('__proto__');
+    expect(input[0].a).toBe(1);
+    expect(input[1].b).toBe(2);
+  });
+
+  it('leaves non-plain objects untouched', () => {
+    const map = new Map([['__proto__', { x: 1 }]]);
+    const input = { map, n: 5 };
+    sanitizeUntrustedKeys(input);
+    expect(input.map).toBe(map);
+    expect(map.get('__proto__')).toEqual({ x: 1 });
+  });
+
+  it('is idempotent', () => {
+    const input = JSON.parse('{"__proto__":{"p":1},"a":1}');
+    sanitizeUntrustedKeys(input);
+    sanitizeUntrustedKeys(input);
+    expect(input).not.toHaveProperty('__proto__');
   });
 });

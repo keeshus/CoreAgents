@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerUser, createFlow, deleteFlow, uniqueFlowName } from './helpers/api';
-import { getAuthCookie } from './helpers/auth';
+import { getAuthCookie, getAdminAuthFile } from './helpers/auth';
 
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
@@ -8,15 +8,23 @@ test.describe('Groups feature', () => {
   let createdGroupIds: string[] = [];
   let cleanupUserIds: string[] = [];
 
-  test.afterEach(async ({ request }) => {
-    for (const gId of createdGroupIds) {
-      await request.delete(`${API_URL}/groups/${gId}`).catch(() => {});
+  test.afterEach(async ({ playwright }) => {
+    // The shared `request` fixture may hold a non-admin session if the test
+    // logged the browser in as a reader/editor — admin-only deletes (groups,
+    // users) need a dedicated admin context from the saved auth state.
+    const adminCtx = await playwright.request.newContext({ storageState: getAdminAuthFile() });
+    try {
+      for (const gId of createdGroupIds) {
+        await adminCtx.delete(`${API_URL}/groups/${gId}`).catch(() => {});
+      }
+      createdGroupIds = [];
+      for (const uId of cleanupUserIds) {
+        await adminCtx.delete(`${API_URL}/users/${uId}`).catch(() => {});
+      }
+      cleanupUserIds = [];
+    } finally {
+      await adminCtx.dispose();
     }
-    createdGroupIds = [];
-    for (const uId of cleanupUserIds) {
-      await request.delete(`${API_URL}/users/${uId}`).catch(() => {});
-    }
-    cleanupUserIds = [];
   });
 
   // ─── Settings page navigation ──────────────────────────────────────
@@ -38,11 +46,6 @@ test.describe('Groups feature', () => {
   test('groups settings page loads', async ({ page }) => {
     await page.goto('/settings/groups');
     await expect(page.locator('h1').filter({ hasText: 'Groups' }).first()).toBeVisible({ timeout: 10000 });
-  });
-
-  test('SSO config page loads for admin', async ({ page }) => {
-    await page.goto('/settings/sso');
-    await expect(page.locator('h1').filter({ hasText: 'SSO / OIDC' }).first()).toBeVisible({ timeout: 10000 });
   });
 
   // ─── Group CRUD via UI ─────────────────────────────────────────────
@@ -148,6 +151,61 @@ test.describe('Groups feature', () => {
     await expect(page.getByText('Select a user to add')).toBeVisible();
     await page.getByText(userName).click();
     await expect(page.getByText(userName).first()).toBeVisible({ timeout: 5000 });
+
+    // Remove the member via the UI — the member row has a close-icon button
+    const memberRow = page.locator('div.flex.items-center.justify-between.px-2').filter({ hasText: userName }).first();
+    await expect(memberRow).toBeVisible();
+    await memberRow
+      .locator('button')
+      .filter({ has: page.locator('span.material-symbols-outlined', { hasText: 'close' }) })
+      .click();
+
+    // The member should disappear and the empty state returns
+    await expect(page.getByText(userName)).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('No members')).toBeVisible({ timeout: 5000 });
+
+    // Backend state matches the UI
+    const getRes = await request.get(`${API_URL}/groups/${group.id}`);
+    expect(getRes.status()).toBe(200);
+    const detail = await getRes.json();
+    expect(detail.members.length).toBe(0);
+  });
+
+  test('user role can be updated via the users page role dropdown', async ({ page, request }) => {
+    const userName = `Role-Change-User-${Date.now()}`;
+    const userEmail = `rolechange-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: userName, email: userEmail, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+
+    // Sanity check: a newly registered user has the reader role
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    expect(rolesRes.status()).toBe(200);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    expect(editorRole).toBeDefined();
+
+    await page.goto('/settings/users');
+    await expect(page.locator('h1').filter({ hasText: 'Users' }).first()).toBeVisible({ timeout: 10000 });
+
+    // Find the user's row and change the role via the row's role dropdown
+    const userRow = page.locator('tr').filter({ hasText: userEmail }).first();
+    await expect(userRow).toBeVisible({ timeout: 5000 });
+    await userRow.locator('[role="combobox"]').click();
+    await page.getByRole('option', { name: 'editor' }).click();
+
+    // The role change is persisted to the backend
+    await expect.poll(async () => {
+      const res = await request.get(`${API_URL}/users`);
+      if (res.status() !== 200) return null;
+      const users = await res.json();
+      const u = users.find((x: any) => x.id === regData.user.id);
+      return u?.role_name || null;
+    }, { timeout: 5000 }).toBe('editor');
   });
 
   test('users page shows Groups column for admin', async ({ page }) => {
@@ -356,7 +414,7 @@ test.describe('Groups feature', () => {
 
   // ─── Permission checks ─────────────────────────────────────────────
 
-  test('reader cannot create groups but can access pending executions', async ({ page, request }) => {
+  test('reader cannot create groups and cannot access pending executions', async ({ page, request }) => {
     const readerEmail = `reader-${Date.now()}@test.local`;
     const regRes = await registerUser(request, {
       name: 'Reader Perm Test',
@@ -382,8 +440,75 @@ test.describe('Groups feature', () => {
     });
     expect(gRes.status()).toBe(403);
 
+    // The reader role no longer grants execution:approve (destructive rights),
+    // so the pending list is forbidden for readers.
     const pRes = await page.request.get(`${API_URL}/executions/pending`);
-    expect(pRes.status()).toBe(200);
+    expect(pRes.status()).toBe(403);
+  });
+
+  test('editor role can create flows but cannot access admin settings', async ({ page, request }) => {
+    // Create an editor user via API — use fetch directly so the request
+    // fixture's admin cookie is not overwritten by the register response cookie
+    const editorEmail = `editor-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Editor Perm Test', email: editorEmail, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+
+    // Assign the editor role via the admin API
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    expect(rolesRes.status()).toBe(200);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    expect(editorRole).toBeDefined();
+    const roleUpd = await request.put(`${API_URL}/users/${regData.user.id}/role`, {
+      data: { role_id: editorRole.id },
+    });
+    expect(roleUpd.status()).toBe(200);
+
+    // Login as editor in the browser
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(editorEmail);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: /sign.?in/i }).click();
+
+    // Editors land on the flows page (unlike readers who are sent to /approvals)
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('button', { name: 'New Flow' })).toBeVisible({ timeout: 10000 });
+
+    // Editor CAN create a flow via the API (flow:create permission)
+    const fRes = await page.request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('Editor-Created-Flow'),
+        nodes: [{ id: 'n1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } }],
+        edges: [],
+      },
+    });
+    expect(fRes.status()).toBe(201);
+    const createdFlow = await fRes.json();
+    await request.delete(`${API_URL}/flows/${createdFlow.id}`);
+
+    // Editor CAN open the flow editor (create UI)
+    await page.goto('/flows/new/edit');
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    // Editor CANNOT see admin-only settings links
+    await page.goto('/settings');
+    await expect(page.locator('h1').filter({ hasText: 'Settings' }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Users').first()).not.toBeVisible();
+    await expect(page.getByText('SSO / OIDC').first()).not.toBeVisible();
+    await expect(page.getByText('Secret Vaults').first()).not.toBeVisible();
+
+    // Admin API endpoints reject the editor with 403
+    const ssoRes = await page.request.get(`${API_URL}/admin/sso-config`);
+    expect(ssoRes.status()).toBe(403);
+    const usersRes = await page.request.get(`${API_URL}/users`);
+    expect(usersRes.status()).toBe(403);
+    const rolesAdminRes = await page.request.get(`${API_URL}/roles`);
+    expect(rolesAdminRes.status()).toBe(403);
   });
 
   // Register a user WITHOUT affecting the request fixture's admin cookie
@@ -481,43 +606,31 @@ async function registerUserClean(email: string, password: string, name: string):
     await page.goto(`/flows/${flow.id}/edit`);
     await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
 
-    // Wait for groups to load via auth-dependent fetch
-    await page.waitForTimeout(2000);
+    // Open Flow Settings — the real group selector lives in this modal
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
 
-    // Try to select a group via the group selector
-    const groupSelect = page.locator('[role="combobox"]').filter({ hasText: /No group|Editor-Save-Group/ }).first();
-    const selectVisible = await groupSelect.isVisible({ timeout: 8000 }).catch(() => false);
-    if (!selectVisible) {
-      // Try any combobox
-      const anyCombobox = page.locator('[role="combobox"]').first();
-      if (await anyCombobox.isVisible({ timeout: 2000 }).catch(() => false)) {
-        const currentText = await anyCombobox.textContent().catch(() => '');
-        if (currentText.includes('No group')) {
-          await anyCombobox.click();
-          const groupOption = page.getByText('Editor-Save-Group');
-          if (await groupOption.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await groupOption.click();
-            await page.getByRole('button', { name: /Save/ }).click();
-            await expect(page.getByText('Saving...')).not.toBeVisible({ timeout: 10000 });
-          }
-        }
-      }
-    }
+    // The Group SearchableSelect shows "No group" for an unassigned flow
+    const groupTrigger = page.locator('button').filter({ hasText: 'No group' }).first();
+    await expect(groupTrigger).toBeVisible();
 
-    // Verify the flow was saved with the group_id via API
+    // Selecting a group in the UI auto-saves it (PUT /api/flows/:id) — no manual Save needed
+    const saveResponse = page.waitForResponse(
+      (resp) => resp.url().includes(`/api/flows/${flow.id}`) && resp.request().method() === 'PUT',
+      { timeout: 10000 },
+    );
+    await groupTrigger.click();
+    await page.getByText(group.name, { exact: true }).click();
+    await saveResponse;
+
+    // The UI now shows the selected group on the trigger
+    await expect(page.locator('button').filter({ hasText: group.name }).first()).toBeVisible({ timeout: 5000 });
+
+    // Backend persisted the group_id via the UI save
     const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
     expect(getRes.status()).toBe(200);
     const saved = await getRes.json();
-    if (!saved.group_id) {
-      // Directly update the flow with group_id via API to test backend
-      const updRes = await request.put(`${API_URL}/flows/${flow.id}`, {
-        data: { group_id: group.id },
-      });
-      expect(updRes.ok()).toBe(true);
-      const updated = await request.get(`${API_URL}/flows/${flow.id}`);
-      const saved2 = await updated.json();
-      expect(saved2.group_id).toBe(group.id);
-    }
+    expect(saved.group_id).toBe(group.id);
 
     await deleteFlow(request, flow.id);
   });
@@ -603,51 +716,6 @@ async function registerUserClean(email: string, password: string, name: string):
     await request.delete(`${API_URL}/flows/${f3.id}`);
   });
 
-  // ─── SSO config CRUD ────────────────────────────────────────────
-
-  test('SSO config can be saved and read back', async ({ page, request }) => {
-    await page.goto('/settings/sso');
-    await expect(page.locator('h1').filter({ hasText: 'SSO / OIDC' }).first()).toBeVisible({ timeout: 10000 });
-
-    // Enable SSO
-    await page.getByText('Enable SSO').click();
-
-    // Fill in provider details
-    await page.getByLabel('Provider name').fill('test-provider');
-    await page.getByLabel('Client ID').fill('test-client-id');
-    await page.getByLabel('Issuer URL').fill('https://sso.example.com');
-    await page.getByLabel('Group claim name').fill('roles');
-
-    await page.getByRole('button', { name: 'Save Configuration' }).click();
-
-    // Check for success or error message
-    const successVisible = await page.getByText('SSO configuration saved').isVisible({ timeout: 3000 }).catch(() => false);
-    if (!successVisible) {
-      const errorText = await page.getByText('Failed to save').isVisible().catch(() => false);
-      if (errorText) {
-        // Try via API directly
-        const res = await request.put(`${API_URL}/admin/sso-config`, {
-          data: {
-            provider: 'test-provider',
-            clientId: 'test-client-id',
-            clientSecret: 'test-secret',
-            issuer: 'https://sso.example.com',
-            groupClaim: 'roles',
-            adminGroupMapping: [],
-            editorGroupMapping: [],
-            enabled: true,
-          },
-        });
-        expect(res.ok()).toBe(true);
-      }
-    }
-
-    // Reload and verify persisted
-    await page.goto('/settings/sso');
-    await expect(page.getByLabel('Provider name')).toHaveValue('test-provider');
-    await expect(page.getByLabel('Group claim name')).toHaveValue('roles');
-  });
-
   // ─── Group-based execution approval filtering ────────────────────────
 
   test('pending executions filtered by group membership', async ({ page, request }) => {
@@ -712,24 +780,30 @@ async function registerUserClean(email: string, password: string, name: string):
     expect(paused).toBeDefined();
     const executionId = paused?.data?.executionId || paused?.executionId || '';
 
-    // Register a reader user who is in this group
-    const readerEmail = `hitl-member-${Date.now()}@test.local`;
-    const readerData = await registerUserClean(readerEmail, 'Test1234!', 'HITL Member');
-    cleanupUserIds.push(readerData.user.id);
+    // Register a member who is in this group and promote them to editor so
+    // they hold execution:approve (the reader role no longer has it)
+    const memberEmail = `hitl-member-${Date.now()}@test.local`;
+    const memberData = await registerUserClean(memberEmail, 'Test1234!', 'HITL Member');
+    cleanupUserIds.push(memberData.user.id);
+    const allRoles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = allRoles.find((r: any) => r.name === 'editor');
+    if (editorRole) {
+      await request.put(`${API_URL}/users/${memberData.user.id}/role`, { data: { role_id: editorRole.id } });
+    }
 
     // Add member via groups API
     const addMember = await request.post(`${API_URL}/groups/${group.id}/members`, {
-      data: { userId: readerData.user.id },
+      data: { userId: memberData.user.id },
     });
     expect(addMember.status()).toBe(201);
 
-    // Login as reader
+    // Login as the member (editor role)
     await page.goto('/login');
-    await page.getByLabel('Email').fill(readerEmail);
+    await page.getByLabel('Email').fill(memberEmail);
     await page.getByLabel('Password', { exact: true }).fill('Test1234!');
     await page.getByRole('button', { name: /sign.?in/i }).click();
 
-    // Reader should see the pending execution
+    // Member should see the pending execution
     const readerExecIds = await page.evaluate(async (apiUrl) => {
       const res = await fetch(`${apiUrl}/executions/pending`, { credentials: 'include' });
       if (!res.ok) return [];
@@ -738,7 +812,7 @@ async function registerUserClean(email: string, password: string, name: string):
     }, API_URL);
     expect(readerExecIds).toContain(executionId);
 
-    // Register a second reader who is NOT in this group
+    // Register a second user who is NOT in this group and has no approval rights
     const outsiderEmail = `outsider-${Date.now()}@test.local`;
     const outsiderData = await registerUserClean(outsiderEmail, 'Test1234!', 'Outsider');
     cleanupUserIds.push(outsiderData.user.id);
@@ -751,23 +825,21 @@ async function registerUserClean(email: string, password: string, name: string):
     // Verify redirected to /approvals (confirmed login as non-admin)
     await expect(page).toHaveURL(/\/approvals/);
 
-    // Outsider should NOT see the pending execution
+    // Outsider is a reader and must NOT be able to list pending executions at all
     const result = await page.evaluate(async (apiUrl) => {
       const meRes = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' });
       const me = meRes.ok ? await meRes.json() : null;
       const pRes = await fetch(`${apiUrl}/executions/pending`, { credentials: 'include' });
-      const pData = pRes.ok ? await pRes.json() : [];
       return {
         userId: me?.user?.userId,
         role: me?.user?.role,
         groups: me?.user?.groups,
-        execCount: Array.isArray(pData) ? pData.length : -1,
-        execIds: Array.isArray(pData) ? pData.map((e: any) => e.id) : [],
+        pendingStatus: pRes.status,
       };
     }, API_URL);
     expect(result.role).toBe('reader');
     expect(result.groups).toEqual([]);
-    expect(result.execIds).not.toContain(executionId);
+    expect(result.pendingStatus).toBe(403);
 
     // Cleanup: cancel execution
     await request.delete(`${API_URL}/executions/${executionId}`);

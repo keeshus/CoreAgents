@@ -102,21 +102,19 @@ test.describe('Webhook API key management', () => {
     expect(flow.personalApiKey.prefix).toMatch(/^wh_/);
   });
 
-  test('POST /api/flows/:flowId/keys/renew creates a new API key', async ({ request }) => {
-    const renewRes = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
-    expect(renewRes.ok()).toBe(true);
-    const keyData = await renewRes.json();
-    expect(keyData.rawKey).toMatch(/^wh_/);
-    expect(keyData.prefix).toMatch(/^wh_/);
-    expect(keyData.createdAt).toBeDefined();
-  });
-
   test('renew replaces existing key and returns a new raw key', async ({ request }) => {
     const res1 = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
+    expect(res1.ok()).toBe(true);
     const key1 = await res1.json();
+    expect(key1.rawKey).toMatch(/^wh_/);
+    expect(key1.prefix).toMatch(/^wh_/);
+    expect(key1.createdAt).toBeDefined();
 
     const res2 = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
     const key2 = await res2.json();
+    expect(key2.rawKey).toMatch(/^wh_/);
+    expect(key2.prefix).toMatch(/^wh_/);
+    expect(key2.createdAt).toBeDefined();
 
     expect(key1.rawKey).not.toBe(key2.rawKey);
   });
@@ -129,12 +127,6 @@ test.describe('Webhook API key management', () => {
     await deleteFlow(request, manualFlow.id);
   });
 
-  test('DELETE /api/flows/:flowId/keys/revoke revokes the key', async ({ request }) => {
-    await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
-    const revokeRes = await request.delete(`${API_URL}/flows/${webhookFlowId}/keys/revoke`);
-    expect(revokeRes.status()).toBe(204);
-  });
-
   test('revoked key cannot be used for auth', async ({ request }) => {
     const renewRes = await request.post(`${API_URL}/flows/${webhookFlowId}/keys/renew`);
     const { rawKey } = await renewRes.json();
@@ -142,7 +134,8 @@ test.describe('Webhook API key management', () => {
     const deployRes = await request.get(`${API_URL}/flows/${webhookFlowId}/deployment`);
     const { pathSlug } = await deployRes.json();
 
-    await request.delete(`${API_URL}/flows/${webhookFlowId}/keys/revoke`);
+    const revokeRes = await request.delete(`${API_URL}/flows/${webhookFlowId}/keys/revoke`);
+    expect(revokeRes.status()).toBe(204);
 
     const execRes = await fetch(`${API_URL}/webhook/${pathSlug}`, {
       method: 'POST',
@@ -238,6 +231,48 @@ test.describe('Webhook deployment config', () => {
     expect(config.pathSlug.length).toBeGreaterThan(0);
 
     await deleteFlow(request, flow.id);
+  });
+
+  test('PUT deployment with a duplicate pathSlug is rejected', async ({ request }) => {
+    const firstRes = await createFlow(request, {
+      name: uniqueFlowName('SlugOwner'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const firstFlow = await firstRes.json();
+
+    const firstPut = await request.put(`${API_URL}/flows/${firstFlow.id}/deployment`, {
+      data: { pathSlug: 'duplicate-slug-test', rateLimit: 5 },
+    });
+    expect(firstPut.ok()).toBe(true);
+
+    const secondRes = await createFlow(request, {
+      name: uniqueFlowName('SlugTaker'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const secondFlow = await secondRes.json();
+
+    // path_slug has a UNIQUE constraint in the DB; the route now pre-checks for
+    // conflicts and returns a clean 409 (fixed — no more 500 unique violation).
+    const secondPut = await request.put(`${API_URL}/flows/${secondFlow.id}/deployment`, {
+      data: { pathSlug: 'duplicate-slug-test', rateLimit: 5 },
+    });
+    expect(secondPut.status()).toBe(409);
+
+    // The original deployment keeps its slug and still resolves.
+    const keepRes = await request.get(`${API_URL}/flows/${firstFlow.id}/deployment`);
+    const kept = await keepRes.json();
+    expect(kept.pathSlug).toBe('duplicate-slug-test');
+
+    await deleteFlow(request, secondFlow.id);
+    await deleteFlow(request, firstFlow.id);
   });
 
   test('deployment slug appears in OpenAPI spec', async ({ request }) => {
@@ -343,6 +378,43 @@ test.describe('Webhook execution via slug with auth', () => {
     expect(execRes.status).toBe(401);
   });
 
+  test('POST /api/webhook/:slug returns 403 with a wrong secret', async () => {
+    // authenticateWebhookRequest: a provided but non-matching ?secret= is
+    // rejected with 403 'Invalid webhook secret' (see webhook-openapi.ts).
+    const execRes = await fetch(`${API_URL}/webhook/${pathSlug}?secret=wrong-secret-xyz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'test' }),
+    });
+    expect(execRes.status).toBe(403);
+  });
+
+  test('POST /api/webhook/:slug with valid secret works even when API key is revoked', async ({ request }) => {
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('SecretOnly'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook', webhookSecret: 'topsecret-42' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await flowRes.json();
+
+    const deployRes = await request.get(`${API_URL}/flows/${flow.id}/deployment`);
+    const slug = (await deployRes.json()).pathSlug;
+
+    await request.delete(`${API_URL}/flows/${flow.id}/keys/revoke`);
+
+    const execRes = await fetch(`${API_URL}/webhook/${slug}?secret=topsecret-42`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(execRes.status).toBe(202);
+
+    await deleteFlow(request, flow.id);
+  });
+
   test('POST /api/webhook/:slug returns 401 with invalid API key', async () => {
     const execRes = await fetch(`${API_URL}/webhook/${pathSlug}`, {
       method: 'POST',
@@ -436,6 +508,57 @@ test.describe('Webhook execution via slug with auth', () => {
     });
     expect(execRes.status).toBe(202);
   });
+
+  test('POST /api/webhook/:slug enforces per-deployment rate limit (429 + Retry-After)', async ({ request }) => {
+    // Configure the deployment with a 1 request/minute limit
+    const putRes = await request.put(`${API_URL}/flows/${webhookFlowId}/deployment`, {
+      data: { pathSlug, rateLimit: 1 },
+    });
+    expect(putRes.ok()).toBe(true);
+
+    const post = (message: string) => fetch(`${API_URL}/webhook/${pathSlug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rawKey}` },
+      body: JSON.stringify({ message }),
+    });
+
+    // First authenticated request is accepted
+    const first = await post('first');
+    expect(first.status).toBe(202);
+
+    // Second request within the same minute is throttled
+    const second = await post('second');
+    expect(second.status).toBe(429);
+    expect(second.headers.get('Retry-After')).not.toBeNull();
+    const body = await second.json();
+    expect(body.error).toBe('Rate limit exceeded. Try again later.');
+  });
+
+  test('POST /api/webhook/:slug is throttled per-IP before auth (429 + Retry-After)', async () => {
+    // Security hardening: an unauthenticated IP is throttled BEFORE auth so
+    // spam cannot burn DB queries (deployment lookup, flow load, key/secret
+    // checks) at full speed. Default: WEBHOOK_IP_RATE_LIMIT=120 requests/min.
+    // NOTE: this test runs LAST in this describe on purpose — the in-memory
+    // limiter is shared per-process and keyed by IP, so hammering here would
+    // 429 any later webhook-execution calls within the 60s window. The tests
+    // that follow in this file only hit authenticated key/deployment routes,
+    // which are not IP-throttled.
+    const spam = () => fetch(`${API_URL}/webhook/${pathSlug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    let last: Response | null = null;
+    for (let i = 0; i < 130; i++) {
+      last = await spam();
+    }
+
+    expect(last!.status).toBe(429);
+    expect(last!.headers.get('Retry-After')).not.toBeNull();
+    const body = await last!.json();
+    expect(body.error).toBe('Rate limit exceeded. Try again later.');
+  });
 });
 
 test.describe('Webhook API key admin management', () => {
@@ -468,5 +591,72 @@ test.describe('Webhook API key admin management', () => {
 
     const revokeRes = await request.delete(`${API_URL}/flows/${webhookFlowId}/keys/${adminUser.id}`);
     expect(revokeRes.status()).toBe(204);
+  });
+});
+
+test.describe('Webhook API key redaction', () => {
+  test('flow list and details never return the raw key', async ({ request }) => {
+    const res = await createFlow(request, {
+      name: uniqueFlowName('RedactKey'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    expect(res.ok()).toBe(true);
+    const flow = await res.json();
+    const rawKey = flow.personalApiKey?.rawKey;
+    expect(rawKey).toMatch(/^wh_/);
+
+    // List response must not leak the raw key.
+    const listRes = await request.get(`${API_URL}/flows?limit=100`);
+    const list = await listRes.json();
+    const rows = Array.isArray(list) ? list : list.data || [];
+    for (const row of rows) {
+      if (row.id === flow.id) {
+        expect(JSON.stringify(row)).not.toContain(rawKey);
+      }
+    }
+
+    // Flow details only expose the masked prefix in the trigger node config.
+    const detailRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    const detail = await detailRes.json();
+    expect(JSON.stringify(detail)).not.toContain(rawKey);
+    const trigger = (detail.nodes || []).find((n: any) => n.data?.type === 'trigger');
+    expect(trigger).toBeDefined();
+    expect(trigger.data.config.personalApiKeyPrefix).toMatch(/^wh_/);
+    expect(trigger.data.config.personalApiKeyPrefix).not.toBe(rawKey);
+
+    // Deployment config exposes the slug only — never key material.
+    const deployRes = await request.get(`${API_URL}/flows/${flow.id}/deployment`);
+    const deploy = await deployRes.json();
+    expect(JSON.stringify(deploy)).not.toContain(rawKey);
+    expect(deploy.pathSlug.length).toBeGreaterThan(0);
+
+    await deleteFlow(request, flow.id);
+  });
+
+  test('renew response is the only place the new raw key appears', async ({ request }) => {
+    const res = await createFlow(request, {
+      name: uniqueFlowName('RedactRenew'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Webhook', type: 'trigger', config: { triggerType: 'webhook' } } },
+        { id: 'o1', type: 'output', position: { x: 300, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await res.json();
+
+    const renewRes = await request.post(`${API_URL}/flows/${flow.id}/keys/renew`);
+    const renewed = await renewRes.json();
+    expect(renewed.rawKey).toMatch(/^wh_/);
+    expect(renewed.prefix).toMatch(/^wh_/);
+
+    // After renewal, the raw key is still not exposed anywhere.
+    const detailRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(JSON.stringify(await detailRes.json())).not.toContain(renewed.rawKey);
+
+    await deleteFlow(request, flow.id);
   });
 });

@@ -5,6 +5,33 @@ import { getAuthCookie } from './helpers/auth';
 const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 const cookie = getAuthCookie() || undefined;
 
+// Local helpers (spec-scoped — do not put in shared helpers)
+function makeFlow(name: string, nodes: any[], edges: any[]) {
+  return { name, nodes, edges };
+}
+
+function codeFlow(name: string, code: string, extraConfig: Record<string, unknown> = {}) {
+  return makeFlow(name, [
+    { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+    { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Probe', type: 'code', config: { code, ...extraConfig } } },
+    { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Probe.result'] } } },
+  ], [
+    { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+    { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+  ]);
+}
+
+function llmToolFlow(name: string, systemPrompt: string) {
+  return makeFlow(name, [
+    { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+    { id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 }, data: { label: 'Assistant', type: 'llm-agent', config: { endpointId: '', model: 'mock-gpt-4', systemPrompt, temperature: 0.7, maxTokens: 1024, responseFormat: 'text' } } },
+    { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Assistant.content'] } } },
+  ], [
+    { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+    { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+  ]);
+}
+
 test.describe('Sandboxed tool execution', () => {
   const cleanupFlowIds: string[] = [];
   const cleanupGroupIds: string[] = [];
@@ -113,17 +140,9 @@ test.describe('Sandboxed tool execution', () => {
     ];
 
     const updateRes = await request.put(`${API_URL}/flows/${flow.id}`, { data: { envVars } });
-    // The route supports envVars but the flows table may not have the column yet
-    if (!updateRes.ok()) {
-      const err = await updateRes.json();
-      console.warn(`Flow env vars not persisted (may need migration): ${err.error || updateRes.status()}`);
-      test.skip(true, 'Flow env_vars column not yet available');
-      return;
-    }
+    expect(updateRes.ok()).toBe(true);
 
-    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
-    expect(getRes.ok()).toBe(true);
-    const updated = await getRes.json();
+    const updated = await updateRes.json();
     expect(updated.envVars || updated.env_vars).toBeDefined();
     const returned = updated.envVars || updated.env_vars || [];
     expect(returned[0].name).toBe('FLOW_VAR');
@@ -154,8 +173,15 @@ test.describe('Sandboxed tool execution', () => {
     const flow = await flowRes.json();
     cleanupFlowIds.push(flow.id);
 
+    // Sandbox env comes only from the flow's own env_vars configuration —
+    // client-supplied __env is stripped at the API boundary.
+    const envUpdateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: { envVars: [{ name: 'GREETING', value: 'Hello from env!', type: 'static' }] },
+    });
+    expect(envUpdateRes.ok()).toBe(true);
+
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(flow.id, { message: 'test', __env: { GREETING: 'Hello from env!' } }, cookie);
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
@@ -240,8 +266,14 @@ test.describe('Sandboxed tool execution', () => {
     const flow = await flowRes.json();
     cleanupFlowIds.push(flow.id);
 
+    // Sandbox env comes only from the flow's own env_vars configuration
+    const envUpdateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: { envVars: [{ name: 'MY_VAR', value: 'code-node-value', type: 'static' }] },
+    });
+    expect(envUpdateRes.ok()).toBe(true);
+
     const { debugExecute } = await import('./helpers/stream');
-    const events = await debugExecute(flow.id, { message: 'test', __env: { MY_VAR: 'code-node-value' } }, cookie);
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
     expect(completed).toBeDefined();
@@ -251,6 +283,35 @@ test.describe('Sandboxed tool execution', () => {
     // Code node output is stored under its slugified label or node ID
     const c1out = output?.c1 || output?.reader || {};
     expect(c1out.value).toBe('code-node-value');
+  });
+
+  test('client-supplied __env is dropped — sandbox env comes from flow config only', async ({ request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-Env-Drop'), 'return { evil: process.env.EVIL_VAR || null };'),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    // The flow's own env_vars are the ONLY legitimate source of sandbox env.
+    const envUpdateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: { envVars: [{ name: 'EVIL_VAR', value: 'from-flow-config', type: 'static' }] },
+    });
+    expect(envUpdateRes.ok()).toBe(true);
+
+    // The client ALSO smuggles __env — the API boundary must strip it before
+    // the sandbox env is built, so EVIL_VAR resolves to the flow-config value.
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'go', __env: { EVIL_VAR: 'should-not-leak' } }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const output = completed!.data?.output;
+    expect(output).toBeDefined();
+
+    const c1out = output?.c1 || output?.probe || {};
+    expect(c1out.evil).toBe('from-flow-config');
+    expect(c1out.evil).not.toBe('should-not-leak');
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -276,10 +337,21 @@ test.describe('Sandboxed tool execution', () => {
     const flow = await flowRes.json();
     cleanupFlowIds.push(flow.id);
 
+    // Sanitization is applied to the flow's own env_vars (client-supplied
+    // __env is stripped at the API boundary).
+    const envUpdateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: {
+        envVars: [
+          { name: 'DATABASE_URL', value: 'should-not-leak', type: 'static' },
+          { name: 'MY_SAFE_VAR', value: 'ok', type: 'static' },
+        ],
+      },
+    });
+    expect(envUpdateRes.ok()).toBe(true);
+
     const { debugExecute } = await import('./helpers/stream');
     const events = await debugExecute(flow.id, {
       message: 'test',
-      __env: { DATABASE_URL: 'should-not-leak', MY_SAFE_VAR: 'ok' },
     }, cookie);
 
     const completed = events.find(e => e.type === 'execution.completed');
@@ -339,5 +411,158 @@ test.describe('Sandboxed tool execution', () => {
     expect(c1out.etcWritable).toBe(false);
     expect(c1out.binWritable).toBe(false);
     expect(c1out.homeWritable).toBe(true);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Time / resource limits ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // The sidecar kills the process group after `timeout` ms
+  // (default 30s, per-exec max 5min). A runaway code node must NOT
+  // hang the whole execution — it is SIGKILLed and the node FAILS.
+
+  test('code node infinite loop is terminated by the sandbox timeout — execution fails with the kill error', async ({ request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-Infinite-Loop'), 'while (true) {}', { timeout: 3000 }),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('Code node execution failed with exit code -1');
+
+    const stepFailed = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'c1');
+    expect(stepFailed).toBeDefined();
+    expect(stepFailed!.data?.error).toContain('Code node execution failed');
+  });
+
+  test('code node memory exhaustion is contained — execution fails without hanging', async ({ request }) => {
+    const code = [
+      'const a = [];',
+      'while (true) { a.push(new Array(1048576).fill(0)); }',
+    ].join('\n');
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-OOM'), code, { timeout: 8000 }),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    // Node aborted (heap exhausted) or was killed by the sandbox — either way the
+    // non-zero exit code fails the code node instead of silently producing no output
+    expect(failed!.data?.error).toContain('Code node execution failed');
+
+    const stepFailed = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'c1');
+    expect(stepFailed).toBeDefined();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Code node exceptions ────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // A throwing code node exits non-zero; the sandbox error must fail the
+  // execution with the original exception surfaced — never "(no output)".
+
+  test('code node exception fails the execution with the error surfaced', async ({ request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: codeFlow(uniqueFlowName('Sandbox-Code-Throw'), 'throw new Error("boom from code node");'),
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeUndefined();
+
+    const failed = events.find(e => e.type === 'execution.failed');
+    expect(failed).toBeDefined();
+    expect(failed!.data?.error).toContain('boom from code node');
+
+    const stepFailed = events.find(e => e.type === 'step.failed' && e.data?.nodeId === 'c1');
+    expect(stepFailed).toBeDefined();
+    expect(stepFailed!.data?.error).toContain('boom from code node');
+  });
+
+  test('bash tool command exceeding the sandbox timeout is killed (SIGKILL — no exit code)', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    const flow = llmToolFlow(uniqueFlowName('Sandbox-Bash-Timeout'), `ECHO_SYSTEM_PROMPT\nUse bash. MOCK_TOOL_CALL: bash {"command":"sleep 60","timeout":3000}`);
+    (flow.nodes[1].data.config as any).endpointId = mockEndpointId;
+    const flowRes = await request.post(`${API_URL}/flows`, { data: flow });
+    expect(flowRes.ok()).toBe(true);
+    const created = await flowRes.json();
+    cleanupFlowIds.push(created.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(created.id, { message: 'run' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.status).not.toBe('failed');
+
+    const llmStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'l1');
+    expect(llmStep).toBeDefined();
+    const toolCalls = llmStep!.data?.output?.toolCalls || [];
+    const bashCall = toolCalls.find((t: any) => t.name === 'bash');
+    expect(bashCall).toBeDefined();
+    const result = String(bashCall.result);
+    // Sidecar SIGKILLs the process group after the timeout. Signal-killed
+    // processes carry no exit code, so the sidecar reports -1 — the command
+    // must NOT have run to completion (which would be "Exit code: 0").
+    expect(result).toContain('Exit code: -1');
+    expect(result).not.toContain('Exit code: 0');
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Env var sanitization for the bash tool ──────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // executeBash() runs the same sanitizeEnvVars() filter as code
+  // nodes: blocked vars (DATABASE_URL, *SECRET*, *TOKEN*, ...) are
+  // stripped from the bash environment too.
+
+  test('bash tool env is sanitized — blocked vars stripped, safe vars passed', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    const sysPrompt = 'ECHO_SYSTEM_PROMPT\nUse bash. MOCK_TOOL_CALL: bash {"command":"echo \\"DB=[$DATABASE_URL] SAFE=[$MY_SAFE_VAR]\\"","timeout":10000}';
+    const flow = llmToolFlow(uniqueFlowName('Sandbox-Bash-Sanitize'), sysPrompt);
+    (flow.nodes[1].data.config as any).endpointId = mockEndpointId;
+    // Client-supplied __env is dropped (security hardening) — the sandbox env
+    // comes exclusively from the flow's own env_vars config.
+    flow.envVars = [
+      { name: 'DATABASE_URL', value: 'leak-me-not', type: 'static' },
+      { name: 'MY_SAFE_VAR', value: 'safe-value', type: 'static' },
+    ];
+    const flowRes = await request.post(`${API_URL}/flows`, { data: flow });
+    expect(flowRes.ok()).toBe(true);
+    const created = await flowRes.json();
+    cleanupFlowIds.push(created.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(created.id, { message: 'run' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    expect(completed!.data?.status).not.toBe('failed');
+
+    const llmStep = events.find(e => e.type === 'step.completed' && e.data?.nodeId === 'l1');
+    expect(llmStep).toBeDefined();
+    const toolCalls = llmStep!.data?.output?.toolCalls || [];
+    const bashCall = toolCalls.find((t: any) => t.name === 'bash');
+    expect(bashCall).toBeDefined();
+    const result = String(bashCall.result);
+    expect(result).toContain('SAFE=[safe-value]');
+    expect(result).toContain('DB=[]');
+    expect(result).not.toContain('leak-me-not');
   });
 });

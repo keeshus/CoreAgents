@@ -1,5 +1,6 @@
 # ── Core Agents E2E Playwright Test Runner ────────────────────────
-FROM mcr.microsoft.com/playwright:v1.61.1-jammy
+# mcr.microsoft.com/playwright:v1.61.1-jammy pinned by digest
+FROM mcr.microsoft.com/playwright:v1.61.1-jammy@sha256:7b86926fff94374389e8e1f4fdc5c76d050d4a06a7886bb537bf412b20e2b71e
 
 WORKDIR /repo
 
@@ -11,7 +12,8 @@ COPY frontend/package*.json ./frontend/
 COPY frontend/tsconfig.json ./frontend/
 COPY frontend/next.config.js ./frontend/
 
-RUN npm install -w shared -w frontend && npm cache clean --force
+# npm ci for reproducible builds (exact versions from package-lock.json)
+RUN npm ci -w shared -w frontend && npm cache clean --force
 
 COPY frontend/src ./frontend/src/
 COPY frontend/pages ./frontend/pages/

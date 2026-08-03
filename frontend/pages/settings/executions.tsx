@@ -58,7 +58,7 @@ export default function ExecutionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
 
-  const cancelConfirm = useConfirm({ title: 'Cancel execution?', message: 'Force-cancel this pending execution? This cannot be undone.', variant: 'danger' });
+  const cancelConfirm = useConfirm({ title: 'Cancel execution?', message: 'Force-cancel this pending execution? This cannot be undone.', confirmLabel: 'Cancel execution', variant: 'danger' });
 
   useAssistantContext({ pageKey: 'settings:executions', description: 'Managing pending HITL executions' });
 

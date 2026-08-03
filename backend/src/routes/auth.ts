@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import * as oidc from 'openid-client';
@@ -8,8 +8,66 @@ import { users, roles, ssoConfig, groups, groupMembers } from '../db/schema.js';
 import { authenticate, JWT_SECRET } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { logger } from '../utils/logger.js';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
+
+// ── Rate limiting on auth endpoints ────────────────────────────────────
+// Per-IP (optionally via X-Forwarded-For when TRUST_PROXY=1) so the limit
+// cannot be spoofed by default. Login limits are keyed per IP + username.
+
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+
+function clientIp(req: Request): string {
+  if (TRUST_PROXY) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+      return forwarded.split(',')[0].trim();
+    }
+  }
+  return req.socket.remoteAddress || req.ip || 'unknown';
+}
+
+function buildAuthLimiter(opts: { defaultWindowMs: number; defaultMax: number; perUsername: boolean }) {
+  const windowMs = parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || '', 10) || opts.defaultWindowMs;
+  const max = parseInt(process.env.AUTH_RATE_LIMIT_MAX || '', 10) || opts.defaultMax;
+  // Enforce limits in production; dev/e2e environments keep unlimited so
+  // local development and the E2E suite are not blocked.
+  if (process.env.NODE_ENV !== 'production') {
+    return (_req: Request, _res: Response, next: NextFunction) => next();
+  }
+  return rateLimit({
+    windowMs,
+    max,
+    message: { error: 'Too many attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    keyGenerator: (req: Request) => {
+      const ip = clientIp(req);
+      if (opts.perUsername) {
+        const username = String((req.body as any)?.email || '').trim().toLowerCase();
+        return `${ip}:${username}`;
+      }
+      return ip;
+    },
+  });
+}
+
+const loginLimiter = buildAuthLimiter({ defaultWindowMs: 15 * 60 * 1000, defaultMax: 10, perUsername: true });
+const registerLimiter = buildAuthLimiter({ defaultWindowMs: 60 * 60 * 1000, defaultMax: 5, perUsername: false });
+const ssoLimiter = buildAuthLimiter({ defaultWindowMs: 15 * 60 * 1000, defaultMax: 10, perUsername: true });
+
+function tokenCookieOptions(req: Request) {
+  const secure = process.env.NODE_ENV === 'production' || req.secure;
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure,
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+}
 
 // ── SSO / OIDC Configuration ──────────────────────────────────────────────
 
@@ -62,7 +120,7 @@ router.get('/config', asyncHandler(async (_req, res) => {
 
 // ── GET /api/auth/sso/login — redirect to OIDC provider ───────────────────
 
-router.get('/sso/login', asyncHandler(async (_req, res) => {
+router.get('/sso/login', ssoLimiter, asyncHandler(async (_req, res) => {
   const config = await getSSOConfig();
   if (!config || !config.enabled) {
     res.status(400).json({ error: 'SSO not configured' });
@@ -78,8 +136,9 @@ router.get('/sso/login', asyncHandler(async (_req, res) => {
       nonce,
       redirect_uri: config.redirect_uri,
     });
-    res.cookie('sso_state', state, { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
-    res.cookie('sso_nonce', nonce, { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
+    const secure = process.env.NODE_ENV === 'production' || _req.secure;
+    res.cookie('sso_state', state, { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: 5 * 60 * 1000 });
+    res.cookie('sso_nonce', nonce, { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: 5 * 60 * 1000 });
 
     let authUrlStr = String(authUrl);
     // In E2E tests the issuer container hostname is not reachable from the
@@ -243,7 +302,7 @@ router.get('/sso/callback', asyncHandler(async (req, res) => {
       }).where(eq(users.id, user.id));
     }
 
-    res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie('token', token, tokenCookieOptions(req));
     await db.update(users).set({ last_login_at: new Date() }).where(eq(users.id, user.id));
     res.clearCookie('sso_state');
     res.clearCookie('sso_nonce');
@@ -264,7 +323,7 @@ router.get('/setup-status', asyncHandler(async (_req, res) => {
 // ── Local auth (register / login / me / logout) ───────────────────────────
 
 // POST /api/auth/register
-router.post('/register', asyncHandler(async (req, res) => {
+router.post('/register', registerLimiter, asyncHandler(async (req, res) => {
   const { email, password, name } = req.body || {};
   if (!email || !password || !name) {
     res.status(400).json({ error: 'Email, password, and name are required' });
@@ -316,10 +375,8 @@ router.post('/register', asyncHandler(async (req, res) => {
         ],
       },
     {
-      name: 'reader', description: 'Can approve Human-in-the-Loop requests', is_system: true,
-      permissions: [
-        'execution:approve',
-      ],
+      name: 'reader', description: 'Read-only access for regular users', is_system: true,
+      permissions: [],
     },
     ];
     await db.insert(roles).values(defaultRoles);
@@ -345,11 +402,7 @@ router.post('/register', asyncHandler(async (req, res) => {
   );
 
   // Set httpOnly cookie
-  res.cookie('token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+  res.cookie('token', token, tokenCookieOptions(req));
 
   await db.update(users).set({ last_login_at: new Date() }).where(eq(users.id, user.id));
 
@@ -359,7 +412,7 @@ router.post('/register', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/auth/login
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     res.status(400).json({ error: 'Email and password are required' });
@@ -397,18 +450,15 @@ router.post('/login', asyncHandler(async (req, res) => {
   );
 
   // Set httpOnly cookie
-  res.cookie('token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  res.cookie('token', token, tokenCookieOptions(req));
 
   // Update last_login
   await db.update(users).set({ last_login_at: new Date() }).where(eq(users.id, user.id));
 
+  // The JWT is delivered exclusively via the httpOnly cookie; it is not
+  // echoed in the response body.
   res.json({
     user: { id: user.id, email: user.email, name: user.name, role: roleName, permissions },
-    token,
   });
 }));
 

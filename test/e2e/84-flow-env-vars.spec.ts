@@ -44,7 +44,7 @@ test.describe('Flow env vars and secret types', () => {
     const updateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
       data: { envVars: [{ name: 'FLOW_TOKEN', value: 'flow-val', type: 'static' }] },
     });
-    if (!updateRes.ok()) test.skip(true, 'Flow env_vars column not yet available');
+    expect(updateRes.ok()).toBe(true);
 
     await page.goto(`/flows/${flow.id}/edit`);
     await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
@@ -364,7 +364,7 @@ test.describe('Flow env vars and secret types', () => {
   // ═══════════════════════════════════════════════════════════════
 
   test('secret type toggle switches between Core and CyberArk in Flow Settings', async ({ page, request }) => {
-    const flowRes = await request.post(`${API_URL}/flows`, { data: { name: uniqueFlowName('Secret-Type-Toggle') } });
+    const flowRes = await createFlow(request, { name: uniqueFlowName('Secret-Type-Toggle') });
     expect(flowRes.ok()).toBe(true);
     const flow = await flowRes.json();
     cleanupFlowIds.push(flow.id);
@@ -399,5 +399,221 @@ test.describe('Flow env vars and secret types', () => {
     await page.waitForTimeout(300);
     await expect(coreBtn).toHaveClass(/bg-primary/);
     await expect(page.getByTestId('flow-secret-value')).toBeVisible();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Flow-scoped secret runtime resolution (documented) ───────
+  // ═══════════════════════════════════════════════════════════════
+  // Flow-scoped secrets (scope: flow) CANNOT be resolved at runtime:
+  //  - {{secrets.core.flow:NAME}} templates resolve to EMPTY — the sync
+  //    regex in resolveTemplateSync (engine.ts) handles group:/app: but
+  //    not flow:, so the captured name keeps the "flow:" prefix and the
+  //    lookup misses.
+  //  - core_secret flow env vars resolve against app scope only, so a
+  //    flow-scoped reference is dropped from the sandbox entirely.
+  // These tests pin that behavior so a fix is caught explicitly.
+
+  test('flow-scoped secret does not resolve via {{secrets.core.flow:NAME}} — template replaced with empty (documented gap)', async ({ request }) => {
+    test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
+
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: { name: uniqueFlowName('FlowSecret-Resolve') },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    // Create a FLOW-scoped secret (scope: flow) bound to this flow
+    const secRes = await request.post(`${API_URL}/secrets`, {
+      data: { name: 'FLOW_ONLY_SECRET', value: 'flow-secret-value-99', scope: 'flow', scopeId: flow.id },
+    });
+    expect(secRes.status()).toBe(201);
+    const secret = await secRes.json();
+    cleanupSecretIds.push(secret.id);
+
+    // Add an LLM node referencing the flow-scoped secret template
+    const updateRes = await request.put(`${API_URL}/flows/${flow.id}`, {
+      data: {
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'l1', type: 'llm-agent', position: { x: 300, y: 0 }, data: { label: 'Assistant', type: 'llm-agent', config: { endpointId: mockEndpointId, model: 'mock-gpt-4', systemPrompt: 'ECHO_SYSTEM_PROMPT\nThe flow secret is: {{secrets.core.flow:FLOW_ONLY_SECRET}}', temperature: 0.7, maxTokens: 1024, responseFormat: 'text' } } },
+          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Assistant.content'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'l1', targetHandle: 'input-0' },
+          { id: 'e2', source: 'l1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        ],
+      },
+    });
+    expect(updateRes.ok()).toBe(true);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+
+    const output = completed?.data?.output || {};
+    const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+    // Template is replaced with an empty string — the secret VALUE never
+    // appears, but neither does the value resolve (current app behavior)
+    expect(outputStr).toContain('The flow secret is:');
+    expect(outputStr).not.toContain('flow-secret-value-99');
+    expect(outputStr).not.toContain('{{secrets.core.flow:FLOW_ONLY_SECRET}}');
+  });
+
+  test('core_secret flow env var referencing a flow-scoped secret is dropped from the sandbox (app-scope runtime lookup)', async ({ request }) => {
+    const flowRes = await request.post(`${API_URL}/flows`, {
+      data: {
+        name: uniqueFlowName('FlowSecret-EnvVar'),
+        envVars: [{ name: 'FLOW_SECRET_VAR', value: 'FLOW_ONLY_SECRET', type: 'core_secret' }],
+        nodes: [
+          { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'c1', type: 'code', position: { x: 300, y: 0 }, data: { label: 'Inspector', type: 'code', config: { code: 'return { value: process.env.FLOW_SECRET_VAR || null };' } } },
+          { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: ['Inspector.value'] } } },
+        ],
+        edges: [
+          { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'c1', targetHandle: 'input-0' },
+          { id: 'e2', source: 'c1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        ],
+      },
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    // Create the flow-scoped secret this env var references
+    const secRes = await request.post(`${API_URL}/secrets`, {
+      data: { name: 'FLOW_ONLY_SECRET', value: 'flow-secret-value-99', scope: 'flow', scopeId: flow.id },
+    });
+    expect(secRes.status()).toBe(201);
+    const secret = await secRes.json();
+    cleanupSecretIds.push(secret.id);
+
+    const { debugExecute } = await import('./helpers/stream');
+    const events = await debugExecute(flow.id, { message: 'test' }, cookie);
+
+    const completed = events.find(e => e.type === 'execution.completed');
+    expect(completed).toBeDefined();
+    const output = completed?.data?.output || {};
+
+    const c1out = output?.c1 || output?.inspector || {};
+    // Runtime core_secret lookup defaults to app scope — the flow-scoped
+    // secret is not found, so the var is dropped from the sandbox env.
+    // The secret VALUE must never leak in its place.
+    expect(c1out.value).toBeNull();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Edit / delete flow env vars via Flow Settings modal ──────
+  // ═══════════════════════════════════════════════════════════════
+
+  test('edit a flow env var value via the modal — persists when settings are saved', async ({ page, request }) => {
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('Env-Edit'),
+      envVars: [{ name: 'FLOW_EDIT_VAR', value: 'old-value', type: 'static' }],
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+    // The env var row: name span → name wrapper → row (flex justify-between)
+    const row = page.getByText('FLOW_EDIT_VAR', { exact: true }).locator('..').locator('..');
+    await expect(row).toBeVisible({ timeout: 5000 });
+
+    // Edit via the row's edit button (window.prompt)
+    page.once('dialog', dialog => dialog.accept('new-value'));
+    await row.getByRole('button').first().click();
+
+    // The modal edit only updates local state — it persists when any
+    // settings field triggers a save (flow_context here)
+    await page.getByPlaceholder('Context for this specific flow...').fill('edit-save-trigger');
+    await page.waitForTimeout(1500);
+
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.ok()).toBe(true);
+    const updated = await getRes.json();
+    const envVars = updated.env_vars || [];
+    expect(envVars.find((v: any) => v.name === 'FLOW_EDIT_VAR')?.value).toBe('new-value');
+  });
+
+  test('delete a flow env var via the modal — persists', async ({ page, request }) => {
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('Env-Delete'),
+      envVars: [{ name: 'FLOW_DEL_VAR', value: 'delete-me', type: 'static' }],
+    });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+    const row = page.getByText('FLOW_DEL_VAR', { exact: true }).locator('..').locator('..');
+    await expect(row).toBeVisible({ timeout: 5000 });
+
+    await row.getByRole('button').last().click();
+    await expect(page.getByText('FLOW_DEL_VAR', { exact: true })).toHaveCount(0, { timeout: 5000 });
+    await page.waitForTimeout(1500);
+
+    // Persisted to the backend immediately
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.ok()).toBe(true);
+    const updated = await getRes.json();
+    const envVars = updated.env_vars || [];
+    expect(envVars.find((v: any) => v.name === 'FLOW_DEL_VAR')).toBeUndefined();
+
+    // Still gone after a reload
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('FLOW_DEL_VAR', { exact: true })).toHaveCount(0, { timeout: 5000 });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // ─── Duplicate env var names ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // The modal's add handler does not validate uniqueness — duplicates are
+  // allowed and stored. Pin that behavior (no inline error, both rows kept).
+
+  test('duplicate flow env var names are accepted — no dedupe validation, both rows persist', async ({ page, request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('Env-Dupe') });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    cleanupFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('flow-settings-btn').click();
+    await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+    const addRow = page.getByPlaceholder('Variable name').locator('..');
+    await page.getByPlaceholder('Variable name').fill('DUP_VAR');
+    await addRow.getByPlaceholder('Value').fill('first');
+    await addRow.locator('button').click();
+    await page.waitForTimeout(500);
+
+    await page.getByPlaceholder('Variable name').fill('DUP_VAR');
+    await addRow.getByPlaceholder('Value').fill('second');
+    await addRow.locator('button').click();
+    await page.waitForTimeout(500);
+
+    // Both rows show the same name — no inline error
+    await expect(page.getByText('DUP_VAR', { exact: true })).toHaveCount(2, { timeout: 5000 });
+
+    // Both entries persist
+    const getRes = await request.get(`${API_URL}/flows/${flow.id}`);
+    expect(getRes.ok()).toBe(true);
+    const updated = await getRes.json();
+    const dupes = (updated.env_vars || []).filter((v: any) => v.name === 'DUP_VAR');
+    expect(dupes).toHaveLength(2);
   });
 });

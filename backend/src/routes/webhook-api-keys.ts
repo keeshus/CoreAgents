@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../db/connection.js';
-import { apiKeys, apiDeployments } from '../db/schema.js';
+import { flows, apiKeys, apiDeployments } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { resolveFlowAccess } from './webhook-security.js';
 
 const router = Router();
 
@@ -30,14 +31,27 @@ function generateSlug(name: string): string {
     .slice(0, 63);
 }
 
+async function loadFlow(flowId: string): Promise<{ id: string; group_id: string | null } | undefined> {
+  const [flow] = await db.select({ id: flows.id, group_id: flows.group_id }).from(flows).where(eq(flows.id, flowId)).limit(1);
+  return flow;
+}
+
 // POST /api/flows/:flowId/keys/renew — renew personal API key
 router.post(
   '/flows/:flowId/keys/renew',
   requirePermission('flow:edit'),
   asyncHandler(async (req, res) => {
     const flowId = asStr(req.params.flowId);
-    const [flow] = await db.select({ id: apiDeployments.flow_id }).from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1)
-    if (!flow) { res.status(404).json({ error: 'Flow not found or not deployed' }); return; }
+    const flow = await loadFlow(flowId);
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const accessError = await resolveFlowAccess(req, flow);
+    if ('status' in accessError) {
+      res.status(accessError.status).json({ error: accessError.error });
+      return;
+    }
+
+    const [deployment] = await db.select({ id: apiDeployments.flow_id }).from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1)
+    if (!deployment) { res.status(404).json({ error: 'Flow not found or not deployed' }); return; }
 
     const { raw, hash, prefix } = generateApiKey();
 
@@ -61,6 +75,14 @@ router.delete(
   requirePermission('flow:edit'),
   asyncHandler(async (req, res) => {
     const flowId = asStr(req.params.flowId);
+    const flow = await loadFlow(flowId);
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const accessError = await resolveFlowAccess(req, flow);
+    if ('status' in accessError) {
+      res.status(accessError.status).json({ error: accessError.error });
+      return;
+    }
+
     await db.update(apiKeys).set({ enabled: false })
       .where(and(eq(apiKeys.flow_id, flowId), eq(apiKeys.user_id, req.user!.userId)));
     res.status(204).end();
@@ -86,6 +108,14 @@ router.get(
   requirePermission('flow:edit'),
   asyncHandler(async (req, res) => {
     const flowId = asStr(req.params.flowId);
+    const flow = await loadFlow(flowId);
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const accessError = await resolveFlowAccess(req, flow);
+    if ('status' in accessError) {
+      res.status(accessError.status).json({ error: accessError.error });
+      return;
+    }
+
     const [deployment] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1)
     if (!deployment) {
       res.json({ pathSlug: '', rateLimit: 0, summary: '' });
@@ -103,9 +133,40 @@ router.put(
     const flowId = asStr(req.params.flowId);
     const { pathSlug, rateLimit, summary } = req.body;
 
-    const slug = pathSlug || generateSlug(req.body.name || flowId);
+    const requestedSlug = asStr(pathSlug);
+    const slug = requestedSlug || generateSlug(req.body.name || flowId);
+
+    const flow = await loadFlow(flowId);
+    if (!flow) { res.status(404).json({ error: 'Flow not found' }); return; }
+    const accessError = await resolveFlowAccess(req, flow);
+    if ('status' in accessError) {
+      res.status(accessError.status).json({ error: accessError.error });
+      return;
+    }
+
+    // Pre-check: another flow must not already use this path slug (409, not 500)
+    if (slug) {
+      const [slugConflict] = await db.select({ flow_id: apiDeployments.flow_id })
+        .from(apiDeployments)
+        .where(and(eq(apiDeployments.path_slug, slug), ne(apiDeployments.flow_id, flowId)))
+        .limit(1);
+      if (slugConflict) {
+        res.status(409).json({ error: 'Path slug already in use' });
+        return;
+      }
+    }
 
     const [existing] = await db.select().from(apiDeployments).where(eq(apiDeployments.flow_id, flowId)).limit(1)
+
+    // Changing the public path_slug of a group-scoped flow can hijack the
+    // group's endpoint — require group-admin (or global admin) for it
+    if (existing && requestedSlug && requestedSlug !== existing.path_slug) {
+      const slugAccess = await resolveFlowAccess(req, flow, true);
+      if ('status' in slugAccess) {
+        res.status(slugAccess.status).json({ error: slugAccess.error });
+        return;
+      }
+    }
 
     if (existing) {
       const [updated] = await db.update(apiDeployments)

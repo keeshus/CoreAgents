@@ -4,7 +4,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 
 const router = Router();
 
-const catalog: NodeCatalogEntry[] = [
+export const catalog: NodeCatalogEntry[] = [
   {
     type: 'trigger',
     label: 'Trigger',

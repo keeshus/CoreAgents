@@ -58,12 +58,33 @@ run_stack() {
 
   # Frontend has no Docker health check — wait until it actually serves HTTP
   echo "[Stack $STACK_ID] Waiting for frontend..."
-  for attempt in $(seq 1 60); do
+  FRONTEND_UP=0
+  for attempt in $(seq 1 120); do
     if curl -sf "http://localhost:${FRONTEND_PORT}" > /dev/null 2>&1; then
+      FRONTEND_UP=1
       break
     fi
-    sleep 1
+    sleep 2
   done
+
+  # Backend may still be booting — wait for its health endpoint too
+  echo "[Stack $STACK_ID] Waiting for backend health..."
+  BACKEND_UP=0
+  for attempt in $(seq 1 120); do
+    if curl -sf "http://localhost:${BACKEND_PORT}/api/health" > /dev/null 2>&1; then
+      BACKEND_UP=1
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$FRONTEND_UP" -ne 1 ] || [ "$BACKEND_UP" -ne 1 ]; then
+    echo "[Stack $STACK_ID] Services did not become ready (frontend=$FRONTEND_UP backend=$BACKEND_UP)"
+    docker compose -p "$PROJECT" -f docker-compose.e2e.stack.yml logs --tail 30 2>&1 | tail -40
+    docker compose -p "$PROJECT" -f docker-compose.e2e.stack.yml down -v --timeout 10 2>&1 | tail -1
+    return 1
+  fi
+  echo "[Stack $STACK_ID] Frontend + backend ready"
 
   local AUTH_FILE="e2e/.auth/user-s${STACK_ID}.json"
 

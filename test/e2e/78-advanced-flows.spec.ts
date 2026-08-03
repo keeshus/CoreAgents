@@ -115,6 +115,8 @@ test.describe('Advanced multi-node flows', () => {
 
     const paused = events.find(e => e.type === 'execution.paused');
     expect(paused).toBeDefined();
+    // The LLM returns "approve" → condition routes to the true branch → HITL 1 pauses
+    expect(paused!.data?.nodeId).toBe('h1');
 
     const stepIds = events.filter(e => e.type === 'step.started' || e.type === 'step.completed').map((e: any) => e.data?.nodeId || e.nodeId).filter(Boolean);
     expect(stepIds).toContain('t1');
@@ -122,6 +124,64 @@ test.describe('Advanced multi-node flows', () => {
     expect(stepIds).toContain('c1');
     expect(stepIds).toContain('b1');
     expect(stepIds).not.toContain('ft1');
+  });
+
+  // ─── Condition false branch ─────────────────────────────────────
+
+  test('condition routes to the FALSE branch when the condition does not match', async ({ request }) => {
+    // Mirror of the big flow's condition config, but driven by flow input so the
+    // false path is reachable (the mock LLM always answers "approve").
+    const name = uniqueFlowName('Cond-False-Branch');
+    const res = await createFlow(request, {
+      name,
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 0, y: 0 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'b1', type: 'condition', position: { x: 300, y: 0 }, data: { label: 'Route', type: 'condition', config: { condition: 'input.trigger.decision === "approve"' } } },
+        { id: 'o1', type: 'output', position: { x: 600, y: -100 }, data: { label: 'Approved', type: 'output', config: { inputFields: ['Trigger.decision'] } } },
+        { id: 'o2', type: 'output', position: { x: 600, y: 100 }, data: { label: 'Rejected', type: 'output', config: { inputFields: ['Trigger.decision'] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'b1', targetHandle: 'input-0' },
+        { id: 'e2', source: 'b1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+        { id: 'e3', source: 'b1', sourceHandle: 'output-1', target: 'o2', targetHandle: 'input-0' },
+      ],
+    });
+    expect(res.ok()).toBe(true);
+    const flow = await res.json();
+    createdFlowIds.push(flow.id);
+
+    // Persisted run with a decision that does not match the condition
+    const { readSSE } = await import('./helpers/stream');
+    const { pollExecution } = await import('./helpers/stream');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (cookie) headers['Cookie'] = cookie;
+    const runRes = await fetch(`${API_URL}/flows/${flow.id}/execute`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ input: { decision: 'reject' }, _debug: false }),
+    });
+    expect(runRes.ok).toBe(true);
+    const events = await readSSE(runRes);
+    const started = events.find(e => e.type === 'execution.started');
+    expect(started).toBeDefined();
+    const executionId = started?.executionId as string;
+
+    const exec = await pollExecution(request, executionId, 30000);
+    expect(exec.status).toBe('completed');
+
+    // The condition evaluated to the false output label
+    const condStep = exec.steps?.find((s: any) => s.node_id === 'b1');
+    expect(condStep).toBeDefined();
+    expect(condStep.status).toBe('completed');
+    expect(condStep.output?.label).toBe('false');
+
+    // False-path output node executed and carried the input; true-path node never ran
+    const falseStep = exec.steps?.find((s: any) => s.node_id === 'o2');
+    expect(falseStep).toBeDefined();
+    expect(falseStep.status).toBe('completed');
+    const trueStep = exec.steps?.find((s: any) => s.node_id === 'o1');
+    expect(trueStep).toBeUndefined();
+    expect(JSON.stringify(exec.output)).toContain('reject');
   });
 
   // ─── HITL output routing: approve → forward path ─────────────────
@@ -216,7 +276,7 @@ test.describe('Advanced multi-node flows', () => {
 
   // ─── Persisted: dual HITL + subflow ──────────────────────────────
 
-  test('persisted: dual HITL approvals with subflow enrichment', async ({ page, request }) => {
+  test('persisted: dual-HITL big flow runs end-to-end to completed via API approval', async ({ page, request }) => {
     test.skip(!mockEndpointId, 'Mock LLM endpoint not available');
 
     const subflow = await createEnrichSubflow(request);
@@ -253,7 +313,21 @@ test.describe('Advanced multi-node flows', () => {
 
     const { executeUntilPaused, pollExecution } = await import('./helpers/stream');
 
-    // Pause at HITL 1 → approve → continue to Subflow → HITL 2
+    const waitForStatus = async (executionId: string, status: string, timeoutMs = 30000): Promise<any> => {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const res = await request.get(`${API_URL}/executions/${executionId}`);
+        const exec = await res.json();
+        if (exec.status === status) return exec;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      throw new Error(`Execution ${executionId} did not reach status "${status}" within ${timeoutMs}ms`);
+    };
+
+    const parsePending = (exec: any): any[] => Array.isArray(exec.pending_hitls) ? exec.pending_hitls : JSON.parse(exec.pending_hitls || '[]');
+
+    // Pause at HITL 1 → approve → the flow must pause again at HITL 2 (strict:
+    // the second HITL must NOT be auto-approved by the first approval)
     let { executionId } = await executeUntilPaused(flow.id, { message: 'test' }, cookie);
     expect(executionId).toBeTruthy();
 
@@ -263,34 +337,44 @@ test.describe('Advanced multi-node flows', () => {
     });
     expect(approveRes1.ok).toBe(true);
 
-    // Wait and check if execution is awaiting HITL 2 or is already completed
-    let waited = 0;
-    let execAfter = null;
-    while (waited < 25) {
-      await new Promise(r => setTimeout(r, 1000));
-      waited++;
-      const r2 = await fetch(`${API_URL}/executions/${executionId}`, { headers: { Cookie: cookie || '' } });
-      if (r2.ok) {
-        execAfter = await r2.json();
-        if (execAfter.status === 'awaiting_approval') break;
-        if (['completed', 'failed'].includes(execAfter.status)) break;
-      }
-    }
+    // The first approval must leave the execution awaiting the SECOND HITL
+    const execAfterFirst = await waitForStatus(executionId, 'awaiting_approval');
+    const pendingAfterFirst = parsePending(execAfterFirst);
+    expect(pendingAfterFirst).toHaveLength(1);
+    expect(pendingAfterFirst[0]?.nodeId).toBe('h2');
+    expect(pendingAfterFirst[0]?.prompt).toBe('Final approval?');
 
-    if (!execAfter || execAfter.status === 'completed') {
-      // Single HITL flow completed — this is valid
-      console.log(`Execution completed after first approval: ${execAfter?.status}`);
-      expect(execAfter?.status).toBe('completed');
-      return;
-    }
-
+    // Approve the second HITL → the flow completes
     const approveRes2 = await fetch(`${API_URL}/executions/${executionId}/approve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
-      body: JSON.stringify({ decision: 'approved' }),
+      body: JSON.stringify({ decision: 'approved', hitlNodeId: 'h2' }),
     });
     expect(approveRes2.ok).toBe(true);
 
     const exec = await pollExecution(request, executionId, 30000);
     expect(exec.status).toBe('completed');
+
+    // No HITL left pending
+    const pending = parsePending(exec);
+    expect(pending).toHaveLength(0);
+
+    // The subflow executed (its steps are recorded with the subflow label prefix)
+    const subflowSteps = exec.steps?.filter((s: any) => String(s.node_id || '').startsWith('enricher:'));
+    expect(subflowSteps.length).toBeGreaterThan(0);
+    expect(subflowSteps.every((s: any) => s.status === 'completed')).toBe(true);
+
+    // Both HITL nodes completed with the approved decision
+    const h1Steps = exec.steps?.filter((s: any) => s.node_id === 'h1');
+    const h2Steps = exec.steps?.filter((s: any) => s.node_id === 'h2');
+    expect(h1Steps.length).toBeGreaterThan(0);
+    expect(h1Steps.some((s: any) => s.status === 'completed')).toBe(true);
+    expect(h1Steps.some((s: any) => s.output?.decision === 'approved')).toBe(true);
+    expect(h2Steps.length).toBeGreaterThan(0);
+    expect(h2Steps.some((s: any) => s.status === 'completed')).toBe(true);
+    expect(h2Steps.some((s: any) => s.output?.decision === 'approved')).toBe(true);
+
+    // Subflow enrichment data reached the final output
+    const outStr = typeof exec.output === 'string' ? exec.output : JSON.stringify(exec.output);
+    expect(outStr).toContain('enriched');
   });
 });

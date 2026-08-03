@@ -23,10 +23,13 @@ vi.mock('../db/connection.js', () => ({ db: { select: vi.fn(), insert: vi.fn(), 
 vi.mock('core-agents-shared', () => ({
   apiDeployments: { _: { name: 'api_deployments' } },
   apiKeys: { _: { name: 'api_keys' } },
+  flows: { _: { name: 'flows' } },
+  groupMembers: { _: { name: 'group_members' } },
 }));
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn((a: any, b: any) => ({ op: 'eq', a, b })),
+  ne: vi.fn((a: any, b: any) => ({ op: 'ne', a, b })),
   and: vi.fn((...args: any[]) => ({ op: 'and', args })),
 }));
 
@@ -61,7 +64,17 @@ function mockChain(data?: any) {
     onConflictDoUpdate: vi.fn(() => chain),
     onConflictDoNothing: vi.fn(() => chain),
   };
+  if (data !== undefined) {
+    chain.then = (onfulfilled: any) => {
+      const result = onfulfilled(data);
+      return result instanceof Promise ? result : Promise.resolve(result);
+    };
+  }
   return chain;
+}
+
+function flowRow(groupId: string | null = null): any[] {
+  return [{ id: 'flow-1', group_id: groupId }];
 }
 
 describe('webhook-api-keys routes', () => {
@@ -90,13 +103,13 @@ describe('webhook-api-keys routes', () => {
   describe('POST /flows/:flowId/keys/renew', () => {
     it('renews key when deployment exists', async () => {
       req.params = { flowId: 'flow-1' };
-      const chain = mockChain([{ flow_id: 'flow-1' }]);
-      db.select.mockReturnValue(chain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([{ flow_id: 'flow-1' }]));
       db.insert.mockReturnValue(mockChain());
 
       await callHandler(getHandler(router, 'post', '/flows/:flowId/keys/renew'));
 
-      expect(db.select).toHaveBeenCalledTimes(1);
       expect(db.insert).toHaveBeenCalledTimes(1);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ prefix: expect.stringMatching(/^wh_/), rawKey: expect.stringMatching(/^wh_/) }),
@@ -105,13 +118,36 @@ describe('webhook-api-keys routes', () => {
 
     it('returns 404 when no deployment exists', async () => {
       req.params = { flowId: 'flow-1' };
-      const chain = mockChain([]);
-      db.select.mockReturnValue(chain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([]));
 
       await callHandler(getHandler(router, 'post', '/flows/:flowId/keys/renew'));
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Flow not found or not deployed' });
+    });
+
+    it('returns 404 when flow does not exist', async () => {
+      req.params = { flowId: 'flow-1' };
+      db.select.mockReturnValue(mockChain([]));
+
+      await callHandler(getHandler(router, 'post', '/flows/:flowId/keys/renew'));
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Flow not found' });
+    });
+
+    it('returns 403 when user is not a member of the flow group', async () => {
+      req.params = { flowId: 'flow-1' };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow('group-1')))
+        .mockReturnValueOnce(mockChain([])); // no membership
+
+      await callHandler(getHandler(router, 'post', '/flows/:flowId/keys/renew'));
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'You are not a member of this flow\'s group' });
     });
 
     it('returns 403 without flow:edit permission', async () => {
@@ -129,6 +165,7 @@ describe('webhook-api-keys routes', () => {
   describe('DELETE /flows/:flowId/keys/revoke', () => {
     it('revokes personal key', async () => {
       req.params = { flowId: 'flow-1' };
+      db.select.mockReturnValueOnce(mockChain(flowRow()));
       const chain = mockChain();
       db.update.mockReturnValue(chain);
 
@@ -177,8 +214,9 @@ describe('webhook-api-keys routes', () => {
   describe('GET /flows/:flowId/deployment', () => {
     it('returns deployment config', async () => {
       req.params = { flowId: 'flow-1' };
-      const chain = mockChain([{ path_slug: 'my-flow', rate_limit: 10, summary: 'Test' }]);
-      db.select.mockReturnValue(chain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([{ path_slug: 'my-flow', rate_limit: 10, summary: 'Test' }]));
 
       await callHandler(getHandler(router, 'get', '/flows/:flowId/deployment'));
 
@@ -187,12 +225,24 @@ describe('webhook-api-keys routes', () => {
 
     it('returns defaults when no deployment exists', async () => {
       req.params = { flowId: 'flow-1' };
-      const chain = mockChain([]);
-      db.select.mockReturnValue(chain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([]));
 
       await callHandler(getHandler(router, 'get', '/flows/:flowId/deployment'));
 
       expect(res.json).toHaveBeenCalledWith({ pathSlug: '', rateLimit: 0, summary: '' });
+    });
+
+    it('returns 403 for non-members of the flow group', async () => {
+      req.params = { flowId: 'flow-1' };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow('group-1')))
+        .mockReturnValueOnce(mockChain([]));
+
+      await callHandler(getHandler(router, 'get', '/flows/:flowId/deployment'));
+
+      expect(res.status).toHaveBeenCalledWith(403);
     });
   });
 
@@ -200,8 +250,10 @@ describe('webhook-api-keys routes', () => {
     it('creates deployment when none exists', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = { pathSlug: 'my-flow', rateLimit: 5, summary: 'Test flow' };
-      const selectChain = mockChain([]);
-      db.select.mockReturnValue(selectChain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
       const insertChain = mockChain();
       insertChain.returning.mockResolvedValue([{ path_slug: 'my-flow', rate_limit: 5, summary: 'Test flow' }]);
       db.insert.mockReturnValue(insertChain);
@@ -216,8 +268,11 @@ describe('webhook-api-keys routes', () => {
     it('updates existing deployment', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = { pathSlug: 'updated-slug', rateLimit: 20, summary: 'Updated' };
-      const selectChain = mockChain([{ path_slug: 'old', rate_limit: 5, summary: 'Old' }]);
-      db.select.mockReturnValue(selectChain);
+      // loadFlow + slug conflict check + existing deployment lookup
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([]))
+        .mockReturnValueOnce(mockChain([{ path_slug: 'old', rate_limit: 5, summary: 'Old' }]));
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ path_slug: 'updated-slug', rate_limit: 20, summary: 'Updated' }]);
       db.update.mockReturnValue(updateChain);
@@ -232,8 +287,10 @@ describe('webhook-api-keys routes', () => {
     it('auto-generates slug from request body name when none provided', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = { name: 'My Cool Flow' };
-      const selectChain = mockChain([]);
-      db.select.mockReturnValue(selectChain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
       const insertChain = mockChain();
       insertChain.returning.mockResolvedValue([{ path_slug: 'my-cool-flow', rate_limit: 0, summary: '' }]);
       db.insert.mockReturnValue(insertChain);
@@ -249,8 +306,11 @@ describe('webhook-api-keys routes', () => {
       req.params = { flowId: 'flow-1' };
       req.body = { rateLimit: 20 }; // only rateLimit provided, no pathSlug or name
 
-      const selectChain = mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old summary' }]);
-      db.select.mockReturnValue(selectChain);
+      // loadFlow + slug conflict check (slug falls back to flowId) + existing deployment
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([]))
+        .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old summary' }]));
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ path_slug: 'flow-1', rate_limit: 20, summary: 'Old summary' }]);
       db.update.mockReturnValue(updateChain);
@@ -262,12 +322,46 @@ describe('webhook-api-keys routes', () => {
       expect(res.json).toHaveBeenCalledWith({ pathSlug: 'flow-1', rateLimit: 20, summary: 'Old summary' });
     });
 
+    it('returns 409 when path slug is already used by another flow', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { pathSlug: 'taken-slug' };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([{ flow_id: 'flow-2' }])); // conflict found
+      db.select.mockReturnValue(mockChain([]));
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Path slug already in use' });
+      expect(db.insert).not.toHaveBeenCalled();
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('allows a flow to keep its own path slug (no false conflict)', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { pathSlug: 'my-flow', rateLimit: 5, summary: 'Test flow' };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // conflict check (no conflict)
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
+      const insertChain = mockChain();
+      insertChain.returning.mockResolvedValue([{ path_slug: 'my-flow', rate_limit: 5, summary: 'Test flow' }]);
+      db.insert.mockReturnValue(insertChain);
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
     it('falls back to flowId for slug when neither pathSlug nor name is provided (new deployment)', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = {}; // no pathSlug, no name
 
-      const selectChain = mockChain([]);
-      db.select.mockReturnValue(selectChain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
       const insertChain = mockChain();
       insertChain.returning.mockResolvedValue([{ path_slug: 'flow-1', rate_limit: 0, summary: '' }]);
       db.insert.mockReturnValue(insertChain);
@@ -277,6 +371,73 @@ describe('webhook-api-keys routes', () => {
       expect(db.insert).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith({ pathSlug: 'flow-1', rateLimit: 0, summary: '' });
+    });
+
+    it('blocks slug changes by non-members of the flow group', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { pathSlug: 'hijacked-slug' };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow('group-1'))) // flow
+        .mockReturnValueOnce(mockChain([])); // no membership
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('blocks slug changes by group members (non-admin) on grouped flows', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { pathSlug: 'new-slug' };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow('group-1'))) // flow
+        .mockReturnValueOnce(mockChain([{ role: 'member' }])) // membership
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old' }])) // existing deployment
+        .mockReturnValueOnce(mockChain([{ role: 'member' }])); // group-admin check for slug change
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Only group admins can change the deployment slug' });
+      expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('allows slug changes by group admins', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { pathSlug: 'new-slug' };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow('group-1'))) // flow
+        .mockReturnValueOnce(mockChain([{ role: 'admin' }])) // membership
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old' }])) // existing deployment
+        .mockReturnValueOnce(mockChain([{ role: 'admin' }])); // group-admin check for slug change
+      const updateChain = mockChain();
+      updateChain.returning.mockResolvedValue([{ path_slug: 'new-slug', rate_limit: 5, summary: 'Old' }]);
+      db.update.mockReturnValue(updateChain);
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(db.update).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({ pathSlug: 'new-slug', rateLimit: 5, summary: 'Old' });
+    });
+
+    it('allows rate limit updates by group members without touching the slug', async () => {
+      req.params = { flowId: 'flow-1' };
+      req.body = { rateLimit: 99 };
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow('group-1'))) // flow
+        .mockReturnValueOnce(mockChain([{ role: 'member' }])) // membership
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old' }])); // existing deployment
+      const updateChain = mockChain();
+      updateChain.returning.mockResolvedValue([{ path_slug: 'old-slug', rate_limit: 99, summary: 'Old' }]);
+      db.update.mockReturnValue(updateChain);
+
+      await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
+
+      expect(db.update).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({ pathSlug: 'old-slug', rateLimit: 99, summary: 'Old' });
     });
   });
 
