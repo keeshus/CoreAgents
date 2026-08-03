@@ -52,15 +52,6 @@ router.post(
       return;
     }
 
-    // Per-IP throttle BEFORE authentication — unauthenticated spam must not
-    // burn DB queries at full speed (see webhook-security.ts).
-    const ipRetryAfter = enforceWebhookIpRateLimit(req.ip || '');
-    if (ipRetryAfter !== null) {
-      res.setHeader('Retry-After', String(ipRetryAfter));
-      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
-      return;
-    }
-
     // Verify credentials (API key or webhook secret) — deployments without
     // either configured are never publicly triggerable
     const authError = await authenticateWebhookRequest(req, flowId, flow);

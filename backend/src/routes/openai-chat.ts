@@ -68,11 +68,7 @@ async function authenticateApiKey(req: Request, res: Response, next: NextFunctio
   }
 
   // Enforce per-API-key rate limit (deployment rate_limit is requests/minute,
-<<<<<<< HEAD
   // 0 falls back to the CHAT_RATE_LIMIT_MAX default).
-=======
-  // 0 falls back to CHAT_RATE_LIMIT_MAX)
->>>>>>> refs/rewritten/merge-security-hardening-into-feat-e2e-full-coverage
   const retryAfter = enforceChatRateLimit(keyRecord.id, deployment.rate_limit || 0);
   if (retryAfter !== null) {
     res.setHeader('Retry-After', String(retryAfter));

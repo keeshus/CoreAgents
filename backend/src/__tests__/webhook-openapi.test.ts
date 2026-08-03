@@ -104,8 +104,6 @@ describe('webhook-openapi routes', () => {
     db.select.mockReturnValue(mockChain([]));
     db.insert.mockReturnValue(mockChain());
     db.update.mockReturnValue(mockChain());
-    const { resetRateLimiters } = await import('../routes/webhook-security.js');
-    resetRateLimiters();
     const mod = await import('../routes/webhook-openapi.js');
     router = mod.default;
     req = {
@@ -356,13 +354,6 @@ describe('webhook-openapi routes', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Flow not found' });
     });
 
-<<<<<<< HEAD
-    it('returns 429 with Retry-After once the per-deployment rate limit is exceeded', async () => {
-      req.params = { slug: 'rate-limited-429' };
-      req.headers = { authorization: 'Bearer wh_testkey' };
-      req.body = { amount: 100, currency: 'USD' };
-
-=======
     it('authenticates with the X-Webhook-Secret header', async () => {
       req.params = { slug: 'my-flow' };
       req.headers = { 'x-webhook-secret': 'secret123' };
@@ -455,24 +446,15 @@ describe('webhook-openapi routes', () => {
       );
     });
 
-    it('returns 429 with Retry-After when the deployment rate limit is exceeded', async () => {
-      req.params = { slug: 'rl-flow' };
+    it('returns 429 with Retry-After once the per-deployment rate limit is exceeded', async () => {
+      req.params = { slug: 'rate-limited-429' };
       req.headers = { authorization: 'Bearer wh_testkey' };
       req.body = { amount: 100, currency: 'USD' };
 
-      const deployChain = mockChain([{ flow_id: 'flow-1', path_slug: 'rl-flow', rate_limit: 1 }]);
-      const keyChain = mockChain([{ id: 'key-1', flow_id: 'flow-1', enabled: true }]);
-      const flowChain = mockChain([makeWebhookFlow()]);
-      db.select
-        .mockReturnValueOnce(deployChain)
-        .mockReturnValueOnce(keyChain)
-        .mockReturnValueOnce(flowChain);
->>>>>>> refs/rewritten/merge-security-hardening-into-feat-e2e-full-coverage
       const execChain = mockChain();
       execChain.returning.mockResolvedValue([{ id: 'exec-1' }]);
       db.insert.mockReturnValue(execChain);
 
-<<<<<<< HEAD
       const run = async () => {
         db.select
           .mockReset()
@@ -500,24 +482,6 @@ describe('webhook-openapi routes', () => {
       // The 429 path does not consume the flow-lookup mock; drain the queue so
       // leftover once-implementations cannot leak into later tests.
       db.select.mockReset();
-=======
-      // First call passes and enqueues
-      await (async () => {
-        const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
-      })();
-
-      // Second call within the window → 429 before any enqueue work
-      db.select
-        .mockReturnValueOnce(deployChain)
-        .mockReturnValueOnce(keyChain);
-      await (async () => {
-        const next = vi.fn(); getHandler(router, 'post', '/webhook/:slug')(req, res, next); await new Promise(r => setTimeout(r, 0)); if (next.mock.calls.length > 0) throw next.mock.calls[0][0];
-      })();
-
-      expect(res.status).toHaveBeenCalledWith(429);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Rate limit exceeded. Try again later.' });
-      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
->>>>>>> refs/rewritten/merge-security-hardening-into-feat-e2e-full-coverage
     });
   });
 

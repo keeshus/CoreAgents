@@ -251,8 +251,9 @@ describe('webhook-api-keys routes', () => {
       req.params = { flowId: 'flow-1' };
       req.body = { pathSlug: 'my-flow', rateLimit: 5, summary: 'Test flow' };
       db.select
-        .mockReturnValueOnce(mockChain(flowRow()))
-        .mockReturnValueOnce(mockChain([]));
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
       const insertChain = mockChain();
       insertChain.returning.mockResolvedValue([{ path_slug: 'my-flow', rate_limit: 5, summary: 'Test flow' }]);
       db.insert.mockReturnValue(insertChain);
@@ -267,16 +268,11 @@ describe('webhook-api-keys routes', () => {
     it('updates existing deployment', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = { pathSlug: 'updated-slug', rateLimit: 20, summary: 'Updated' };
-<<<<<<< HEAD
-      // First select = pathSlug conflict check (empty), second = existing deployment
-      db.select.mockReturnValueOnce(mockChain([]));
-      const selectChain = mockChain([{ path_slug: 'old', rate_limit: 5, summary: 'Old' }]);
-      db.select.mockReturnValueOnce(selectChain);
-=======
+      // loadFlow + slug conflict check + existing deployment lookup
       db.select
         .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([]))
         .mockReturnValueOnce(mockChain([{ path_slug: 'old', rate_limit: 5, summary: 'Old' }]));
->>>>>>> refs/rewritten/merge-security-hardening-into-feat-e2e-full-coverage
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ path_slug: 'updated-slug', rate_limit: 20, summary: 'Updated' }]);
       db.update.mockReturnValue(updateChain);
@@ -292,8 +288,9 @@ describe('webhook-api-keys routes', () => {
       req.params = { flowId: 'flow-1' };
       req.body = { name: 'My Cool Flow' };
       db.select
-        .mockReturnValueOnce(mockChain(flowRow()))
-        .mockReturnValueOnce(mockChain([]));
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
       const insertChain = mockChain();
       insertChain.returning.mockResolvedValue([{ path_slug: 'my-cool-flow', rate_limit: 0, summary: '' }]);
       db.insert.mockReturnValue(insertChain);
@@ -309,15 +306,11 @@ describe('webhook-api-keys routes', () => {
       req.params = { flowId: 'flow-1' };
       req.body = { rateLimit: 20 }; // only rateLimit provided, no pathSlug or name
 
-<<<<<<< HEAD
-      db.select.mockReturnValueOnce(mockChain([])); // pathSlug conflict check
-      const selectChain = mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old summary' }]);
-      db.select.mockReturnValueOnce(selectChain);
-=======
+      // loadFlow + slug conflict check (slug falls back to flowId) + existing deployment
       db.select
         .mockReturnValueOnce(mockChain(flowRow()))
+        .mockReturnValueOnce(mockChain([]))
         .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old summary' }]));
->>>>>>> refs/rewritten/merge-security-hardening-into-feat-e2e-full-coverage
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ path_slug: 'flow-1', rate_limit: 20, summary: 'Old summary' }]);
       db.update.mockReturnValue(updateChain);
@@ -332,8 +325,10 @@ describe('webhook-api-keys routes', () => {
     it('returns 409 when path slug is already used by another flow', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = { pathSlug: 'taken-slug' };
-      const conflictChain = mockChain([{ flow_id: 'flow-2' }]);
-      db.select.mockReturnValue(conflictChain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([{ flow_id: 'flow-2' }])); // conflict found
+      db.select.mockReturnValue(mockChain([]));
 
       await callHandler(getHandler(router, 'put', '/flows/:flowId/deployment'));
 
@@ -346,8 +341,10 @@ describe('webhook-api-keys routes', () => {
     it('allows a flow to keep its own path slug (no false conflict)', async () => {
       req.params = { flowId: 'flow-1' };
       req.body = { pathSlug: 'my-flow', rateLimit: 5, summary: 'Test flow' };
-      const selectChain = mockChain([]);
-      db.select.mockReturnValue(selectChain);
+      db.select
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // conflict check (no conflict)
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
       const insertChain = mockChain();
       insertChain.returning.mockResolvedValue([{ path_slug: 'my-flow', rate_limit: 5, summary: 'Test flow' }]);
       db.insert.mockReturnValue(insertChain);
@@ -362,8 +359,9 @@ describe('webhook-api-keys routes', () => {
       req.body = {}; // no pathSlug, no name
 
       db.select
-        .mockReturnValueOnce(mockChain(flowRow()))
-        .mockReturnValueOnce(mockChain([]));
+        .mockReturnValueOnce(mockChain(flowRow())) // loadFlow
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
+        .mockReturnValueOnce(mockChain([])); // no existing deployment
       const insertChain = mockChain();
       insertChain.returning.mockResolvedValue([{ path_slug: 'flow-1', rate_limit: 0, summary: '' }]);
       db.insert.mockReturnValue(insertChain);
@@ -394,6 +392,7 @@ describe('webhook-api-keys routes', () => {
       db.select
         .mockReturnValueOnce(mockChain(flowRow('group-1'))) // flow
         .mockReturnValueOnce(mockChain([{ role: 'member' }])) // membership
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
         .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old' }])) // existing deployment
         .mockReturnValueOnce(mockChain([{ role: 'member' }])); // group-admin check for slug change
 
@@ -410,6 +409,7 @@ describe('webhook-api-keys routes', () => {
       db.select
         .mockReturnValueOnce(mockChain(flowRow('group-1'))) // flow
         .mockReturnValueOnce(mockChain([{ role: 'admin' }])) // membership
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
         .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old' }])) // existing deployment
         .mockReturnValueOnce(mockChain([{ role: 'admin' }])); // group-admin check for slug change
       const updateChain = mockChain();
@@ -428,6 +428,7 @@ describe('webhook-api-keys routes', () => {
       db.select
         .mockReturnValueOnce(mockChain(flowRow('group-1'))) // flow
         .mockReturnValueOnce(mockChain([{ role: 'member' }])) // membership
+        .mockReturnValueOnce(mockChain([])) // slug conflict check
         .mockReturnValueOnce(mockChain([{ path_slug: 'old-slug', rate_limit: 5, summary: 'Old' }])); // existing deployment
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([{ path_slug: 'old-slug', rate_limit: 99, summary: 'Old' }]);
