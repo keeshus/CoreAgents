@@ -158,7 +158,7 @@ export default function GroupsSettingsPage() {
 
   const handleUpdateMemberRole = async (groupId: string, userId: string, role: string) => {
     try {
-      await fetch(`${API_URL}/admin/groups/${groupId}/members/${userId}/role`, {
+      await fetch(`${API_URL}/groups/${groupId}/members/${userId}/role`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ role }),

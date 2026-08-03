@@ -171,6 +171,57 @@ test.describe('Groups feature', () => {
     expect(detail.members.length).toBe(0);
   });
 
+  test('make group admin via the group settings UI', async ({ page, request }) => {
+    const groupName = `Member-Promote-${Date.now()}`;
+    const gRes = await request.post(`${API_URL}/groups`, {
+      data: { name: groupName },
+    });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    createdGroupIds.push(group.id);
+
+    const userName = `Promote-User-${Date.now()}`;
+    const userEmail = `promote-${Date.now()}@test.local`;
+
+    // Use fetch directly so the request fixture's admin cookie is preserved
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: userName, email: userEmail, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+
+    // Add the user as a member via the API (UI member-add is covered above)
+    const addRes = await request.post(`${API_URL}/groups/${group.id}/members`, {
+      data: { userId: regData.user.id },
+    });
+    expect(addRes.status()).toBe(201);
+
+    await page.goto('/settings/groups');
+    await expect(page.getByText(groupName)).toBeVisible({ timeout: 10000 });
+    await page.getByText(groupName).click();
+
+    // The member row shows the "Make group admin" button (admin_panel_settings icon)
+    const memberRow = page.locator('div.flex.items-center.justify-between.px-2').filter({ hasText: userName }).first();
+    await expect(memberRow).toBeVisible({ timeout: 5000 });
+    await memberRow
+      .locator('button')
+      .filter({ has: page.locator('span.material-symbols-outlined', { hasText: 'admin_panel_settings' }) })
+      .click();
+
+    // The "Admin" badge appears after promotion
+    await expect(page.getByText('Admin').first()).toBeVisible({ timeout: 5000 });
+
+    // Backend state matches: member now has role admin
+    const getRes = await request.get(`${API_URL}/groups/${group.id}`);
+    expect(getRes.status()).toBe(200);
+    const detail = await getRes.json();
+    const member = detail.members.find((m: any) => m.id === regData.user.id || m.userId === regData.user.id);
+    expect(member).toBeDefined();
+    expect(member.role).toBe('admin');
+  });
+
   test('user role can be updated via the users page role dropdown', async ({ page, request }) => {
     const userName = `Role-Change-User-${Date.now()}`;
     const userEmail = `rolechange-${Date.now()}@test.local`;

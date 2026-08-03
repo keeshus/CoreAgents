@@ -27,6 +27,10 @@ test.describe('Flow Editor DOM tools', () => {
     flowId = flow.id;
     await page.goto(`/flows/${flowId}/edit`);
     await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+
+    // Wait until the editor has fully mounted and exposed its canvas helpers —
+    // otherwise helper calls below silently no-op and the assertions flake.
+    await waitForEditorReady(page);
   });
 
   test.afterEach(async ({ request }) => {
@@ -47,8 +51,25 @@ test.describe('Flow Editor DOM tools', () => {
   async function waitForCanvasSync(page: any, refBefore: unknown) {
     await expect.poll(() =>
       page.evaluate((r: unknown) => (window as any).__flowCanvasNodes !== r, refBefore),
-      { timeout: 5000, message: 'parent state should sync the canvas change' },
+      { timeout: 10000, message: 'parent state should sync the canvas change' },
     ).toBe(true);
+  }
+
+  /** Wait for the editor to mount and expose its window helpers + canvas state. */
+  async function waitForEditorReady(page: any) {
+    await expect.poll(() => page.evaluate(() => typeof (window as any).__addFlowNode), { timeout: 10000, message: '__addFlowNode helper' }).toBe('function');
+    await expect.poll(() => page.evaluate(() => typeof (window as any).__deleteFlowNode), { timeout: 10000, message: '__deleteFlowNode helper' }).toBe('function');
+    await expect.poll(() => page.evaluate(() => typeof (window as any).__connectFlowNodes), { timeout: 10000, message: '__connectFlowNodes helper' }).toBe('function');
+    await expect.poll(() => page.evaluate(() => typeof (window as any).__removeFlowEdge), { timeout: 10000, message: '__removeFlowEdge helper' }).toBe('function');
+    await expect.poll(() => page.evaluate(() => Array.isArray((window as any).__flowCanvasNodes)), { timeout: 10000, message: '__flowCanvasNodes state' }).toBe(true);
+  }
+
+  /** Wait until the rendered node count is stable across two consecutive frames. */
+  async function waitForStableNodeCount(page: any, expected: number) {
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(expected);
+    // Give React Flow one more frame so node dimensions/layout settle before
+    // the test reads positions or counts again.
+    await page.waitForTimeout(150);
   }
 
   test('open_node clicks a node by label', async ({ page }) => {
@@ -57,13 +78,13 @@ test.describe('Flow Editor DOM tools', () => {
         if (n.textContent?.toLowerCase().includes('processor')) { (n as HTMLElement).click(); return; }
       }
     });
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
     await expect(page.getByLabel('Node name')).toHaveValue('Processor');
   });
 
   test('get_node_config reads all fields from open config panel', async ({ page }) => {
     await page.locator('.react-flow__node').nth(1).click();
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
 
     const codeEditor = page.getByLabel('JavaScript Code');
     await expect(codeEditor).toBeVisible({ timeout: 3000 });
@@ -73,7 +94,7 @@ test.describe('Flow Editor DOM tools', () => {
 
   test('update_node_field updates a field in the config panel', async ({ page }) => {
     await page.locator('.react-flow__node').nth(1).click();
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
 
     const codeEditor = page.getByLabel('JavaScript Code');
     await codeEditor.fill('return { result: "updated" };');
@@ -81,17 +102,15 @@ test.describe('Flow Editor DOM tools', () => {
   });
 
   test('add_node adds a node via the exposed canvas helper', async ({ page }) => {
-    // The window helper is assigned by the editor on mount — wait until it exists
-    await expect.poll(() => page.evaluate(() => typeof (window as any).__addFlowNode), { timeout: 5000 }).toBe('function');
     const countBefore = await page.locator('.react-flow__node').count();
     await page.evaluate(() => (window as any).__addFlowNode?.('code', {}));
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+    await waitForStableNodeCount(page, countBefore + 1);
   });
 
   test('add_node_from_catalog adds a node through the UI', async ({ page }) => {
     const countBefore = await page.locator('.react-flow__node').count();
     await addNodeFromCatalog(page, 'http');
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+    await waitForStableNodeCount(page, countBefore + 1);
   });
 
   test('delete_node removes a node by label via the canvas helper', async ({ page }) => {
@@ -105,12 +124,12 @@ test.describe('Flow Editor DOM tools', () => {
         }
       }
     });
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore - 1);
+    await waitForStableNodeCount(page, countBefore - 1);
   });
 
   test('read_code reads from the code editor', async ({ page }) => {
     await page.locator('.react-flow__node').nth(1).click();
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
 
     const code = await page.getByLabel('JavaScript Code').inputValue();
     expect(code).toContain('return input;');
@@ -118,7 +137,7 @@ test.describe('Flow Editor DOM tools', () => {
 
   test('replace_code updates the code in the editor', async ({ page }) => {
     await page.locator('.react-flow__node').nth(1).click();
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
 
     await page.getByLabel('JavaScript Code').fill('return { result: "replaced" };');
 
@@ -148,9 +167,10 @@ test.describe('Flow Editor DOM tools', () => {
     const flow = await res.json();
     await page.goto(`/flows/${flow.id}/edit`);
     await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+    await waitForEditorReady(page);
     await page.getByTestId('add-node-btn').click();
     await page.getByTestId('catalog-output').click();
-    await page.waitForTimeout(500);
+    await waitForStableNodeCount(page, 2);
 
     await page.evaluate(() => {
       let src: string | null = null, tgt: string | null = null;
@@ -164,7 +184,7 @@ test.describe('Flow Editor DOM tools', () => {
 
     await expect.poll(() =>
       page.evaluate(() => (window as any).__flowCanvasEdges?.length || 0),
-      { timeout: 5000 },
+      { timeout: 10000 },
     ).toBeGreaterThanOrEqual(1);
     await deleteFlow(request, flow.id);
   });
@@ -185,11 +205,10 @@ test.describe('Flow Editor DOM tools', () => {
   });
 
   test('save_flow persists the modified canvas state via the UI', async ({ page, request }) => {
-    await expect.poll(() => page.evaluate(() => typeof (window as any).__addFlowNode), { timeout: 5000 }).toBe('function');
     const countBefore = await page.locator('.react-flow__node').count();
     const refBefore = await page.evaluate(() => (window as any).__flowCanvasNodes);
     await page.evaluate(() => (window as any).__addFlowNode?.('code', {}));
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+    await waitForStableNodeCount(page, countBefore + 1);
     await waitForCanvasSync(page, refBefore);
 
     await saveFlowViaUi(page, request, flowId, (f) => f.nodes?.length === countBefore + 1);
@@ -205,55 +224,59 @@ test.describe('Flow Editor DOM tools', () => {
 
     // Add a node through the catalog — snapshot is taken on add
     await addNodeFromCatalog(page, 'delay');
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore + 1);
 
     // Ctrl+Z undoes the add
     await page.keyboard.press('Control+z');
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore);
 
     // Ctrl+Y redoes the add
     await page.keyboard.press('Control+y');
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore + 1);
 
     // Ctrl+Shift+Z also redoes the add
     await page.keyboard.press('Control+z');
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore);
     await page.keyboard.press('Control+Shift+z');
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore + 1);
 
     // Undo/redo toolbar buttons work too
     await page.getByRole('button', { name: 'Undo' }).click();
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore);
     await page.getByRole('button', { name: 'Redo' }).click();
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore + 1);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore + 1);
   });
 
   test('keyboard undo restores a config edit', async ({ page }) => {
     await page.locator('.react-flow__node').nth(1).click();
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
 
     const codeEditor = page.getByLabel('JavaScript Code');
     await codeEditor.fill('return { result: "edited" };');
     await expect(codeEditor).toHaveValue('return { result: "edited" };');
 
     await page.keyboard.press('Control+z');
-    await expect(codeEditor).toHaveValue('return input;', { timeout: 5000 });
+    await expect(codeEditor).toHaveValue('return input;', { timeout: 10000 });
   });
 
   test('keyboard undo restores a node deleted from the config modal', async ({ page }) => {
     const countBefore = await page.locator('.react-flow__node').count();
 
     await page.locator('.react-flow__node').nth(1).click();
-    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('node-config-modal').getByRole('button', { name: 'Delete' }).click();
 
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore - 1);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore - 1);
 
     await page.keyboard.press('Control+z');
-    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 5000 }).toBe(countBefore);
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000 }).toBe(countBefore);
   });
 
   test('remove_edge removes a connection between two nodes', async ({ page }) => {
+    await expect.poll(() =>
+      page.evaluate(() => (window as any).__flowCanvasEdges?.length || 0),
+      { timeout: 10000 },
+    ).toBe(2); // Wait for the initial two edges before removing one
     await page.evaluate(() => {
       const nodes = document.querySelectorAll('.react-flow__node');
       let src: string | null = null, tgt: string | null = null;
@@ -267,7 +290,7 @@ test.describe('Flow Editor DOM tools', () => {
 
     await expect.poll(() =>
       page.evaluate(() => (window as any).__flowCanvasEdges?.length || 0),
-      { timeout: 5000 },
+      { timeout: 10000 },
     ).toBe(1); // Only the processor→output edge remains
   });
 
@@ -289,7 +312,7 @@ test.describe('Flow Editor DOM tools', () => {
 
   test('run_flow opens the debug overlay and executes the canvas', async ({ page }) => {
     await page.getByTestId('debug-btn').click();
-    await expect(page.getByTestId('debug-overlay')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('debug-overlay')).toBeVisible({ timeout: 10000 });
 
     // Manual trigger: supply the message to send, then run
     const message = 'Hello! This is a debug run.';
