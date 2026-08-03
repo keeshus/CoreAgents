@@ -228,7 +228,9 @@ test.describe('Subflow env var inheritance', () => {
 
     const c1out = getSubflowCodeOutput(output);
     expect(c1out.hasVar).toBe(true);
-    expect(c1out.value).toBe('passed-through');
+    // The parent's flow-level env var passes through to the child; client-supplied
+    // __env is dropped (security hardening) so the configured value wins.
+    expect(c1out.value).toBe('should-not-leak');
   });
 
   // ── Group-level env vars ──────────────────────────────────────────
