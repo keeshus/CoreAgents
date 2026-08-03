@@ -26,6 +26,18 @@ router.get('/', requirePermission('vaults:read'), asyncHandler(async (_req, res)
   res.json(rows.map(sanitizeVault));
 }));
 
+// GET /api/secret-vaults/:id — single vault
+router.get('/:id', requirePermission('vaults:read'), asyncHandler(async (req, res) => {
+  const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Vault not found' }); return; }
+
+  const [vault] = await db.select().from(secretVaults).where(eq(secretVaults.id, id));
+  if (!vault) { res.status(404).json({ error: 'Vault not found' }); return; }
+
+  const configs = await db.select().from(groupVaultConfig).where(eq(groupVaultConfig.vault_id, id));
+  res.json(sanitizeVault({ ...vault, groups: configs.map(c => c.group_id) }));
+}));
+
 // POST /api/secret-vaults — CyberArk Conjur
 router.post('/', requirePermission('vaults:write'), asyncHandler(async (req, res) => {
   const { name, vaultType = 'cyberark', baseUrl, account = 'conjur', login, apiKey, caCert, selfHosted = false, groupId } = req.body || {};

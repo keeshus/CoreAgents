@@ -1,39 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { catalog } from '../routes/catalog.js';
 
-// Replicate the catalog array to test it independently
-// Matches the structure in ../routes/catalog.ts
+// Tests the real catalog exported by ../routes/catalog.ts — no replication, so
+// the fixture can never drift from the source of truth.
+
 const NODE_CATEGORIES = ['input', 'processing', 'tools', 'output'] as const;
-
-interface CatalogEntry {
-  type: string;
-  label: string;
-  category: string;
-  description: string;
-  defaultConfig: Record<string, unknown>;
-  inputs: number;
-  outputs: number;
-}
-
-const catalog: CatalogEntry[] = [
-  { type: 'trigger', label: 'Trigger', category: 'input', description: '', defaultConfig: { triggerType: 'manual' }, inputs: 0, outputs: 1 },
-  { type: 'llm-agent', label: 'LLM Agent', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'mcp-tool', label: 'MCP Tool', category: 'tools', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'flow-tool', label: 'Flow Tool', category: 'tools', description: '', defaultConfig: { flowIds: [], selectedFlows: [] }, inputs: 0, outputs: 0 },
-  { type: 'retriever', label: 'Retriever', category: 'tools', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'condition', label: 'Condition', category: 'processing', description: '', defaultConfig: { condition: '' }, inputs: 1, outputs: 2 },
-  { type: 'code', label: 'Code', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'parallel', label: 'Parallel Agents', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'subflow', label: 'Subflow', category: 'processing', description: '', defaultConfig: { subflowId: '', inputMapping: {} }, inputs: 1, outputs: 1 },
-  { type: 'hitl', label: 'Human in the Loop', category: 'processing', description: '', defaultConfig: {}, inputs: 1, outputs: 1 },
-  { type: 'switch', label: 'Switch', category: 'processing', description: '', defaultConfig: { fieldPath: '', cases: [] }, inputs: 1, outputs: 0 },
-  { type: 'http', label: 'HTTP Request', category: 'tools', description: '', defaultConfig: { method: 'GET', url: '' }, inputs: 1, outputs: 1 },
-  { type: 'loop', label: 'Loop', category: 'processing', description: '', defaultConfig: { itemsField: '', subNodes: [], subEdges: [] }, inputs: 1, outputs: 1 },
-  { type: 'delay', label: 'Delay', category: 'processing', description: '', defaultConfig: { type: 'fixed', seconds: 5 }, inputs: 1, outputs: 1 },
-  { type: 'ai-action', label: 'AI Action', category: 'processing', description: '', defaultConfig: { endpointId: '', model: '', prompt: '' }, inputs: 1, outputs: 1 },
-  { type: 'map', label: 'Map', category: 'processing', description: '', defaultConfig: { fields: [], mode: 'replace' }, inputs: 1, outputs: 1 },
-  { type: 'note', label: 'Note', category: 'processing', description: '', defaultConfig: { content: '' }, inputs: 0, outputs: 0 },
-  { type: 'output', label: 'Output', category: 'output', description: '', defaultConfig: {}, inputs: 1, outputs: 0 },
-];
 
 describe('Node Catalog', () => {
   it('contains all expected node types', () => {

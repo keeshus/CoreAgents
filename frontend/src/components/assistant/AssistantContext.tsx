@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect, ty
 import { useAuth } from '@/lib/auth-context';
 import { getToolsForPage as getTools } from './tools/registry';
 import { useConversationMemory } from './useConversationMemory';
+import { TOOL_PERMS } from './toolPerms';
 
 const API = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -112,6 +113,7 @@ function buildSystemPrompt(pageContext: PageContext | null, tools: AssistantTool
     '',
     `Current page: ${pageContext?.description || 'Unknown page'}`,
     ...(redirectNote ? ['', redirectNote, ''] : []),
+    ...(capabilities ? ['', 'Page capabilities:', capabilities, ''] : []),
     'Available tools:',
     toolList || '  (none for this page)',
     '',
@@ -192,17 +194,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [pageContext?.pageKey]);
 
   // Permission check: tool → required permission map
-  const toolPerms: Record<string, string> = {
-    create_endpoint: 'endpoint:write', delete_endpoint: 'endpoint:write',
-    create_mcp_server: 'mcp:write', delete_mcp_server: 'mcp:write', refresh_mcp_tools: 'mcp:write',
-    create_embedding_provider: 'embedding:write', delete_embedding_provider: 'embedding:write',
-    create_vector_store: 'store:write', delete_vector_store: 'store:write',
-    list_users: 'admin', create_user: 'admin', delete_user: 'admin', update_user_role: 'admin',
-    list_executions: 'admin',
-    list_endpoints: 'endpoint:read', list_mcp_servers: 'mcp:read',
-    list_embedding_providers: 'embedding:read', list_vector_stores: 'store:read',
-    get_pending_approvals: 'execution:approve', approve_execution: 'execution:approve', reject_execution: 'execution:approve',
-  };
+  // Mirrors the backend requirePermission() gates so the panel only exposes
+  // tools the current user can actually use. See toolPerms.ts.
+  const toolPerms: Record<string, string> = TOOL_PERMS;
 
   // Reload tools when page context or node type changes
   useEffect(() => {

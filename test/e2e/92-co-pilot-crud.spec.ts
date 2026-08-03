@@ -398,6 +398,28 @@ test.describe('Co-Pilot tools', () => {
     expect(Array.isArray(await res.json())).toBe(true);
   });
 
+  test('get_vault — fetches a single vault by id', async ({ request }) => {
+    const createRes = await request.post(`${API_URL}/secret-vaults`, {
+      data: { name: 'CP-GetVault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'admin', apiKey: 'test-key', groupId: vaultGroupId },
+    });
+    expect(createRes.ok()).toBe(true);
+    const vault = await createRes.json();
+
+    const res = await request.get(`${API_URL}/secret-vaults/${vault.id}`);
+    expect(res.ok()).toBe(true);
+    const single = await res.json();
+    expect(single.id).toBe(vault.id);
+    expect(single.name).toBe('CP-GetVault');
+    expect(single.vault_type).toBe('cyberark');
+    expect(single.base_url).toBe('http://mock-cyberark-e2e:3005');
+
+    // Unknown vault id -> 404
+    const missing = await request.get(`${API_URL}/secret-vaults/00000000-0000-0000-0000-000000000000`);
+    expect(missing.status()).toBe(404);
+
+    await request.delete(`${API_URL}/secret-vaults/${vault.id}`);
+  });
+
   test('create_vault — success', async ({ request }) => {
     const res = await request.post(`${API_URL}/secret-vaults`, {
       data: { name: 'CP-Vault', vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'admin', apiKey: 'test-key', groupId: vaultGroupId },
@@ -870,6 +892,58 @@ test.describe('Co-Pilot tools', () => {
     const pending = await (await request.get(`${API_URL}/executions/pending`)).json();
     expect(pending.some((e: any) => e.id === executionId)).toBe(true);
 
+    // The HITL pause also mirrors into the assignments table — a pending
+    // assignment must exist for the current user
+    const assignments = await (await request.get(`${API_URL}/assignments?status=pending`)).json();
+    const mine = assignments.find((a: any) => a.execution_id === executionId);
+    expect(mine).toBeDefined();
+    expect(mine.status).toBe('pending');
+    expect(mine.hitl_node_id).toBe('h1');
+
+    // Positive path: decide the assignment (approve)
+    const decideRes = await request.post(`${API_URL}/assignments/${mine.id}/decide`, {
+      data: { status: 'approved', feedback: 'looks good' },
+    });
+    expect(decideRes.status()).toBe(200);
+    expect((await decideRes.json()).status).toBe('updated');
+
+    // Assignment is no longer pending, feedback is persisted
+    const after = await (await request.get(`${API_URL}/assignments`)).json();
+    const decided = after.find((a: any) => a.id === mine.id);
+    expect(decided.status).toBe('approved');
+    expect(decided.feedback).toBe('looks good');
+    expect(decided.decided_by_user_id).toBeTruthy();
+
+    // Deciding again must fail (already decided)
+    const againRes = await request.post(`${API_URL}/assignments/${mine.id}/decide`, {
+      data: { status: 'rejected' },
+    });
+    expect(againRes.status()).toBe(400);
+
+    // Reject path on a fresh assignment
+    const rejectFlowRes = await createFlow(request, { name: uniqueFlowName('CPAssignReject'), nodes: [
+      { id: 't1', type: 'trigger', data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+      { id: 'h1', type: 'hitl', position: { x: 300, y: 0 }, data: { label: 'Gate', type: 'hitl', config: { prompt: 'Go', buttons: [{ label: 'Go', value: 'go' }] } } },
+      { id: 'o1', type: 'output', position: { x: 600, y: 0 }, data: { label: 'Output', type: 'output', config: { inputFields: [] } } },
+    ], edges: [
+      { id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'h1', targetHandle: 'input-0' },
+      { id: 'e2', source: 'h1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' },
+    ] });
+    const rejectFlow = await rejectFlowRes.json();
+    const { executionId: rejectExecId } = await executeUntilPaused(rejectFlow.id, { message: 'test' }, cookie);
+    const assignments2 = await (await request.get(`${API_URL}/assignments?status=pending`)).json();
+    const rejectAssign = assignments2.find((a: any) => a.execution_id === rejectExecId);
+    expect(rejectAssign).toBeDefined();
+    const rejectDecide = await request.post(`${API_URL}/assignments/${rejectAssign.id}/decide`, {
+      data: { status: 'rejected' },
+    });
+    expect(rejectDecide.status()).toBe(200);
+    const after2 = await (await request.get(`${API_URL}/assignments`)).json();
+    expect(after2.find((a: any) => a.id === rejectAssign.id).status).toBe('rejected');
+    await deleteFlow(request, rejectFlow.id);
+
+    // Complete the first flow via the execution-level approve endpoint and
+    // confirm the assignment was marked decided in sync
     const approveRes = await fetch(`${API_URL}/executions/${executionId}/approve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie || '' },
       body: JSON.stringify({ decision: 'go' }),
@@ -877,6 +951,8 @@ test.describe('Co-Pilot tools', () => {
     expect(approveRes.ok).toBe(true);
     const exec = await pollExecution(request, executionId, 30000);
     expect(exec.status).toBe('completed');
+    const finalAssign = await (await request.get(`${API_URL}/assignments`)).json();
+    expect(finalAssign.find((a: any) => a.id === mine.id).status).toBe('approved');
     await deleteFlow(request, flow.id);
   });
 

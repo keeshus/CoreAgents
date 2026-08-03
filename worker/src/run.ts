@@ -11,7 +11,7 @@ import { startReconciliation, stopReconciliation } from './schedule-reconciliati
 async function main() {
   console.log('Worker started, waiting for jobs...');
 
-  const { getDb, flows, executions, executionSteps, agentContexts, agentStore, groups } = await import('core-agents-shared');
+  const { getDb, flows, executions, executionSteps, agentContexts, agentStore, groups, userAssignments } = await import('core-agents-shared');
   const { db } = getDb();
   const { eq, and, inArray } = await import('drizzle-orm');
 
@@ -80,6 +80,7 @@ async function main() {
       agentContextsTable: agentContexts,
       agentStoreTable: agentStore,
       groupsTable: groups,
+      userAssignmentsTable: userAssignments,
     });
 
     console.log(`Flow ${flowDef.id}: ${result.status} (exec ${execId})`);

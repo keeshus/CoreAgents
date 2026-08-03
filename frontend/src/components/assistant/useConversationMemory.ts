@@ -2,8 +2,8 @@ import { useCallback } from 'react';
 import type { Message } from './AssistantContext';
 
 const STORAGE_KEY = 'copilot:history';
-const MAX_MESSAGES_PER_PAGE = 30;
-const MAX_TOTAL_CONVERSATIONS = 50;
+export const MAX_MESSAGES_PER_PAGE = 30;
+export const MAX_TOTAL_CONVERSATIONS = 50;
 
 interface StoredConversation {
   messages: Message[];
@@ -27,36 +27,41 @@ function writeAll(data: Record<string, StoredConversation>) {
   }
 }
 
-export function useConversationMemory() {
-  const save = useCallback((key: string, messages: Message[]) => {
-    if (!key) return;
-    const all = readAll();
-    all[key] = { messages: messages.slice(-MAX_MESSAGES_PER_PAGE), updatedAt: Date.now() };
+// Pure helpers so the memory logic can be unit-tested without a hook host.
+export function saveConversation(key: string, messages: Message[]) {
+  if (!key) return;
+  const all = readAll();
+  all[key] = { messages: messages.slice(-MAX_MESSAGES_PER_PAGE), updatedAt: Date.now() };
 
-    // Evict oldest conversations if over limit
-    const entries = Object.entries(all).sort((a, b) => a[1].updatedAt - b[1].updatedAt);
-    if (entries.length > MAX_TOTAL_CONVERSATIONS) {
-      const pruned: Record<string, StoredConversation> = {};
-      for (const [k, v] of entries.slice(-MAX_TOTAL_CONVERSATIONS)) {
-        pruned[k] = v;
-      }
-      writeAll(pruned);
-    } else {
-      writeAll(all);
+  // Evict oldest conversations if over limit
+  const entries = Object.entries(all).sort((a, b) => a[1].updatedAt - b[1].updatedAt);
+  if (entries.length > MAX_TOTAL_CONVERSATIONS) {
+    const pruned: Record<string, StoredConversation> = {};
+    for (const [k, v] of entries.slice(-MAX_TOTAL_CONVERSATIONS)) {
+      pruned[k] = v;
     }
-  }, []);
-
-  const load = useCallback((key: string): Message[] => {
-    if (!key) return [];
-    const all = readAll();
-    return all[key]?.messages || [];
-  }, []);
-
-  const clearKey = useCallback((key: string) => {
-    const all = readAll();
-    delete all[key];
+    writeAll(pruned);
+  } else {
     writeAll(all);
-  }, []);
+  }
+}
 
-  return { save, load, clearKey };
+export function loadConversation(key: string): Message[] {
+  if (!key) return [];
+  const all = readAll();
+  return all[key]?.messages || [];
+}
+
+export function clearConversationKey(key: string) {
+  const all = readAll();
+  delete all[key];
+  writeAll(all);
+}
+
+export function useConversationMemory() {
+  return {
+    save: useCallback((key: string, messages: Message[]) => saveConversation(key, messages), []),
+    load: useCallback((key: string): Message[] => loadConversation(key), []),
+    clearKey: useCallback((key: string) => clearConversationKey(key), []),
+  };
 }

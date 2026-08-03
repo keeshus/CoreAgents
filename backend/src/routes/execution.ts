@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eq, and, desc, sql, inArray, isNull, or } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, groupMembers, users, agentContexts, agentStore, secretAccessLog } from '../db/schema.js';
+import { executions, executionSteps, flows, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, groupMembers, users, agentContexts, agentStore, secretAccessLog, userAssignments } from '../db/schema.js';
 import { FlowExecutor, HitlPauseError, FlowStopError, PauseExecutionError } from '../../../worker/src/executor/engine.js';
 import { executionQueue } from '../../../worker/src/queue.js';
 import { getStore, listStores } from '../vector-stores/index.js';
@@ -619,6 +619,27 @@ router.post(
               }]) as any,
             })
             .where(eq(executions.id, exec.id));
+
+          // Mirror the paused HITL into the assignments table so the
+          // co-pilot's list_assignments / decide_assignment tools and the
+          // /api/assignments endpoints operate on real data.
+          try {
+            const [pauseFlow] = await db
+              .select({ created_by: flows.created_by })
+              .from(flows)
+              .where(eq(flows.id, exec.flow_id))
+              .limit(1);
+            await db.insert(userAssignments).values({
+              execution_id: exec.id,
+              hitl_node_id: err.nodeId,
+              assigned_to_user_id: err.assignedUserId || err.assignees?.userIds?.[0] || pauseFlow?.created_by || req.user!.userId,
+              assigned_to_role_id: err.assignedRoleId || null,
+              assigned_to_group_id: err.assignedGroupId || err.assignees?.groupIds?.[0] || null,
+              status: 'pending',
+            });
+          } catch (insertErr) {
+            console.error('Failed to create assignment for HITL pause:', insertErr);
+          }
         }
 
         emitSSE({
@@ -1020,6 +1041,15 @@ router.post('/executions/:executionId/approve', asyncHandler(async (req, res) =>
   const executor = new FlowExecutor();
   const savedOutputs = hitlEntry.savedOutputs || {};
   const mergedInput = { ...(exec.input || {}), _approved: true, _feedback: feedback, _decision: decision, ...userData };
+
+  // Mirror the decision into the assignments table so the co-pilot's
+  // decide_assignment flow stays in sync with the execution-level approval.
+  if (decision === 'approved') {
+    await db.update(userAssignments)
+      .set({ status: 'approved', decided_by_user_id: userId, decided_at: new Date(), feedback: feedback || null })
+      .where(and(eq(userAssignments.execution_id, exec.id), eq(userAssignments.status, 'pending')))
+      .catch((e: any) => console.error('Failed to mark assignments approved:', e));
+  }
   // Node-scoped approval: attach the decision to the exact HITL node being
   // replayed (keyed by its hierarchical node id, e.g. 'h1' or 'subflow:c3') so
   // the engine only resumes that node — other HITL nodes further downstream
@@ -1237,6 +1267,11 @@ router.post('/executions/:executionId/reject', asyncHandler(async (req, res) => 
     .set({ status: 'cancelled', error: 'Rejected by user', completed_at: new Date() })
     .where(eq(executions.id, executionId));
 
+  await db.update(userAssignments)
+    .set({ status: 'rejected', decided_by_user_id: req.user!.userId, decided_at: new Date() })
+    .where(and(eq(userAssignments.execution_id, executionId), eq(userAssignments.status, 'pending')))
+    .catch((e: any) => console.error('Failed to mark assignments rejected:', e));
+
   res.json({ status: 'rejected' });
 }));
 
@@ -1263,22 +1298,6 @@ router.get(
     // Filter out debug runs
     const filtered = result.filter((r: any) => !r.input?._debug);
     res.json({ data: filtered, total: Number(countResult[0].count), limit, offset });
-  }),
-);
-
-// ── GET /api/executions/:executionId — single execution with steps ────────────
-
-router.get(
-  '/executions/:executionId',
-  asyncHandler(async (req, res) => {
-    const executionId = req.params.executionId as string;
-    const [exec] = await db.select().from(executions).where(eq(executions.id, executionId));
-    if (!exec) { res.status(404).json({ message: 'Execution not found' }); return; }
-    const [flow] = await db.select({ created_by: flows.created_by, group_id: flows.group_id })
-      .from(flows).where(eq(flows.id, exec.flow_id)).limit(1);
-    if (!(await canAccessFlow(req.user!, flow))) { res.status(404).json({ message: 'Execution not found' }); return; }
-    const steps = await db.select().from(executionSteps).where(eq(executionSteps.execution_id, executionId)).orderBy(executionSteps.started_at);
-    res.json({ ...exec, steps });
   }),
 );
 

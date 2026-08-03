@@ -22,6 +22,7 @@ interface RunnerOptions {
   agentContextsTable?: any;
   agentStoreTable?: any;
   groupsTable?: any;
+  userAssignmentsTable?: any;
 }
 
 // Sandbox env comes exclusively from the flow's own env var configuration —
@@ -47,7 +48,7 @@ function buildFlowSandboxEnv(flow: FlowDefinition): Record<string, string> {
  * - On success (marks as completed)
  */
 export async function executeFlowWithPersistence(options: RunnerOptions): Promise<{ status: string; output?: any; delayResumeAt?: number }> {
-  const { flow, input, executionId, db: database, executionsTable, executionStepsTable, eq: eqFn, and: andFn, onEvent } = options;
+  const { flow, input, executionId, db: database, executionsTable, executionStepsTable, eq: eqFn, and: andFn, onEvent, userAssignmentsTable } = options;
 
   // Delayed re-run metadata injected by the queue job (see PauseExecutionError
   // handling below): replay from the pause point using the saved outputs.
@@ -143,12 +144,31 @@ export async function executeFlowWithPersistence(options: RunnerOptions): Promis
     return { status: 'completed', output: result.output };
   } catch (err) {
     if (err instanceof HitlPauseError) {
-      const hitlEntry = { nodeId: err.nodeId, prompt: err.prompt, buttons: err.buttons, savedOutputs: err.savedOutputs };
+      const hitlEntry = { nodeId: err.nodeId, prompt: err.prompt, buttons: err.buttons, savedOutputs: err.savedOutputs, assignmentType: err.assignmentType, assignees: err.assignees, requiredApprovals: err.requiredApprovals };
       await database.update(executionsTable).set({
         status: 'awaiting_approval',
         output: { ...err.savedOutputs, _hitlButtons: err.buttons, _hitlPrompt: err.prompt, _pausedAt: Date.now() } as any,
         pending_hitls: JSON.stringify([hitlEntry]) as any,
       }).where(eqFn(executionsTable.id, executionId));
+
+      // Mirror the paused HITL into the assignments table so the co-pilot's
+      // list_assignments / decide_assignment tools and the /api/assignments
+      // endpoints operate on real data for worker-run executions too.
+      if (userAssignmentsTable) {
+        try {
+          const assigneeId = err.assignedUserId || err.assignees?.userIds?.[0] || null;
+          await database.insert(userAssignmentsTable).values({
+            execution_id: executionId,
+            hitl_node_id: err.nodeId,
+            assigned_to_user_id: assigneeId,
+            assigned_to_role_id: err.assignedRoleId || null,
+            assigned_to_group_id: err.assignedGroupId || err.assignees?.groupIds?.[0] || null,
+            status: 'pending',
+          });
+        } catch (insertErr) {
+          console.error('Failed to create assignment for HITL pause:', insertErr);
+        }
+      }
       return { status: 'awaiting_approval' };
     }
 

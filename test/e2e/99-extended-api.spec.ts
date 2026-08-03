@@ -523,6 +523,99 @@ test.describe('Admin and niche endpoints', () => {
     expect(body.error).toBe('endpointId is required');
   });
 
+  test('POST /api/llm/chat streams token + done events on the happy path', async ({ request }) => {
+    // Create a mock-backed endpoint for the chat route
+    const epRes = await request.post(`${API_URL}/llm-endpoints`, {
+      data: {
+        name: `E2E-Chat-${Date.now()}`,
+        providerType: 'openai',
+        baseUrl: 'http://mock-llm-e2e:3002/v1',
+        apiKey: 'mock-key',
+        defaultModel: 'mock-gpt-4',
+        models: ['mock-gpt-4'],
+      },
+    });
+    expect(epRes.ok()).toBe(true);
+    const ep = await epRes.json();
+
+    try {
+      const chatRes = await request.post(`${API_URL}/llm/chat`, {
+        data: {
+          endpointId: ep.id,
+          messages: [{ role: 'user', content: 'hello chat' }],
+          systemPrompt: 'You are a helpful assistant.',
+        },
+      });
+      expect(chatRes.ok()).toBe(true);
+      const text = await chatRes.text();
+      // SSE stream: token events followed by a done event
+      expect(text).toContain('"type":"token"');
+      expect(text).toContain('"type":"done"');
+      // Reassemble the streamed tokens — the phrase is split across events
+      const tokens = [...text.matchAll(/"type":"token","content":"((?:\\.|[^"\\])*)"/g)]
+        .map(m => m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'));
+      expect(tokens.join('')).toContain('Mock response to: hello chat');
+    } finally {
+      await request.delete(`${API_URL}/llm-endpoints/${ep.id}`).catch(() => {});
+    }
+  });
+
+  test('POST /api/llm/chat streams a tool_call event when the mock requests one', async ({ request }) => {
+    const epRes = await request.post(`${API_URL}/llm-endpoints`, {
+      data: {
+        name: `E2E-ChatTool-${Date.now()}`,
+        providerType: 'openai',
+        baseUrl: 'http://mock-llm-e2e:3002/v1',
+        apiKey: 'mock-key',
+        defaultModel: 'mock-gpt-4',
+        models: ['mock-gpt-4'],
+      },
+    });
+    expect(epRes.ok()).toBe(true);
+    const ep = await epRes.json();
+
+    try {
+      const chatRes = await request.post(`${API_URL}/llm/chat`, {
+        data: {
+          endpointId: ep.id,
+          messages: [{ role: 'user', content: 'MOCK_TOOL_CALL: list_flows {}' }],
+          systemPrompt: 'You are a helpful assistant.',
+          tools: [{ name: 'list_flows', description: 'List flows', input_schema: { type: 'object', properties: {} } }],
+        },
+      });
+      expect(chatRes.ok()).toBe(true);
+      const text = await chatRes.text();
+      expect(text).toContain('"type":"tool_call"');
+      expect(text).toContain('list_flows');
+      expect(text).toContain('"type":"done"');
+    } finally {
+      await request.delete(`${API_URL}/llm-endpoints/${ep.id}`).catch(() => {});
+    }
+  });
+
+  test('POST /api/llm/chat returns 404 for unknown endpoint and 400 for oversized history', async ({ request }) => {
+    const missing = await request.post(`${API_URL}/llm/chat`, {
+      data: { endpointId: '00000000-0000-0000-0000-000000000000', messages: [{ role: 'user', content: 'hi' }] },
+    });
+    expect(missing.status()).toBe(404);
+    expect((await missing.json()).error).toBe('Endpoint not found');
+
+    // More than 50 messages is rejected up-front
+    const tooMany = Array.from({ length: 51 }, (_, i) => ({ role: 'user' as const, content: `msg ${i}` }));
+    const oversized = await request.post(`${API_URL}/llm/chat`, {
+      data: { endpointId: '00000000-0000-0000-0000-000000000000', messages: tooMany },
+    });
+    expect(oversized.status()).toBe(400);
+    expect((await oversized.json()).error).toBe('Too many messages');
+  });
+
+  test('GET /api/health reports service status', async ({ request }) => {
+    const res = await request.get(`${API_URL.replace(/\/api$/, '')}/api/health`);
+    expect(res.ok()).toBe(true);
+    const body = await res.json();
+    expect(body.status).toBe('ok');
+  });
+
   test('GET /api/secrets/audit-log returns audit data', async ({ request }) => {
     const res = await request.get(`${API_URL}/secrets/audit-log`);
     expect(res.ok()).toBe(true);

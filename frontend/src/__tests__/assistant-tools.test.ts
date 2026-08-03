@@ -1,25 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import { TOOL_PERMS, filterToolsByPermission } from '@/components/assistant/toolPerms';
 
-// ── Replicate the tool permission filter logic from AssistantContext ─────────
+const toolPerms: Record<string, string> = TOOL_PERMS;
 
-const toolPerms: Record<string, string> = {
-  create_endpoint: 'endpoint:write', delete_endpoint: 'endpoint:write',
-  create_mcp_server: 'mcp:write', delete_mcp_server: 'mcp:write', refresh_mcp_tools: 'mcp:write',
-  create_embedding_provider: 'embedding:write', delete_embedding_provider: 'embedding:write',
-  create_vector_store: 'store:write', delete_vector_store: 'store:write',
-  list_users: 'admin', create_user: 'admin', delete_user: 'admin', update_user_role: 'admin',
-  list_executions: 'admin',
-  list_endpoints: 'endpoint:read', list_mcp_servers: 'mcp:read',
-  list_embedding_providers: 'embedding:read', list_vector_stores: 'store:read',
-  get_pending_approvals: 'execution:approve', approve_execution: 'execution:approve', reject_execution: 'execution:approve',
-};
-
-const adminPerms = ['admin','flow:create','flow:edit','flow:delete','flow:read','endpoint:read','endpoint:write','mcp:read','mcp:write','embedding:read','embedding:write','store:read','store:write','document:write','knowledge:write','chat:create','execution:approve','group:read','group:write'];
+const adminPerms = ['admin','flow:create','flow:edit','flow:delete','flow:read','endpoint:read','endpoint:write','mcp:read','mcp:write','embedding:read','embedding:write','store:read','store:write','document:write','knowledge:write','chat:create','execution:approve','group:read','group:write','secrets:read','secrets:write','secrets:audit','secrets:rotate','vaults:read','vaults:write','groups:manage'];
 const editorPerms = ['flow:create','flow:edit','flow:read','execution:approve','endpoint:read','mcp:read','embedding:read','store:read','document:write','knowledge:write','chat:create','group:read'];
-const readerPerms = ['execution:approve'];
+const readerPerms: string[] = [];
 
 function filterTools(toolNames: string[], userPerms: string[]): string[] {
-  return toolNames.filter(name => !toolPerms[name] || userPerms.includes(toolPerms[name]));
+  return filterToolsByPermission(toolNames, userPerms);
 }
 
 // ── Replicate getToolGroupNames from registry.ts ────────────────────────────
@@ -94,11 +83,12 @@ describe('tool permission filter', () => {
     expect(filterTools(tools, editorPerms)).toEqual([]);
   });
 
-  it('allows execution:approve tools for all roles', () => {
+  it('allows execution:approve tools for roles with the permission', () => {
     const tools = ['get_pending_approvals', 'approve_execution', 'reject_execution'];
     expect(filterTools(tools, adminPerms)).toEqual(tools);
     expect(filterTools(tools, editorPerms)).toEqual(tools);
-    expect(filterTools(tools, readerPerms)).toEqual(tools);
+    // The reader role has no permissions (backend: reader permissions: [])
+    expect(filterTools(tools, readerPerms)).toEqual([]);
   });
 
   it('filters write tools for editors', () => {
@@ -154,12 +144,13 @@ describe('getToolGroupNames', () => {
 });
 
 describe('end-to-end: page tools filtered by role', () => {
-  it('viewer on approvals page gets only approval tools', () => {
+  it('viewer on approvals page gets only unrestricted tools', () => {
     const tools = getToolsForPage('approvals');
     const filtered = filterTools(tools, readerPerms);
-    expect(filtered).toContain('get_pending_approvals');
-    expect(filtered).toContain('approve_execution');
-    expect(filtered).toContain('reject_execution');
+    // Reader has no permissions, so approval/assignment tools are hidden
+    expect(filtered).not.toContain('get_pending_approvals');
+    expect(filtered).not.toContain('approve_execution');
+    expect(filtered).not.toContain('reject_execution');
     expect(filtered).toContain('navigate_to');
     expect(filtered).not.toContain('list_endpoints');
   });
