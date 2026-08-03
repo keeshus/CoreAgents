@@ -8,12 +8,14 @@ const router = Router();
 
 async function canReadGroupEnvVars(user: { userId: string; permissions: string[] }, groupId: string): Promise<boolean> {
   if (user.permissions.includes('admin')) return true;
-  const hasSecretsRead = user.permissions.includes('secrets:read_group') || user.permissions.includes('secrets:write_group');
-  if (!hasSecretsRead) return false;
   const [membership] = await db.select().from(groupMembers)
     .where(and(eq(groupMembers.user_id, user.userId), eq(groupMembers.group_id, groupId)))
     .limit(1);
-  return !!membership;
+  if (!membership) return false;
+  // Group admins can read and manage their group's env vars; other members
+  // may read when they hold group secret permissions.
+  if (membership.role === 'admin') return true;
+  return user.permissions.includes('secrets:read_group') || user.permissions.includes('secrets:write_group');
 }
 
 router.get('/', requirePermission('admin'), async (req, res) => {

@@ -42,6 +42,9 @@ async function checkScopeAccess(scope: string, scopeId: string | undefined, user
       and(eq(groupMembers.group_id, scopeId), eq(groupMembers.user_id, user.userId))
     );
     if (!membership) return false;
+    // Group admins can read their group's secrets; other members need group
+    // secret read permissions.
+    if (membership.role === 'admin') return true;
     return user.permissions.includes('secrets:read_group') || user.permissions.includes('secrets:write_group');
   }
   if (scope === 'flow') {
@@ -69,6 +72,8 @@ async function checkWriteScope(scope: string, scopeId: string | undefined, user:
       and(eq(groupMembers.group_id, scopeId), eq(groupMembers.user_id, user.userId))
     );
     if (!membership) return false;
+    // Group admins can manage their group's secrets.
+    if (membership.role === 'admin') return true;
     return user.permissions.includes('secrets:write_group');
   }
   if (scope === 'flow') {
@@ -119,6 +124,8 @@ router.get('/', asyncHandler(async (req, res) => {
       name: secrets.name,
       scope: secrets.scope,
       scopeId: secrets.scope_id,
+      secretType: secrets.secret_type,
+      referencePath: secrets.reference_path,
       keyVersion: secrets.key_version,
       expiresAt: secrets.expires_at,
       createdAt: secrets.created_at,
@@ -133,9 +140,13 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // POST /api/secrets — create a secret
 router.post('/', requirePermission('secrets:write'), asyncHandler(async (req, res) => {
-  const { name, value, scope = 'app', scopeId } = req.body || {};
+  const { name, value, scope = 'app', scopeId, secretType = 'core', referencePath } = req.body || {};
 
-  if (!name || !value) { res.status(400).json({ error: 'name and value are required' }); return; }
+  const isCyberArk = secretType === 'cyberark';
+  if (!name) { res.status(400).json({ error: 'name is required' }); return; }
+  if (!isCyberArk && !value) { res.status(400).json({ error: 'name and value are required' }); return; }
+  if (isCyberArk && !referencePath) { res.status(400).json({ error: 'referencePath is required for cyberark secrets' }); return; }
+  if (!['core', 'cyberark'].includes(secretType)) { res.status(400).json({ error: 'secretType must be "core" or "cyberark"' }); return; }
   if (!['app', 'group', 'flow'].includes(scope)) { res.status(400).json({ error: 'Invalid scope' }); return; }
   if (scope !== 'app' && !scopeId) { res.status(400).json({ error: 'scopeId is required for group/flow scope' }); return; }
 
@@ -149,31 +160,39 @@ router.post('/', requirePermission('secrets:write'), asyncHandler(async (req, re
   );
   if (existing) { res.status(409).json({ error: 'A secret with this name already exists in this scope' }); return; }
 
-  await ensureInitialKeyVersion();
-  const encrypted = await encrypt(value);
+  let encryptedValue = null, encryptionIv = null, encryptionTag = null, keyVersion = 0;
+  if (!isCyberArk) {
+    await ensureInitialKeyVersion();
+    const encrypted = await encrypt(value);
+    encryptedValue = encrypted.encryptedValue;
+    encryptionIv = encrypted.iv;
+    encryptionTag = encrypted.tag;
+    keyVersion = encrypted.keyVersion;
+  }
 
   const [secret] = await db.insert(secrets).values({
     name,
     scope,
     scope_id: scopeId || null,
-    encrypted_value: encrypted.encryptedValue,
-    encryption_iv: encrypted.iv,
-    encryption_tag: encrypted.tag,
-    key_version: encrypted.keyVersion,
+    secret_type: secretType,
+    reference_path: isCyberArk ? referencePath : null,
+    encrypted_value: encryptedValue,
+    encryption_iv: encryptionIv,
+    encryption_tag: encryptionTag,
+    key_version: keyVersion,
     created_by: user.userId,
   }).returning();
 
   await logAccess('created', secret.id, user.userId, req.ip);
 
-  res.status(201).json({ id: secret.id, name: secret.name, scope: secret.scope, scopeId: secret.scope_id });
+  res.status(201).json({ id: secret.id, name: secret.name, scope: secret.scope, scopeId: secret.scope_id, secretType: secret.secret_type });
 }));
 
-// PUT /api/secrets/:id — update secret value
+// PUT /api/secrets/:id — update secret value (or reference path for cyberark)
 router.put('/:id', requirePermission('secrets:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;
   if (!isValidUUID(id)) { res.status(404).json({ error: 'Secret not found' }); return; }
-  const { value } = req.body || {};
-  if (!value) { res.status(400).json({ error: 'value is required' }); return; }
+  const { value, referencePath } = req.body || {};
 
   const [secret] = await db.select().from(secrets).where(eq(secrets.id, id));
   if (!secret) { res.status(404).json({ error: 'Secret not found' }); return; }
@@ -181,16 +200,24 @@ router.put('/:id', requirePermission('secrets:write'), asyncHandler(async (req, 
   const canWrite = await checkWriteScope(secret.scope, secret.scope_id ?? undefined, req.user!);
   if (!canWrite) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
 
-  await ensureInitialKeyVersion();
-  const encrypted = await encrypt(value);
-
-  await db.update(secrets).set({
-    encrypted_value: encrypted.encryptedValue,
-    encryption_iv: encrypted.iv,
-    encryption_tag: encrypted.tag,
-    key_version: encrypted.keyVersion,
-    updated_at: new Date(),
-  }).where(eq(secrets.id, id));
+  if (secret.secret_type === 'cyberark') {
+    if (!referencePath) { res.status(400).json({ error: 'referencePath is required' }); return; }
+    await db.update(secrets).set({
+      reference_path: referencePath,
+      updated_at: new Date(),
+    }).where(eq(secrets.id, id));
+  } else {
+    if (!value) { res.status(400).json({ error: 'value is required' }); return; }
+    await ensureInitialKeyVersion();
+    const encrypted = await encrypt(value);
+    await db.update(secrets).set({
+      encrypted_value: encrypted.encryptedValue,
+      encryption_iv: encrypted.iv,
+      encryption_tag: encrypted.tag,
+      key_version: encrypted.keyVersion,
+      updated_at: new Date(),
+    }).where(eq(secrets.id, id));
+  }
 
   await logAccess('updated', id, req.user!.userId, req.ip);
 

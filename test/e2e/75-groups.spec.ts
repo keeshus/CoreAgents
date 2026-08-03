@@ -211,7 +211,7 @@ test.describe('Groups feature', () => {
       .click();
 
     // The "Admin" badge appears after promotion
-    await expect(page.getByText('Admin').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Admin', { exact: true }).first()).toBeVisible({ timeout: 5000 });
 
     // Backend state matches: member now has role admin
     const getRes = await request.get(`${API_URL}/groups/${group.id}`);
@@ -264,6 +264,171 @@ test.describe('Groups feature', () => {
     await expect(page.locator('h1').filter({ hasText: 'Users' }).first()).toBeVisible({ timeout: 10000 });
     // The Groups column header should be visible
     await expect(page.locator('th').filter({ hasText: 'Groups' })).toBeVisible();
+  });
+
+  test('users page: create user modal validates and creates a user', async ({ page, request }) => {
+    await page.goto('/settings/users');
+    await expect(page.locator('h1').filter({ hasText: 'Users' }).first()).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('button', { name: 'Create User' }).first().click();
+    await expect(page.getByRole('heading', { name: 'Create User' })).toBeVisible({ timeout: 5000 });
+
+    // ── Empty submit → client-side validation ──
+    await page.getByRole('button', { name: 'Create User', exact: true }).click();
+    await expect(page.getByText('All fields required')).toBeVisible({ timeout: 5000 });
+
+    // ── Short password → client-side validation ──
+    await page.getByLabel('Name').fill('Modal User');
+    await page.getByLabel('Email').fill(`modal-${Date.now()}@test.local`);
+    await page.getByLabel('Password', { exact: true }).fill('short');
+    await page.getByRole('button', { name: 'Create User', exact: true }).click();
+    await expect(page.getByText('Password must be at least 8 characters')).toBeVisible({ timeout: 5000 });
+
+    // ── Valid submit → row appears, admin session is NOT hijacked ──
+    const email = `modal-${Date.now()}@test.local`;
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: 'Create User', exact: true }).click();
+
+    const userRow = page.locator('tr').filter({ hasText: email }).first();
+    await expect(userRow).toBeVisible({ timeout: 10000 });
+
+    // The admin is still logged in as themselves (not the new user) — the
+    // users settings page is still reachable and the admin user is listed.
+    await expect(page.locator('h1').filter({ hasText: 'Users' }).first()).toBeVisible({ timeout: 5000 });
+    const meRes = await page.request.get(`${API_URL}/auth/me`);
+    expect(meRes.ok()).toBe(true);
+    const me = await meRes.json();
+    expect(me.user.email).not.toBe(email);
+
+    // Registered user gets the reader role by default
+    const usersRes = await request.get(`${API_URL}/users`);
+    const users = await usersRes.json();
+    const created = users.find((u: any) => u.email === email);
+    expect(created).toBeDefined();
+    cleanupUserIds.push(created.id);
+    expect(created.role_name).toBe('reader');
+  });
+
+  test('users page: delete user via UI with confirm dialog', async ({ page, request }) => {
+    // Create a disposable user via API
+    const email = `del-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Delete Me', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+
+    await page.goto('/settings/users');
+    await expect(page.locator('h1').filter({ hasText: 'Users' }).first()).toBeVisible({ timeout: 10000 });
+
+    const userRow = page.locator('tr').filter({ hasText: email }).first();
+    await expect(userRow).toBeVisible({ timeout: 5000 });
+    await userRow.getByRole('button', { name: 'Delete' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Delete user?')).toBeVisible({ timeout: 5000 });
+    await dialog.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(page.locator('tr').filter({ hasText: email })).toHaveCount(0, { timeout: 5000 });
+
+    // Backend confirms deletion
+    const usersRes = await request.get(`${API_URL}/users`);
+    const users = await usersRes.json();
+    expect(users.find((u: any) => u.id === regData.user.id)).toBeUndefined();
+    cleanupUserIds = cleanupUserIds.filter((id) => id !== regData.user.id);
+  });
+
+  test('users page: manage groups modal saves memberships', async ({ page, request }) => {
+    // Create a group and a disposable user
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Groups-Modal-${Date.now()}` } });
+    expect(gRes.ok()).toBe(true);
+    const group = await gRes.json();
+    createdGroupIds.push(group.id);
+
+    const email = `gm-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Groups Modal', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+
+    await page.goto('/settings/users');
+    await expect(page.locator('h1').filter({ hasText: 'Users' }).first()).toBeVisible({ timeout: 10000 });
+
+    const userRow = page.locator('tr').filter({ hasText: email }).first();
+    await expect(userRow).toBeVisible({ timeout: 5000 });
+    await userRow.getByRole('button', { name: 'Groups' }).click();
+
+    const modal = page.getByText(`Groups for Groups Modal`).locator('..').locator('..');
+    await expect(page.getByText(`Groups for Groups Modal`)).toBeVisible({ timeout: 5000 });
+    // Check the group checkbox and save
+    await page.getByText(group.name).first().click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText(`Groups for Groups Modal`)).toHaveCount(0, { timeout: 5000 });
+
+    // Backend: user is now a member of the group
+    const gDetail = await (await request.get(`${API_URL}/groups/${group.id}`)).json();
+    expect(gDetail.members.some((m: any) => m.userId === regData.user.id)).toBe(true);
+  });
+
+  test('groups page: demote a group admin back to member via UI', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Demote-${Date.now()}` } });
+    expect(gRes.ok()).toBe(true);
+    const group = await gRes.json();
+    createdGroupIds.push(group.id);
+
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Demote User', email: `demote-${Date.now()}@test.local`, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+
+    // Add member, promote to admin via API
+    await request.post(`${API_URL}/groups/${group.id}/members`, { data: { userId: regData.user.id } });
+    await request.put(`${API_URL}/groups/${group.id}/members/${regData.user.id}/role`, { data: { role: 'admin' } });
+
+    await page.goto('/settings/groups');
+    await expect(page.getByText(group.name)).toBeVisible({ timeout: 10000 });
+    await page.getByText(group.name).click();
+
+    // Admin badge shown; click the "Demote to member" (person icon) button.
+    // Member rows contain the member's name + email inside a member-specific
+    // container — scope by the row that contains the member's email.
+    const memberRow = page.locator('div.flex.items-center.justify-between.px-2').filter({ hasText: regData.user.email }).first();
+    await expect(memberRow).toBeVisible({ timeout: 5000 });
+    await expect(memberRow.getByText('Admin', { exact: true })).toBeVisible({ timeout: 5000 });
+
+    // The demote button is the one with the person icon; use the icon's exact
+    // ligature text within a button element to avoid matching the Admin badge.
+    const demoteBtn = memberRow.locator('button').filter({ has: page.locator('span.material-symbols-outlined:text-is("person")') });
+    await demoteBtn.click();
+
+    // The backend role flips to member (the row re-renders after the update)
+    await expect
+      .poll(async () => {
+        const res = await request.get(`${API_URL}/groups/${group.id}`);
+        if (!res.ok()) return null;
+        const detail = await res.json();
+        const m = detail.members.find((x: any) => x.userId === regData.user.id);
+        return m?.role;
+      }, { timeout: 10000 })
+      .toBe('member');
+
+    // Admin badge disappears from the UI — re-locate the row fresh since the
+    // members list re-renders after the role update.
+    await expect
+      .poll(async () => {
+        const freshRow = page.locator('div.flex.items-center.justify-between.px-2').filter({ hasText: regData.user.email }).first();
+        return (await freshRow.getByText('Admin', { exact: true }).count()) === 0;
+      }, { timeout: 10000 })
+      .toBe(true);
   });
 
   // ─── HITL node config ─────────────────────────────────────────────
@@ -552,6 +717,14 @@ test.describe('Groups feature', () => {
     await expect(page.getByText('Users').first()).not.toBeVisible();
     await expect(page.getByText('SSO / OIDC').first()).not.toBeVisible();
     await expect(page.getByText('Secret Vaults').first()).not.toBeVisible();
+
+    // Editor sees exactly the 6 non-admin hub cards (secrets, env vars,
+    // endpoints, mcp-servers, knowledge, groups) — no admin-only cards
+    const hubCards = page.locator('a[href^="/settings/"]');
+    await expect(hubCards).toHaveCount(6, { timeout: 5000 });
+    for (const card of ['Secrets', 'Environment Variables', 'LLM Endpoints', 'MCP Servers', 'Knowledge Bases', 'Groups']) {
+      await expect(page.getByText(card, { exact: true }).first()).toBeVisible({ timeout: 5000 });
+    }
 
     // Admin API endpoints reject the editor with 403
     const ssoRes = await page.request.get(`${API_URL}/admin/sso-config`);

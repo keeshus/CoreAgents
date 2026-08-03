@@ -53,12 +53,14 @@ export default function UsersSettingsPage() {
     setCreating(true);
     setCreateError('');
     try {
-      const res = await fetch(`${API_URL}/auth/register`, {
+      // Use the admin-only endpoint — register would set a session cookie
+      // for the new user and hijack the admin's session.
+      const res = await fetch(`${API_URL}/users`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ email: newEmail, password: newPassword, name: newName }),
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({ error: 'Registration failed' })); throw new Error(err.error); }
+      if (!res.ok) { const err = await res.json().catch(() => ({ error: 'User creation failed' })); throw new Error(err.error); }
       setShowCreate(false);
       setNewName(''); setNewEmail(''); setNewPassword('');
       await load();

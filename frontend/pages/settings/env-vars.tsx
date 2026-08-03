@@ -99,11 +99,13 @@ export default function EnvVarsPage() {
     fetchSecrets();
   }, [formGroupId]);
 
-  const saveEnvVars = async (vars: EnvVarEntry[]) => {
+  const saveEnvVars = async (vars: EnvVarEntry[], groupIdOverride?: string | null) => {
     const body = { envVars: vars };
-    const url = formGroupId
-      ? `${API_URL}/env-vars/groups/${formGroupId}`
-      : `${API_URL}/env-vars`;
+    const url = groupIdOverride !== undefined
+      ? (groupIdOverride ? `${API_URL}/env-vars/groups/${groupIdOverride}` : `${API_URL}/env-vars`)
+      : (formGroupId
+        ? `${API_URL}/env-vars/groups/${formGroupId}`
+        : `${API_URL}/env-vars`);
     const res = await fetch(url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify(body),
@@ -164,19 +166,35 @@ export default function EnvVarsPage() {
     if (!editingValue) { setError('Value is required.'); return; }
     setEditingSaving(true); setError(null);
     try {
+      // Determine the edited row's scope from the row itself (the Add form's
+      // formGroupId is unrelated to inline editing).
+      const target = (envVars as any[]).find(v => v.name === name);
+      const isGroup = target?._scope === 'group' && target?._groupName;
+      const g = isGroup ? groups.find(g => g.name === target._groupName) : null;
       const isAppItem = (v: any) => !v._scope || v._scope === 'app';
-      const scopeItems = (envVars as any[]).filter(v => formGroupId ? v._scope === 'group' && v._groupName === groups.find(g => g.id === formGroupId)?.name : isAppItem(v));
+      const scopeItems = g
+        ? (envVars as any[]).filter(v => v._scope === 'group' && v._groupName === target._groupName)
+        : (envVars as any[]).filter(v => isAppItem(v));
       const updated = scopeItems.map((v: any) =>
         v.name === name ? { ...v, type: editingType, value: editingValue } : v
       );
-      await saveEnvVars(updated);
+      await saveEnvVars(updated, g ? g.id : null);
       setEditingName(null); setEditingValue('');
       await fetchEnvVars();
     } catch (err) { setError(err instanceof Error ? err.message : 'Update failed'); }
     finally { setEditingSaving(false); }
   };
 
-  const readOnly = selectedGroupId ? !isAdmin : !isAdmin;
+  // App-scope env vars are admin-only. Group-scope env vars can be edited by
+  // admins and by the group's admins (the backend enforces membership role
+  // 'admin' for non-admin users).
+  const isGroupAdmin = (groupId: string | null) => {
+    if (!groupId) return false;
+    return isAdmin || (user?.groups || []).some(g => g.id === groupId && g.role === 'admin');
+  };
+  // Page-level read-only when nothing is editable; per-row read-only is
+  // computed in the row render below.
+  const readOnly = selectedGroupId ? !isGroupAdmin(selectedGroupId) : !isAdmin;
 
   const typeOptions = [
     { value: 'static', label: 'Static' },

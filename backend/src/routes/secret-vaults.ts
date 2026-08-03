@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { secretVaults, groupVaultConfig } from '../db/schema.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
@@ -20,9 +21,23 @@ function sanitizeVault(vault: any) {
   return { ...safe, hasApiKey: !!api_key, connected: vault.is_connected, groups: [] };
 }
 
-// GET /api/secret-vaults
-router.get('/', requirePermission('vaults:read'), asyncHandler(async (_req, res) => {
-  const rows = await db.select().from(secretVaults).orderBy(secretVaults.created_at);
+// GET /api/secret-vaults?group_id= — list vaults (optionally for one group)
+router.get('/', requirePermission('vaults:read'), asyncHandler(async (req, res) => {
+  const groupId = req.query.group_id as string | undefined;
+  let rows: typeof secretVaults.$inferSelect[];
+  if (groupId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
+    const configs = await db.select({ vault_id: groupVaultConfig.vault_id })
+      .from(groupVaultConfig)
+      .where(eq(groupVaultConfig.group_id, groupId));
+    const vaultIds = configs.map(c => c.vault_id);
+    if (vaultIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    rows = await db.select().from(secretVaults).where(sql`${secretVaults.id} IN ${vaultIds}`).orderBy(secretVaults.created_at);
+  } else {
+    rows = await db.select().from(secretVaults).orderBy(secretVaults.created_at);
+  }
   res.json(rows.map(sanitizeVault));
 }));
 

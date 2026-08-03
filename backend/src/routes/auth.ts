@@ -407,7 +407,7 @@ router.post('/register', registerLimiter, asyncHandler(async (req, res) => {
   await db.update(users).set({ last_login_at: new Date() }).where(eq(users.id, user.id));
 
   res.status(201).json({
-    user: { id: user.id, email: user.email, name: user.name, role: role?.name || 'reader', permissions: rolePermissions },
+    user: { id: user.id, email: user.email, name: user.name, role: role?.name || 'reader', permissions: rolePermissions, groups: [] },
   });
 }));
 
@@ -457,8 +457,12 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
 
   // The JWT is delivered exclusively via the httpOnly cookie; it is not
   // echoed in the response body.
+  const loginGroups = await db.select({ id: groups.id, name: groups.name, role: groupMembers.role })
+    .from(groupMembers)
+    .leftJoin(groups, eq(groupMembers.group_id, groups.id))
+    .where(eq(groupMembers.user_id, user.id));
   res.json({
-    user: { id: user.id, email: user.email, name: user.name, role: roleName, permissions },
+    user: { id: user.id, email: user.email, name: user.name, role: roleName, permissions, groups: loginGroups },
   });
 }));
 
@@ -559,7 +563,7 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
     }
   }
 
-  const userGroups = await db.select({ id: groups.id, name: groups.name })
+  const userGroups = await db.select({ id: groups.id, name: groups.name, role: groupMembers.role })
     .from(groupMembers)
     .leftJoin(groups, eq(groupMembers.group_id, groups.id))
     .where(eq(groupMembers.user_id, userId));

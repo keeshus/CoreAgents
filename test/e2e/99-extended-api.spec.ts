@@ -302,6 +302,46 @@ test.describe('Cancel execution', () => {
     const exec = await pollExecution(request, executionId, 15000);
     expect(exec.status).toBe('cancelled');
   });
+
+  test('settings executions page shows empty state and manual refresh works', async ({ page }) => {
+    // With no pending executions the page shows the empty state
+    await page.goto('/settings/executions');
+    await expect(page.getByText('Pending Approvals')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('All caught up! No pending executions.')).toBeVisible({ timeout: 10000 });
+
+    // The manual Refresh button is present and re-fetches without error
+    const refreshBtn = page.getByRole('button', { name: 'Refresh' });
+    await expect(refreshBtn).toBeVisible({ timeout: 5000 });
+    await refreshBtn.click();
+    await expect(page.getByText('All caught up! No pending executions.')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('settings executions page shows access denied for non-admins', async ({ page, request }) => {
+    const email = `exec-denied-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Exec Denied', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      await page.goto('/settings/executions');
+      await expect(page.getByText('Access denied')).toBeVisible({ timeout: 10000 });
+    } finally {
+      await request.delete(`${API_URL}/users/${regData.user.id}`).catch(() => {});
+    }
+  });
 });
 
 // ─── Logout and password change ─────────────────────────────────

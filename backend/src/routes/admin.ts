@@ -24,7 +24,13 @@ router.post('/users', requirePermission('admin'), asyncHandler(async (req, res) 
     return;
   }
   const password_hash = await bcrypt.hash(password, 10);
-  const [user] = await db.insert(users).values({ email, password_hash, name, role_id: role_id || null }).returning();
+  // New users default to the reader role when none is specified
+  let resolvedRoleId = role_id || null;
+  if (!resolvedRoleId) {
+    const [readerRole] = await db.select().from(roles).where(eq(roles.name, 'reader')).limit(1);
+    resolvedRoleId = readerRole?.id || null;
+  }
+  const [user] = await db.insert(users).values({ email, password_hash, name, role_id: resolvedRoleId }).returning();
   res.status(201).json({ id: user.id, email: user.email, name: user.name, role_id: user.role_id });
 }));
 

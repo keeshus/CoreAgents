@@ -31,6 +31,7 @@ test.describe('Flow Editor DOM tools', () => {
     // Wait until the editor has fully mounted and exposed its canvas helpers —
     // otherwise helper calls below silently no-op and the assertions flake.
     await waitForEditorReady(page);
+    await waitForInitialCanvas(page);
   });
 
   test.afterEach(async ({ request }) => {
@@ -62,6 +63,11 @@ test.describe('Flow Editor DOM tools', () => {
     await expect.poll(() => page.evaluate(() => typeof (window as any).__connectFlowNodes), { timeout: 10000, message: '__connectFlowNodes helper' }).toBe('function');
     await expect.poll(() => page.evaluate(() => typeof (window as any).__removeFlowEdge), { timeout: 10000, message: '__removeFlowEdge helper' }).toBe('function');
     await expect.poll(() => page.evaluate(() => Array.isArray((window as any).__flowCanvasNodes)), { timeout: 10000, message: '__flowCanvasNodes state' }).toBe(true);
+    // The canvas helpers are exposed before React Flow finishes its first
+    // layout pass. Wait for the node count to settle at the initial value so
+    // tests read a stable baseline before mutating the canvas.
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000, message: 'initial node render' }).toBeGreaterThan(0);
+    await page.waitForTimeout(300);
   }
 
   /** Wait until the rendered node count is stable across two consecutive frames. */
@@ -70,6 +76,12 @@ test.describe('Flow Editor DOM tools', () => {
     // Give React Flow one more frame so node dimensions/layout settle before
     // the test reads positions or counts again.
     await page.waitForTimeout(150);
+  }
+
+  /** Wait for the editor's initial canvas (3 nodes: Start, Processor, Output). */
+  async function waitForInitialCanvas(page: any) {
+    await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 10000, message: 'initial 3-node canvas' }).toBe(3);
+    await page.waitForTimeout(200);
   }
 
   test('open_node clicks a node by label', async ({ page }) => {

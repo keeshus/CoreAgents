@@ -72,7 +72,7 @@ export default function SecretVaultsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.secretVaults.list();
+      const data = await api.secretVaults.list(filterGroupId ? { groupId: filterGroupId } : undefined);
       setVaults(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load secret vaults');

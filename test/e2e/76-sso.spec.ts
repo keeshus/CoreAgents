@@ -155,6 +155,15 @@ test.describe('SSO with mock OIDC', () => {
     expect(syncedGroup).toBeDefined();
     expect(syncedGroup.provider).toBe('mock-oidc');
 
+    // SSO-provisioned groups are read-only on the groups settings page:
+    // no Edit/Delete buttons and no "+ Add member" for non-local groups.
+    await page.goto('/settings/groups');
+    await expect(page.getByText('core-agents-admin')).toBeVisible({ timeout: 10000 });
+    const ssoRow = page.locator('div.bg-surface.rounded-lg.border.border-outline-variant.p-4').filter({ hasText: 'core-agents-admin' }).first();
+    await expect(ssoRow.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+    await expect(ssoRow.getByRole('button', { name: 'Delete' })).toHaveCount(0);
+    await expect(page.getByText('mock-oidc').first()).toBeVisible({ timeout: 5000 });
+
     await request.delete(`${API_URL}/users/${me.user.userId}`).catch(() => {});
   });
 
@@ -256,6 +265,51 @@ test.describe('SSO with mock OIDC', () => {
     await request.put(`${API_URL}/admin/sso-config`, {
       data: { provider: 'mock-oidc', adminGroupMapping: ['core-agents-admin'], editorGroupMapping: ['core-agents-editor'] },
     });
+  });
+
+  test('SSO settings: save is disabled until required fields are filled, enable toggle is staged', async ({ page }) => {
+    await page.goto('/settings/sso');
+    await expect(page.getByRole('heading', { name: 'SSO / OIDC Configuration' })).toBeVisible({ timeout: 10000 });
+
+    // Empty the required fields → Save disabled
+    await page.getByLabel('Provider name').fill('');
+    await page.getByLabel('Client ID').fill('');
+    await page.getByLabel('Issuer URL').fill('');
+    const saveBtn = page.getByRole('button', { name: 'Save Configuration' });
+    await expect(saveBtn).toBeDisabled({ timeout: 5000 });
+
+    // Fill them back → Save re-enabled
+    await page.getByLabel('Provider name').fill('mock-oidc');
+    await page.getByLabel('Client ID').fill('core-agents');
+    await page.getByLabel('Issuer URL').fill('http://mock-oidc-e2e:3004/dex');
+    await expect(saveBtn).toBeEnabled({ timeout: 5000 });
+
+    // Toggle the Enable SSO checkbox — staged until Save is clicked
+    const enableCheckbox = page.getByLabel('Enable SSO');
+    const before = await (await page.request.get(`${API_URL}/admin/sso-config`)).json();
+    if (await enableCheckbox.isChecked()) {
+      await enableCheckbox.uncheck();
+      // Not saved yet → config unchanged
+      await page.waitForTimeout(300);
+      const mid = await (await page.request.get(`${API_URL}/admin/sso-config`)).json();
+      expect(mid.enabled).toBe(before.enabled);
+      // Save → persisted
+      await saveBtn.click();
+      await expect(page.getByText('SSO configuration saved')).toBeVisible({ timeout: 5000 });
+      const after = await (await page.request.get(`${API_URL}/admin/sso-config`)).json();
+      expect(after.enabled).toBe(false);
+      // Restore
+      await page.request.put(`${API_URL}/admin/sso-config`, { data: { enabled: true } });
+    } else {
+      await enableCheckbox.check();
+      await page.waitForTimeout(300);
+      const mid = await (await page.request.get(`${API_URL}/admin/sso-config`)).json();
+      expect(mid.enabled).toBe(before.enabled);
+      await saveBtn.click();
+      await expect(page.getByText('SSO configuration saved')).toBeVisible({ timeout: 5000 });
+      const after = await (await page.request.get(`${API_URL}/admin/sso-config`)).json();
+      expect(after.enabled).toBe(true);
+    }
   });
 
   // ─── IdP failure paths ──────────────────────────────────

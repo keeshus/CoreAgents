@@ -36,8 +36,8 @@ export default function SecretsPage() {
   const [formGroupId, setFormGroupId] = useState('');
 
   const deleteConfirm = useConfirm({ title: 'Delete secret?', message: 'Are you sure you want to delete this secret? This cannot be undone.' });
-  const rotateConfirm = useConfirm({ title: 'Rotate encryption key?', message: 'Rotate the root encryption key used to encrypt all secrets at rest?' });
-  const reEncryptConfirm = useConfirm({ title: 'Re-encrypt secrets?', message: 'Re-encrypt all secrets with the current key?' });
+  const rotateConfirm = useConfirm({ title: 'Rotate encryption key?', message: 'Rotate the root encryption key used to encrypt all secrets at rest?', confirmLabel: 'Rotate' });
+  const reEncryptConfirm = useConfirm({ title: 'Re-encrypt secrets?', message: 'Re-encrypt all secrets with the current key?', confirmLabel: 'Re-encrypt' });
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);

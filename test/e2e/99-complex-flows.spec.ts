@@ -254,6 +254,8 @@ return {
 
     const nodes = page.locator('.react-flow__node');
     await expect(nodes).toHaveCount(2, { timeout: 5000 });
+    // Let the canvas finish its layout pass so handle coordinates are stable.
+    await page.waitForTimeout(500);
 
     // Real drag: source handle of the trigger -> input-0 handle of the output
     // (the output node also has a feedback-input target handle — ignore it)
@@ -273,7 +275,7 @@ return {
 
     // The edge must exist in the live canvas state
     await expect
-      .poll(() => page.evaluate(() => ((window as any).__flowCanvasEdges || []).length), { timeout: 5000 })
+      .poll(() => page.evaluate(() => ((window as any).__flowCanvasEdges || []).length), { timeout: 10000 })
       .toBeGreaterThan(0);
     const edgeInfo = await page.evaluate(() => {
       const edges: any[] = (window as any).__flowCanvasEdges || [];

@@ -8,7 +8,7 @@ interface User {
   name: string;
   role: string;
   permissions: string[];
-  groups?: Array<{ id: string; name: string }>;
+  groups?: Array<{ id: string; name: string; role?: string }>;
 }
 
 export interface AuthConfig {

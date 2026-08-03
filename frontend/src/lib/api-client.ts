@@ -164,7 +164,7 @@ export const api = {
     refresh: (id: string) => request<any>(`/vector-stores/${id}/refresh`, { method: 'POST' }),
   },
   secretVaults: {
-    list: () => request<any[]>('/secret-vaults'),
+    list: (params?: { groupId?: string }) => request<any[]>('/secret-vaults' + (params?.groupId ? `?group_id=${encodeURIComponent(params.groupId)}` : '')),
     get: (id: string) => request<any>(`/secret-vaults/${id}`),
     create: (data: any) => request<any>('/secret-vaults', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => request<any>(`/secret-vaults/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

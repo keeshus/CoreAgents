@@ -641,7 +641,9 @@ const createUser: AssistantTool = {
     required: ['email', 'password', 'name'],
   },
   async execute({ email, password, name }) {
-    return apiFetch('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
+    // Admin endpoint (not /auth/register) so creating a user never swaps
+    // the caller's session cookie to the new account.
+    return apiFetch('/users', { method: 'POST', body: JSON.stringify({ email, password, name }) });
   },
 };
 

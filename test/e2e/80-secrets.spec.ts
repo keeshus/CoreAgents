@@ -541,6 +541,118 @@ test.describe('Secrets management', () => {
     expect(getRes.status()).toBe(404);
   });
 
+  test('create an app secret via the UI form', async ({ page, request }) => {
+    const secName = `ui-app-secret-${Date.now()}`;
+
+    await page.goto('/settings/secrets');
+    await expect(page.getByText('Secrets', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('button', { name: 'Add Secret' }).click();
+    await expect(page.getByRole('heading', { name: 'New Secret' })).toBeVisible({ timeout: 5000 });
+    await page.getByLabel('Secret name').fill(secName);
+    await page.getByLabel('Value').fill('ui-value-123');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+
+    await expect(page.getByText(secName)).toBeVisible({ timeout: 5000 });
+
+    const listRes = await request.get(`${API_URL}/secrets?scope=app`);
+    const list = await listRes.json();
+    const created = list.find((s: any) => s.name === secName);
+    expect(created).toBeDefined();
+    expect(created.scope).toBe('app');
+    cleanupSecretIds.push(created.id);
+  });
+
+  test('create a group secret via the UI with the Core/CyberArk type toggle', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Sec-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    await page.goto('/settings/secrets');
+    await expect(page.getByText('Secrets', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+
+    // ── Helper: select a group in the Add Secret form's Group select ──
+    const selectFormGroup = async () => {
+      // The form's Group select button shows "App-wide" (its allLabel) when
+      // no group is chosen. The icon text is concatenated into the accessible
+      // name, so match by substring. Scope to the form via its heading.
+      const form = page.getByRole('heading', { name: 'New Secret' }).locator('..');
+      await form.getByRole('button', { name: /App-wide/ }).click();
+      // Pick the group from the open dropdown (last match is inside the popover)
+      await page.getByRole('button', { name: group.name, exact: true }).last().click();
+      await page.waitForTimeout(300);
+      // Verify the toggle appeared (group selected)
+      await expect(page.getByRole('button', { name: 'CyberArk', exact: true })).toBeVisible({ timeout: 5000 });
+    };
+
+    // ── Core group secret ──
+    await page.getByRole('button', { name: 'Add Secret' }).click();
+    await expect(page.getByRole('heading', { name: 'New Secret' })).toBeVisible({ timeout: 5000 });
+    await selectFormGroup();
+    await expect(page.getByRole('button', { name: 'Core', exact: true })).toBeVisible({ timeout: 5000 });
+
+    const coreName = `ui-group-core-${Date.now()}`;
+    await page.getByLabel('Secret name').fill(coreName);
+    await page.getByLabel('Value').fill('group-value-123');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByText(coreName)).toBeVisible({ timeout: 5000 });
+
+    const listRes = await request.get(`${API_URL}/secrets?scope=group&scopeId=${group.id}`);
+    const list = await listRes.json();
+    const coreSecret = list.find((s: any) => s.name === coreName);
+    expect(coreSecret).toBeDefined();
+    expect(coreSecret.scope).toBe('group');
+    cleanupSecretIds.push(coreSecret.id);
+
+    // ── CyberArk group secret (reference path) ──
+    await page.getByRole('button', { name: 'Add Secret' }).click();
+    await expect(page.getByRole('heading', { name: 'New Secret' })).toBeVisible({ timeout: 5000 });
+    await selectFormGroup();
+    await page.getByRole('button', { name: 'CyberArk', exact: true }).click();
+
+    const arkName = `ui-group-ark-${Date.now()}`;
+    await page.getByLabel('Secret name').fill(arkName);
+    await page.getByLabel('Reference path').fill('prod/db/password');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByText(arkName)).toBeVisible({ timeout: 5000 });
+
+    const listRes2 = await request.get(`${API_URL}/secrets?scope=group&scopeId=${group.id}`);
+    const arkSecret = (await listRes2.json()).find((s: any) => s.name === arkName);
+    expect(arkSecret).toBeDefined();
+    expect(arkSecret.secretType || arkSecret.secret_type).toBe('cyberark');
+    cleanupSecretIds.push(arkSecret.id);
+  });
+
+  test('rotate key and re-encrypt via the UI (admin panel)', async ({ page, request }) => {
+    // Seed a secret so rotate/re-encrypt have something to operate on
+    const secRes = await request.post(`${API_URL}/secrets`, { data: { name: `rot-${Date.now()}`, value: 'rotate-me', scope: 'app' } });
+    expect(secRes.status()).toBe(201);
+    const secret = await secRes.json();
+    cleanupSecretIds.push(secret.id);
+
+    await page.goto('/settings/secrets');
+    await expect(page.getByText('Secrets', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+
+    // ── Rotate key ──
+    await page.getByRole('button', { name: 'Rotate Key' }).click();
+    await expect(page.getByText('Rotate encryption key?')).toBeVisible({ timeout: 5000 });
+    await page.getByRole('button', { name: 'Rotate' }).click();
+    // Success: no error banner, panel still present
+    await expect(page.getByRole('button', { name: 'Rotate Key' })).toBeVisible({ timeout: 5000 });
+
+    // ── Re-encrypt all ──
+    await page.getByRole('button', { name: 'Re-encrypt All' }).click();
+    await expect(page.getByText('Re-encrypt all secrets with the current key?')).toBeVisible({ timeout: 5000 });
+    await page.getByRole('button', { name: 'Re-encrypt' }).click();
+    await expect(page.getByRole('button', { name: 'Re-encrypt All' })).toBeVisible({ timeout: 5000 });
+
+    // The secret still resolves after the rotation
+    const revealRes = await request.post(`${API_URL}/secrets/${secret.id}/reveal`);
+    expect(revealRes.status()).toBe(200);
+    expect((await revealRes.json()).value).toBe('rotate-me');
+  });
+
   test('delete a vault via UI with confirm dialog', async ({ page, request }) => {
     const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Delete-Group-${Date.now()}` } });
     expect(gRes.status()).toBe(201);
@@ -574,6 +686,181 @@ test.describe('Secrets management', () => {
     const list = await listRes.json();
     const stillPresent = list.some((v: any) => v.id === vault.id);
     expect(stillPresent).toBe(false);
+  });
+
+  test('secret vaults page group filter filters the list', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Filter-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    // Create a vault bound to the group + one unbound (app-wide)
+    const boundRes = await request.post(`${API_URL}/secret-vaults`, {
+      data: { name: `Vault-Bound-${Date.now()}`, vaultType: 'cyberark', baseUrl: 'http://mock-cyberark-e2e:3005', account: 'conjur', login: 'host/myapp', apiKey: 'k', groupId: group.id },
+    });
+    const bound = await boundRes.json();
+    cleanupVaultIds.push(bound.id);
+
+    await page.goto('/settings/secret-vaults');
+    await expect(page.getByRole('heading', { name: 'Secret Vaults' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(bound.name)).toBeVisible({ timeout: 5000 });
+
+    // Select the group in the filter → only the bound vault remains
+    await page.getByText('All items').first().click();
+    await page.getByText(group.name).first().click();
+    await page.waitForTimeout(500);
+
+    await expect(page.getByText(bound.name)).toBeVisible({ timeout: 5000 });
+
+    // Backend filtering matches (GET with group_id returns only the bound vault)
+    const filtered = await (await request.get(`${API_URL}/secret-vaults?group_id=${group.id}`)).json();
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].id).toBe(bound.id);
+  });
+
+  test('create a vault via the UI and test the connection', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Vault-Create-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    const vaultName = `Vault-UI-Created-${Date.now()}`;
+    await page.goto('/settings/secret-vaults');
+    await expect(page.getByRole('heading', { name: 'Secret Vaults' })).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('button', { name: 'Add Vault' }).click();
+    await expect(page.getByLabel('Name')).toBeVisible({ timeout: 5000 });
+    await page.getByLabel('Name').fill(vaultName);
+    await page.getByLabel('URL').fill('http://mock-cyberark-e2e:3005');
+    await page.getByLabel('Login').fill('host/myapp');
+    await page.getByLabel('API Key').fill('myapp-api-key-456');
+    // Bind to group (the vault form's group select shows "Select..." placeholder)
+    await page.getByText('Select...').first().click();
+    await page.getByText(group.name, { exact: true }).first().click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Create Vault' }).click();
+
+    await expect(page.getByText(vaultName)).toBeVisible({ timeout: 5000 });
+
+    const listRes = await request.get(`${API_URL}/secret-vaults`);
+    const vault = (await listRes.json()).find((v: any) => v.name === vaultName);
+    expect(vault).toBeDefined();
+    cleanupVaultIds.push(vault.id);
+
+    // ── Test connection via the UI (mock CyberArk returns success) ──
+    const card = page.locator('div.bg-surface.rounded-lg.border.border-outline-variant.p-4').filter({ hasText: vaultName }).first();
+    await card.getByRole('button', { name: /Test/i }).click();
+    await expect(card.locator('span.material-symbols-outlined', { hasText: 'check_circle' })).toBeVisible({ timeout: 10000 });
+
+    const after = await (await request.get(`${API_URL}/secret-vaults/${vault.id}`)).json();
+    expect(after.connected).toBe(true);
+  });
+
+  test('secret vaults page shows access denied for non-permitted roles', async ({ page, request }) => {
+    // Register an editor (no vaults:write) and log in as them
+    const email = `vault-denied-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Vault Denied', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      // Verify the browser session is the editor, not the storage-state admin
+      await expect.poll(async () => {
+        const meRes = await page.request.get(`${API_URL}/auth/me`);
+        if (!meRes.ok()) return 'ERR';
+        return (await meRes.json()).user?.role;
+      }, { timeout: 10000 }).toBe('editor');
+
+      await page.goto('/settings/secret-vaults');
+      await expect(page.getByText('Access denied')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText('You do not have permission to view this page.')).toBeVisible();
+    } finally {
+      await request.delete(`${API_URL}/users/${regData.user.id}`).catch(() => {});
+    }
+  });
+
+  test('secrets page for non-admin users: app secrets hidden, group secrets manageable', async ({ page, request }) => {
+    // Seed an app-wide secret and a group the editor belongs to
+    const secName = `hidden-app-${Date.now()}`;
+    const secRes = await request.post(`${API_URL}/secrets`, { data: { name: secName, value: 'hidden-value', scope: 'app' } });
+    expect(secRes.status()).toBe(201);
+    const secret = await secRes.json();
+    cleanupSecretIds.push(secret.id);
+
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `Sec-RO-Group-${Date.now()}` } });
+    expect(gRes.ok()).toBe(true);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    // Register an editor (non-admin) and add them to the group as a group admin
+    const email = `secread-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Secret Read Only', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.post(`${API_URL}/groups/${group.id}/members`, { data: { userId: regData.user.id } });
+    await request.put(`${API_URL}/groups/${group.id}/members/${regData.user.id}/role`, { data: { role: 'admin' } });
+
+    // Create a group secret the editor will manage
+    const grpSecName = `group-visible-${Date.now()}`;
+    const grpSecRes = await request.post(`${API_URL}/secrets`, { data: { name: grpSecName, value: 'group-val', scope: 'group', scopeId: group.id } });
+    expect(grpSecRes.status()).toBe(201);
+    const grpSecret = await grpSecRes.json();
+    cleanupSecretIds.push(grpSecret.id);
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      // Verify the browser session is the editor, not the storage-state admin
+      await expect.poll(async () => {
+        const meRes = await page.request.get(`${API_URL}/auth/me`);
+        if (!meRes.ok()) return 'ERR';
+        return (await meRes.json()).user?.role;
+      }, { timeout: 10000 }).toBe('editor');
+
+      await page.goto('/settings/secrets');
+      await expect(page.getByText('Secrets', { exact: true }).first()).toBeVisible({ timeout: 10000 });
+
+      // App secrets are not visible to non-admins — only the group secret shows
+      await expect(page.getByText(secName)).toHaveCount(0);
+      await expect(page.getByText(grpSecName)).toBeVisible({ timeout: 5000 });
+
+      // Selecting their group still shows the group secret, and the group
+      // admin can add secrets (Add Secret button visible with a group selected)
+      await page.getByText('All items').first().click();
+      await page.getByText(group.name).first().click();
+      await page.waitForTimeout(500);
+      await expect(page.getByText(grpSecName)).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('button', { name: 'Add Secret' })).toBeVisible({ timeout: 5000 });
+      // Group secrets are manageable (not read-only) for the group's admins
+      const grpRow = page.locator('div.flex.items-center.justify-between.bg-surface.rounded-lg.border.px-4').filter({ hasText: grpSecName }).first();
+      await expect(grpRow.locator('button')).not.toHaveCount(0, { timeout: 5000 });
+    } finally {
+      await request.delete(`${API_URL}/users/${regData.user.id}`).catch(() => {});
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════

@@ -456,4 +456,147 @@ test.describe('Env Vars settings page', () => {
     expect(Array.isArray(stored)).toBe(true);
     expect(stored.find((v: any) => v.name === 'UI_GROUP_DEL_VAR')).toBeUndefined();
   });
+
+  test('inline edit mode updates an env var value via the UI', async ({ page, request }) => {
+    const varName = `UI_INLINE_${Date.now()}`;
+    const putRes = await request.put(`${API_URL}/env-vars`, {
+      data: { envVars: [{ name: varName, value: 'before', type: 'static' }] },
+    });
+    expect(putRes.ok()).toBe(true);
+
+    await page.goto('/settings/env-vars');
+    await expect(page.getByTestId('env-vars-heading')).toBeVisible({ timeout: 10000 });
+
+    const row = page.getByTestId('env-var-item').filter({ hasText: varName });
+    await expect(row).toBeVisible({ timeout: 5000 });
+
+    // Enter inline edit mode
+    await row.getByTestId('edit-var-btn').click();
+    await expect(page.getByLabel('Value')).toHaveValue('before', { timeout: 5000 });
+    await page.getByLabel('Value').fill('after');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+    // Row shows the new value
+    await expect(page.getByTestId('env-var-item').filter({ hasText: varName })).toContainText('after', { timeout: 5000 });
+
+    // Backend reflects the change
+    const res = await request.get(`${API_URL}/env-vars`);
+    const stored = await res.json();
+    expect(stored.find((v: any) => v.name === varName)?.value).toBe('after');
+
+    await removeAppVar(request, varName);
+  });
+
+  test('env vars page is read-only for non-admin users', async ({ page, request }) => {
+    const email = `envro-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Env Read Only', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+
+    // Seed an app env var first
+    const varName = `UI_READONLY_${Date.now()}`;
+    await request.put(`${API_URL}/env-vars`, { data: { envVars: [{ name: varName, value: 'x', type: 'static' }] } });
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      // Verify the browser session is the editor, not the storage-state admin
+      await expect.poll(async () => {
+        const meRes = await page.request.get(`${API_URL}/auth/me`);
+        if (!meRes.ok()) return 'ERR';
+        return (await meRes.json()).user?.role;
+      }, { timeout: 10000 }).toBe('editor');
+
+      await page.goto('/settings/env-vars');
+      await expect(page.getByTestId('env-vars-heading')).toBeVisible({ timeout: 10000 });
+
+      // App env vars are admin-only: a non-admin sees no rows, no Add button,
+      // and a prompt to select a group (group-scoped vars are managed there).
+      await expect(page.getByText(varName)).toHaveCount(0);
+      await expect(page.getByTestId('add-variable-btn')).toHaveCount(0);
+      await expect(page.getByText('Select a group to manage group variables.')).toBeVisible({ timeout: 10000 });
+    } finally {
+      await removeAppVar(request, varName);
+      await request.delete(`${API_URL}/users/${regData.user.id}`).catch(() => {});
+    }
+  });
+
+  test('group admin can edit group env vars via the UI', async ({ page, request }) => {
+    // Create a group + a group env var
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `GA-Group-${Date.now()}` } });
+    expect(gRes.ok()).toBe(true);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    const varName = `UI_GA_VAR_${Date.now()}`;
+    const putRes = await request.put(`${API_URL}/env-vars/groups/${group.id}`, {
+      data: { envVars: [{ name: varName, value: 'before', type: 'static' }] },
+    });
+    expect(putRes.ok()).toBe(true);
+
+    // Register a user, add to group as group admin
+    const email = `ga-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'GA User', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    await request.post(`${API_URL}/groups/${group.id}/members`, { data: { userId: regData.user.id } });
+    await request.put(`${API_URL}/groups/${group.id}/members/${regData.user.id}/role`, { data: { role: 'admin' } });
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      // Verify the browser session is the group admin user, not the admin
+      await expect.poll(async () => {
+        const meRes = await page.request.get(`${API_URL}/auth/me`);
+        if (!meRes.ok()) return 'ERR';
+        return (await meRes.json()).user?.email;
+      }, { timeout: 10000 }).toBe(email);
+
+      await page.goto('/settings/env-vars');
+      await expect(page.getByTestId('env-vars-heading')).toBeVisible({ timeout: 10000 });
+
+      // Select the group → group admin sees the var with edit/delete buttons
+      await page.getByText('All items').first().click();
+      await page.getByText(group.name).first().click();
+      await page.waitForTimeout(500);
+      const row = page.getByTestId('env-var-item').filter({ hasText: varName });
+      await expect(row).toBeVisible({ timeout: 5000 });
+      await expect(row.getByTestId('edit-var-btn')).toBeVisible({ timeout: 5000 });
+      await expect(row.getByTestId('delete-var-btn')).toBeVisible({ timeout: 5000 });
+
+      // Edit the value inline
+      await row.getByTestId('edit-var-btn').click();
+      await page.getByLabel('Value').fill('after-group-admin');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+      // The edit form closes and the row shows the new value
+      const updatedRow = page.getByTestId('env-var-item').filter({ hasText: varName });
+      await expect(updatedRow.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0, { timeout: 5000 });
+      await expect(updatedRow).toContainText('after-group-admin', { timeout: 5000 });
+
+      const res = await request.get(`${API_URL}/env-vars/groups/${group.id}`);
+      const stored = await res.json();
+      expect(stored.find((v: any) => v.name === varName)?.value).toBe('after-group-admin');
+    } finally {
+      await request.delete(`${API_URL}/users/${regData.user.id}`).catch(() => {});
+    }
+  });
 });
