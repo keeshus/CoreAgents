@@ -76,6 +76,7 @@ test.describe('Sidecar real-world capabilities', () => {
   });
 
   test('npm install on cloned repo', async ({ request }) => {
+    test.setTimeout(180_000);
     const code = ['var cp = require("child_process");',
       'cp.execSync("cd $HOME && rm -rf CoreTemplate && git clone https://github.com/keeshus/CoreTemplate.git 2>&1", { encoding: "utf-8", timeout: 30000 });',
       'cp.execSync("cd $HOME/CoreTemplate && npm install 2>&1", { encoding: "utf-8", timeout: 120000 });',
@@ -96,6 +97,7 @@ test.describe('Sidecar real-world capabilities', () => {
   });
 
   test('full project workflow clone build check', async ({ request }) => {
+    test.setTimeout(180_000);
     const code = ['var cp = require("child_process"); var steps = [];',
       'try { cp.execSync("cd $HOME && rm -rf CoreTemplate && git clone https://github.com/keeshus/CoreTemplate.git 2>&1", { encoding: "utf-8", timeout: 30000 }); steps.push("clone:OK"); } catch(e) { steps.push("clone:" + e.message.slice(0,50)); }',
       'try { cp.execSync("cd $HOME/CoreTemplate && npm install 2>&1", { encoding: "utf-8", timeout: 120000 }); steps.push("npm:OK"); } catch(e) { steps.push("npm:" + e.message.slice(0,50)); }',

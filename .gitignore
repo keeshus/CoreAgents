@@ -29,6 +29,8 @@ example-transaction-files/
 test/e2e/.auth/
 /e2e/
 test-results/
+test-results-e2e-*/
+coverage/
 error
 ponto-key
 gemini-key.claude/
