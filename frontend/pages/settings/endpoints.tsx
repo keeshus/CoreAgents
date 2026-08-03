@@ -282,12 +282,12 @@ export default function EndpointsPage() {
               <span className="text-xs font-medium text-on-surface-variant block mb-1">Models</span>
               <div className="space-y-1.5">
                 {(form.models ? form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '') : []).map((model, i) => (
-                  <div key={i} className={`flex items-center gap-1 p-2 rounded transition-colors ${form.defaultModel === model ? 'bg-secondary-container ring-1 ring-primary' : ''}`}>
+                  <div key={i} className={`flex items-center gap-1 p-2 rounded transition-colors ${form.defaultModel === model && model !== '' ? 'bg-secondary-container ring-1 ring-primary' : ''}`}>
                     <span
-                      onClick={() => setForm((f) => ({ ...f, defaultModel: model }))}
+                      onClick={() => { if (model.trim()) setForm((f) => ({ ...f, defaultModel: model.trim() })); }}
                       className="flex items-center cursor-pointer shrink-0 w-20 justify-center"
                     >
-                      {form.defaultModel === model ? (
+                      {form.defaultModel === model && model !== '' ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary text-on-primary font-medium">Default</span>
                       ) : (
                         <span className="text-[10px] px-1.5 py-0.5 text-on-surface-variant">Set default</span>
@@ -298,8 +298,19 @@ export default function EndpointsPage() {
                       value={model}
                       onChange={(v) => {
                         const list = form.models.split(',').map(s => s.trim()).filter((s) => s.length > 0 || s === '');
+                        const previous = list[i] || '';
                         list[i] = v;
-                        setForm((f) => ({ ...f, models: list.join(', ') }));
+                        setForm((f) => ({
+                          ...f,
+                          models: list.join(', '),
+                          // Auto-mark as default when none is set yet, or when
+                          // this row was the default — typing must not lose the
+                          // default marker.
+                          defaultModel:
+                            f.defaultModel === '' || f.defaultModel === previous.trim()
+                              ? v.trim()
+                              : f.defaultModel,
+                        }));
                       }}
                       className="flex-1"
                     />
@@ -345,11 +356,11 @@ export default function EndpointsPage() {
               >
                 Cancel
               </button>
-              <Tooltip content={!saving && (!form.name || (!editingId && !form.apiKey)) ? 'Fill in all required fields' : ''}>
+              <Tooltip content={!saving && !form.defaultModel ? 'A default model is required' : ''}>
                 <span>
                   <button
                     type="submit"
-                    disabled={saving || !form.name || (!editingId && !form.apiKey)}
+                    disabled={saving || !form.defaultModel}
                     className="m3-button disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {saving ? 'Saving...' : editingId ? 'Update Endpoint' : 'Create Endpoint'}
