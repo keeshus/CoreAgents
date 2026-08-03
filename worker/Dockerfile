@@ -20,6 +20,11 @@ COPY worker/package*.json ./worker/
 # npm ci for reproducible builds (exact versions from package-lock.json)
 RUN npm ci -w shared -w worker -w backend --install-strategy=hoisted && npm cache clean --force
 
+# Build shared so the compiled worker can resolve core-agents-shared at runtime
+# (the package main points at src/index.ts, which only tsx can load)
+RUN cd shared && npx -p typescript@7.0.2 tsc && cd .. && \
+    node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('shared/package.json','utf8'));p.main='./dist/index.js';p.types='./dist/index.d.ts';p.exports={'.':{types:'./dist/index.d.ts',default:'./dist/index.js'},'./types':{types:'./dist/types/index.d.ts',default:'./dist/types/index.js'}};fs.writeFileSync('shared/package.json',JSON.stringify(p,null,2))"
+
 # Worker source + build
 COPY worker/tsconfig.build.json ./worker/tsconfig.json
 COPY worker/src ./worker/src/
@@ -38,4 +43,4 @@ COPY --from=builder /app/worker/dist ./worker/dist
 COPY --from=builder /app/worker/package*.json ./worker/
 
 USER node
-CMD ["node", "worker/dist/run.js"]
+CMD ["node", "worker/dist/worker/src/run.js"]
