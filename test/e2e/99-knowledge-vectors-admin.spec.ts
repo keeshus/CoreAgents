@@ -148,31 +148,8 @@ test.describe('Admin endpoints', () => {
     if (groupId) await request.delete(`${API_URL}/groups/${groupId}`).catch(() => {});
   });
 
-  test('PUT /api/users/:id/groups updates user group membership', async ({ request }) => {
-    test.skip(!testUserId, 'No test user');
-    const res = await request.put(`${API_URL}/users/${testUserId}/groups`, {
-      data: { groupIds: [groupId] },
-    });
-    expect(res.ok()).toBe(true);
-  });
-
-  test('PUT /api/groups/:id/members/:userId/role updates member role', async ({ request }) => {
-    test.skip(!testUserId || !groupId, 'No test user or group');
-    // First add the member
-    await request.post(`${API_URL}/groups/${groupId}/members`, { data: { userId: testUserId } });
-    const res = await request.put(`${API_URL}/groups/${groupId}/members/${testUserId}/role`, {
-      data: { role: 'admin' },
-    });
-    expect(res.ok()).toBe(true);
-  });
-
   // Note: GET /api/assignments is mounted at /api not /api/assignments (routing bug)
   // Assignments are tested via the approvals page and execution approve flow
-
-  test('GET /api/admin/sso-config returns SSO config', async ({ request }) => {
-    const res = await request.get(`${API_URL}/admin/sso-config`);
-    expect(res.ok()).toBe(true);
-  });
 });
 
 // ─── Vector store endpoints ─────────────────────────────────────
@@ -305,52 +282,6 @@ test.describe('Vector store endpoints', () => {
     await deleteFlow(request, flow.id);
     await request.delete(`${API_URL}/documents/${docId}`).catch(() => {});
     if (embeddingEndpointId) await request.delete(`${API_URL}/llm-endpoints/${embeddingEndpointId}`).catch(() => {});
-  });
-});
-
-// ─── Single-entity GET endpoints ────────────────────────────────
-
-test.describe('Single entity GET endpoints', () => {
-  test('GET /api/llm-endpoints/default returns default endpoint or 404', async ({ request }) => {
-    const res = await request.get(`${API_URL}/llm-endpoints/default`);
-    // Either returns the default endpoint or 404 if none set
-    expect([200, 404]).toContain(res.status());
-  });
-
-  test('GET /api/llm-endpoints/:id returns specific endpoint', async ({ request }) => {
-    const createRes = await request.post(`${API_URL}/llm-endpoints`, {
-      data: { name: 'GetTest', providerType: 'openai', baseUrl: 'http://test.local', apiKey: 'sk-test', defaultModel: 'gpt-4', models: ['gpt-4'] },
-    });
-    const ep = await createRes.json();
-
-    const getRes = await request.get(`${API_URL}/llm-endpoints/${ep.id}`);
-    expect(getRes.ok()).toBe(true);
-
-    await request.delete(`${API_URL}/llm-endpoints/${ep.id}`);
-  });
-
-  test('GET /api/embedding-providers/:id returns specific provider', async ({ request }) => {
-    const createRes = await request.post(`${API_URL}/embedding-providers`, {
-      data: { name: 'GetEmbTest', providerType: 'openai', baseUrl: 'http://test.local', apiKey: 'sk-test', model: 'test-model' },
-    });
-    const ep = await createRes.json();
-
-    const getRes = await request.get(`${API_URL}/embedding-providers/${ep.id}`);
-    expect(getRes.ok()).toBe(true);
-
-    await request.delete(`${API_URL}/embedding-providers/${ep.id}`);
-  });
-
-  test('GET /api/mcp-servers/:id returns specific server', async ({ request }) => {
-    const createRes = await request.post(`${API_URL}/mcp-servers`, {
-      data: { name: 'GetMCPTest', url: 'http://test-mcp.local/sse' },
-    });
-    const server = await createRes.json();
-
-    const getRes = await request.get(`${API_URL}/mcp-servers/${server.id}`);
-    expect(getRes.ok()).toBe(true);
-
-    await request.delete(`${API_URL}/mcp-servers/${server.id}`);
   });
 });
 

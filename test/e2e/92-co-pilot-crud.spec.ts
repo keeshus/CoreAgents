@@ -692,7 +692,15 @@ test.describe('Co-Pilot tools', () => {
   });
 
   test('validate_flow — validates flow structure', async ({ request }) => {
-    const res = await request.post(`${API_URL}/flows/validate`, { data: { nodes: [], edges: [] } });
+    const res = await request.post(`${API_URL}/flows/validate`, {
+      data: {
+        nodes: [
+          { id: 't1', type: 'trigger', data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+          { id: 'o1', type: 'output', data: { label: 'Output', type: 'output', config: {} } },
+        ],
+        edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+      },
+    });
     expect(res.ok()).toBe(true);
   });
 

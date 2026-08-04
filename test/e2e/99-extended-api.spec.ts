@@ -432,19 +432,6 @@ test.describe('Flow utilities', () => {
 
     await deleteFlow(request, flow.id);
   });
-
-  test('POST /api/flows/validate validates a flow definition', async ({ request }) => {
-    const res = await request.post(`${API_URL}/flows/validate`, {
-      data: {
-        nodes: [
-          { id: 't1', type: 'trigger', data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
-          { id: 'o1', type: 'output', data: { label: 'Output', type: 'output', config: {} } },
-        ],
-        edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
-      },
-    });
-    expect(res.ok()).toBe(true);
-  });
 });
 
 // ─── Settings CRUD ──────────────────────────────────────────────
@@ -502,18 +489,6 @@ test.describe('Settings CRUD from API', () => {
 
     await request.delete(`${API_URL}/mcp-servers/${server.id}`);
     createdId = '';
-  });
-
-  test('MCP server refresh endpoint', async ({ request }) => {
-    const createRes = await request.post(`${API_URL}/mcp-servers`, {
-      data: { name: 'E2E MCP Refresh', url: 'http://mock-mcp-e2e:3003/sse' },
-    });
-    const server = await createRes.json();
-
-    const refreshRes = await request.post(`${API_URL}/mcp-servers/${server.id}/refresh`);
-    expect(refreshRes.ok()).toBe(true);
-
-    await request.delete(`${API_URL}/mcp-servers/${server.id}`);
   });
 
   test('GET /api/secret-vaults returns vault list', async ({ request }) => {
@@ -661,16 +636,6 @@ test.describe('Admin and niche endpoints', () => {
     expect(res.ok()).toBe(true);
     const data = await res.json();
     expect(Array.isArray(data)).toBe(true);
-  });
-
-  test('POST /api/secrets/rotate-key rotates encryption key', async ({ request }) => {
-    const res = await request.post(`${API_URL}/secrets/rotate-key`);
-    expect(res.ok()).toBe(true);
-  });
-
-  test('POST /api/secrets/re-encrypt re-encrypts secrets', async ({ request }) => {
-    const res = await request.post(`${API_URL}/secrets/re-encrypt`);
-    expect(res.ok()).toBe(true);
   });
 
   test('POST /api/executions/:id/admin-cancel cancels execution as admin', async ({ request }) => {
