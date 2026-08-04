@@ -596,7 +596,7 @@ export default function FlowEditPage() {
 
       {/* Flow Settings modal */}
       {showFlowSettings && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-12" onClick={() => setShowFlowSettings(false)}>
+        <div data-co-pilot-modal="flow-settings" className="fixed inset-0 z-50 flex items-start justify-center pt-12" onClick={() => setShowFlowSettings(false)}>
           <div className="bg-surface rounded-xl shadow-m3-4 w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <h2 className="text-lg font-semibold text-on-surface">Flow Settings</h2>
@@ -897,7 +897,7 @@ export default function FlowEditPage() {
 
       {/* Personal API Key creation modal */}
       {showKeyModal && personalApiKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div data-co-pilot-modal="api-key" className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="bg-surface rounded-xl shadow-m3-4 p-6 max-w-md w-full mx-4 space-y-4">
             <h3 className="m3-title-small text-on-surface">Personal API Key Created</h3>
             <p className="m3-body-small text-on-surface-variant">

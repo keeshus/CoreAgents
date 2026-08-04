@@ -13,11 +13,12 @@ interface SelectFieldProps {
 }
 
 export function SelectField({ label, value, onChange, options, error, helpText, disabled, className = '' }: SelectFieldProps) {
-  const selectedLabel = options.find(o => o.value === value)?.label || '';
+  const normalizedValue = value ?? '';
+  const selectedLabel = options.find(o => o.value === normalizedValue)?.label || '';
 
   return (
     <div className={`relative ${className}`}>
-      <Select.Root value={value} onValueChange={onChange} disabled={disabled}>
+      <Select.Root value={normalizedValue} onValueChange={onChange} disabled={disabled}>
          <Select.Trigger
           data-field-label={label}
           className={`w-full rounded-t bg-surface-container-high border-b-2 transition-colors flex items-center justify-between text-left cursor-pointer min-h-[48px] group ${
@@ -60,7 +61,7 @@ export function SelectField({ label, value, onChange, options, error, helpText, 
       </Select.Root>
 
       <label className={`absolute left-4 transition-all pointer-events-none ${
-        value.length > 0
+        normalizedValue.length > 0
           ? 'text-[10px] top-1.5 text-on-surface-variant'
           : 'text-sm top-2 text-outline'
       } ${error ? '!text-error' : ''}`}>

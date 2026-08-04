@@ -529,7 +529,7 @@ export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canva
   const triggerIconName = TRIGGER_CONFIG[triggerType]?.icon || 'terminal';
 
   return (
-    <div data-testid="debug-overlay" className="fixed inset-0 z-50 bg-surface flex flex-col">
+    <div data-testid="debug-overlay" data-co-pilot-modal="debug-overlay" className="fixed inset-0 z-50 bg-surface flex flex-col">
       {/* Header — clean minimal bar */}
       <div className="h-11 border-b flex items-center justify-between px-4 shrink-0 bg-surface">
         <div className="flex items-center gap-3">

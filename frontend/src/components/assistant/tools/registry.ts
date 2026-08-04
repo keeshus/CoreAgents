@@ -29,7 +29,7 @@ const readCode: AssistantTool = {
   inputSchema: { type: 'object', properties: {} },
   async execute() {
     // Find the code editor by looking for the TextField with label "JavaScript Code"
-    const modal = document.querySelector('.fixed.inset-0.z-50');
+    const modal = findOpenModal();
     if (!modal) return 'No code editor found. Open a Code Node configuration panel first.';
     const labels = modal.querySelectorAll('span.text-xs.font-medium, span.text-sm.font-medium, label');
     for (const label of labels) {
@@ -42,7 +42,7 @@ const readCode: AssistantTool = {
       }
     }
     // Fallback: try the TextField's textarea directly
-    const codeField = findModalField('JavaScript Code');
+    const codeField = await findModalField('JavaScript Code');
     if (codeField) return (codeField as HTMLTextAreaElement).value || '(empty)';
     return 'No code editor found. Open a Code Node configuration panel first.';
   },
@@ -57,7 +57,7 @@ const replaceCode: AssistantTool = {
     required: ['code'],
   },
   async execute({ code }) {
-    const field = findModalField('JavaScript Code');
+    const field = await findModalField('JavaScript Code');
     if (field) {
       reactSetValue(field as HTMLInputElement | HTMLTextAreaElement, code as string);
       return 'Code updated in the editor.';
@@ -93,8 +93,9 @@ function getFieldLabel(el: Element): string | null {
   return el.getAttribute('placeholder') || null;
 }
 
-function findModalField(label: string): HTMLElement | null {
-  const modal = document.querySelector('.fixed.inset-0.z-50');
+async function findModalField(label: string): Promise<HTMLElement | null> {
+  // Wait for the modal to mount (open_node / the user may have just clicked)
+  const modal = await waitForModal();
   if (!modal) return null;
   // First try native form elements
   for (const el of modal.querySelectorAll('input, textarea, select')) {
@@ -105,6 +106,36 @@ function findModalField(label: string): HTMLElement | null {
     if (el.getAttribute('data-field-label') === label) return el as HTMLElement;
   }
   return null;
+}
+
+/**
+ * Find the currently open modal/dialog container.
+ * Co-pilot-aware modals carry a `data-co-pilot-modal` attribute (added to the
+ * node config, debug overlay, confirm, and settings modals) — prefer those.
+ * Falls back to legacy class selectors for any modal without the attribute.
+ */
+function findOpenModal(): HTMLElement | null {
+  return (
+    document.querySelector('[data-co-pilot-modal]') ||
+    document.querySelector('[data-testid="node-config-modal"]') ||
+    document.querySelector('.fixed.inset-0.z-50') ||
+    document.querySelector('.fixed.z-50')
+  ) as HTMLElement | null;
+}
+
+/**
+ * Wait (up to timeoutMs) for a modal to appear. React mounts dialogs one
+ * frame after the triggering click, so tools that act on a freshly opened
+ * panel must wait instead of reading the DOM synchronously.
+ */
+async function waitForModal(timeoutMs = 1500): Promise<HTMLElement | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const modal = findOpenModal();
+    if (modal) return modal;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return findOpenModal();
 }
 
 function reactSetValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
@@ -123,8 +154,8 @@ const getNodeConfig: AssistantTool = {
   description: 'Read all configuration fields from the currently open node config panel. Works with any node type.',
   inputSchema: { type: 'object', properties: {} },
   async execute() {
-    const modal = document.querySelector('.fixed.inset-0.z-50');
-    if (!modal) return 'No node config panel is open. Double-click a node to open it.';
+    const modal = await waitForModal();
+    if (!modal) return 'No node config panel is open. Use open_node to open a node first.';
     const fields: Record<string, string> = {};
 
     modal.querySelectorAll('input, textarea, select').forEach((el: any) => {
@@ -160,7 +191,7 @@ const updateNodeField: AssistantTool = {
     required: ['label', 'value'],
   },
   async execute({ label, value }) {
-    const field = findModalField(label);
+    const field = await findModalField(label);
     if (!field) return `Field "${label}" not found. Open the node config panel first.`;
 
     if ((field as HTMLInputElement).type === 'checkbox') {
@@ -233,7 +264,12 @@ const openNode: AssistantTool = {
     for (const node of nodes) {
       if (node.textContent?.toLowerCase().includes((label as string).toLowerCase())) {
         (node as HTMLElement).click();
-        return `Clicked on node matching "${label}". The config panel should now be open.`;
+        // Wait for the config panel to mount before returning — the LLM reads
+        // the result immediately after, and React mounts the dialog one frame
+        // after the click.
+        const modal = await waitForModal();
+        if (modal) return `Opened the config panel for node matching "${label}".`;
+        return `Clicked on node matching "${label}", but the config panel did not appear. The node may not be clickable in the current UI state.`;
       }
     }
     return `No node found matching "${label}". Available nodes: ${[...nodes].map(n => n.textContent?.trim()).join(', ')}`;
@@ -412,7 +448,10 @@ const closeNodeConfig: AssistantTool = {
   inputSchema: { type: 'object', properties: {} },
   async execute() {
     // Try clicking the close/X button in the modal
-    const closeBtn = document.querySelector('.fixed.inset-0.z-50 button[aria-label="Close"], .fixed.inset-0.z-50 .material-symbols-outlined')?.closest('button');
+    const modal = findOpenModal();
+    const closeBtn = modal
+      ? modal.querySelector('button[aria-label="Close"], button[aria-label="close"], .material-symbols-outlined')?.closest('button')
+      : null;
     if (closeBtn) {
       (closeBtn as HTMLElement).click();
       return 'Closed the node config panel.';
@@ -1440,9 +1479,8 @@ const getNodeDetails: AssistantTool = {
     const nodeType = target.classList.toString().match(/node-([^\s]+)/)?.[1] || 'unknown';
     // Try to open it to read config, then close
     (target as HTMLElement).click();
-    await new Promise(r => setTimeout(r, 300));
     let config = '{}';
-    const modal = document.querySelector('.fixed.inset-0.z-50');
+    const modal = await waitForModal();
     if (modal) {
       const fields: Record<string, string> = {};
       modal.querySelectorAll('input, textarea, select, [data-field-label]').forEach((el: any) => {

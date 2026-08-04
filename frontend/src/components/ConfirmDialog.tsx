@@ -17,7 +17,7 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', c
     <Dialog.Root open={open} onOpenChange={(open) => { if (!open) onCancel(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30 data-[state=open]:animate-in" />
-        <Dialog.Content className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface rounded-xl shadow-m3-4 max-w-sm w-full mx-4 p-6">
+        <Dialog.Content data-co-pilot-modal="confirm" className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface rounded-xl shadow-m3-4 max-w-sm w-full mx-4 p-6">
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-lg font-semibold text-on-surface m-0">{title}</Dialog.Title>
             <Dialog.Close className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded transition-colors">

@@ -366,6 +366,9 @@ function FlowEditorInner({ initialNodes = [], initialEdges = [], onNodesChange, 
           edgeTypes={edgeTypes}
           defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: 'var(--md-outline)', strokeWidth: 2 }, animated: false }}
           fitView
+          fitViewOptions={{ minZoom: 0.5, maxZoom: 1, padding: 0.2 }}
+          minZoom={0.25}
+          maxZoom={2}
           deleteKeyCode={['Backspace', 'Delete']}
           onNodeClick={(_event, node) => onNodeClick?.(node.id, node.data)}
           onNodeDragStart={(_event, node) => onNodeDragStart?.(node.id)}

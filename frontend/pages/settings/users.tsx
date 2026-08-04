@@ -238,7 +238,7 @@ const openGroupManager = (u: User) => {
 
       {/* Manage Groups Dialog */}
       {groupUser && (
-        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setGroupUser(null)}>
+        <div data-co-pilot-modal="user-groups" className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setGroupUser(null)}>
           <div className="bg-surface rounded-lg shadow-m3-4 max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-on-surface">Groups for {groupUser.name}</h3>
@@ -293,7 +293,7 @@ const openGroupManager = (u: User) => {
 
       {/* Create User Modal */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowCreate(false)}>
+        <div data-co-pilot-modal="create-user" className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowCreate(false)}>
           <div className="bg-surface rounded-lg shadow-m3-4 max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-on-surface">Create User</h3>

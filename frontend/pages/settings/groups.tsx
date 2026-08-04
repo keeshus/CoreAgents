@@ -377,7 +377,7 @@ export default function GroupsSettingsPage() {
       {deleteConfirm.dialog}
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowCreate(false)}>
+        <div data-co-pilot-modal="create-group" className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowCreate(false)}>
           <div className="bg-surface rounded-lg shadow-m3-4 max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-on-surface">Create Group</h3>
@@ -400,7 +400,7 @@ export default function GroupsSettingsPage() {
       )}
 
       {editingGroup && (
-        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setEditingGroup(null)}>
+        <div data-co-pilot-modal="edit-group" className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setEditingGroup(null)}>
           <div className="bg-surface rounded-lg shadow-m3-4 max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-on-surface">Edit Group</h3>
