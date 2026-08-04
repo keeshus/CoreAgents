@@ -1,6 +1,7 @@
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
 import { Icon } from '@/components/ui/Icon';
+import { JsonSchemaBuilder } from './JsonSchemaBuilder';
 import { useAuth } from '@/lib/auth-context';
 import { API_URL } from '@/lib/api-client';
 import { useState, useCallback } from 'react';
@@ -70,19 +71,13 @@ export function TriggerConfig({ config, onChange, flowId }: TriggerConfigProps) 
           This flow is a subflow — it will be executed as a sub-routine within other flows.
           Define the input contract below.
         </p>
-        <div>
-          <span className="text-xs font-medium text-on-surface-variant mb-1 block">Input Schema</span>
-          <textarea
-            value={config.inputSchema || ''}
-            onChange={(e) => onChange({ inputSchema: e.target.value })}
-            placeholder='{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}'
-            rows={8}
-            className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-          />
-          <p className="mt-1 text-[10px] text-on-surface-variant">
-            Define the expected input fields. The parent flow must map these fields.
-          </p>
-        </div>
+        <JsonSchemaBuilder
+          value={config.inputSchema || ''}
+          onChange={(v) => onChange({ inputSchema: v })}
+          label="Input Schema"
+          helpText="Define the expected input fields. The parent flow must map these fields."
+          rows={8}
+        />
         <TextField
           label="Description"
           value={config.inputMessage || ''}
@@ -225,17 +220,12 @@ export function TriggerConfig({ config, onChange, flowId }: TriggerConfigProps) 
       )}
 
       {triggerType === 'webhook' && (
-        <div>
-          <span className="text-xs font-medium text-on-surface-variant mb-1 block">Expected Input Schema</span>
-          <textarea
-            value={config.inputSchema || ''}
-            onChange={(e) => onChange({ inputSchema: e.target.value })}
-            placeholder='{"type":"object","properties":{...}}'
-            rows={Math.max(3, Math.min(10, (config.inputSchema || '').split('\n').length))}
-            className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary max-h-[200px]"
-          />
-          <p className="mt-1 text-[10px] text-on-surface-variant">Define required fields and types. Incoming POSTs are validated — invalid requests get 400.</p>
-        </div>
+        <JsonSchemaBuilder
+          value={config.inputSchema || ''}
+          onChange={(v) => onChange({ inputSchema: v })}
+          label="Expected Input Schema"
+          helpText="Define required fields and types. Incoming POSTs are validated — invalid requests get 400."
+        />
       )}
     </div>
   );

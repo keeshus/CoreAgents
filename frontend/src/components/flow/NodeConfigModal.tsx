@@ -13,6 +13,7 @@ import { HITLNodeConfig } from '@/components/flow/config/HITLNodeConfig';
 import { SubflowNodeConfig } from '@/components/flow/config/SubflowNodeConfig';
 import { LoopNodeConfig } from './config/LoopNodeConfig';
 import { HttpConfig } from './config/HttpConfig';
+import { JsonSchemaBuilder } from './config/JsonSchemaBuilder';
 import { TriggerConfig } from '@/components/flow/config/TriggerConfig';
 import { Tooltip } from '@/components/ui/Tooltip';
 
@@ -437,17 +438,12 @@ export function NodeConfigModal({
                 helpText='Use "input" to access upstream data. Return the transformed value.'
                 className="font-mono"
               />
-              <div>
-                <span className="text-xs font-medium text-on-surface-variant mb-1 block">Output Structure <span className="text-on-surface-variant">(documentation)</span></span>
-                <textarea
-                  value={node.data.config.outputSchema || ''}
-                  onChange={(e) => onConfigChange({ outputSchema: e.target.value })}
-                  placeholder='{"type":"object","properties":{"result":{"type":"string"}},"required":["result"]}'
-                  rows={Math.max(2, Math.min(8, (node.data.config.outputSchema || '').split('\n').length))}
-                  className="w-full text-sm border border-outline rounded-lg px-3 py-2 font-mono bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary max-h-[160px]"
-                />
-                <p className="mt-1 text-[10px] text-on-surface-variant">Optional. Documents what this node outputs so downstream nodes can reference the structure.</p>
-              </div>
+              <JsonSchemaBuilder
+                value={node.data.config.outputSchema || ''}
+                onChange={(v) => onConfigChange({ outputSchema: v })}
+                label="Output Structure (documentation)"
+                helpText="Optional. Documents what this node outputs so downstream nodes can reference the structure."
+              />
             </div>
           )}
 
