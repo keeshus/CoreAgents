@@ -26,6 +26,10 @@ export interface LLMCallParams {
 
 // ── Adapter interface ─────────────────────────────────────────────
 
+// Per-call timeout so a hung or rate-limited provider never freezes a run.
+// Override via LLM_TIMEOUT_MS.
+const LLM_CALL_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS ?? '120000', 10);
+
 interface ProviderAdapter {
   createClient(params: LLMCallParams): any;
   buildRequest(params: LLMCallParams): any;
@@ -37,7 +41,12 @@ interface ProviderAdapter {
 
 const openaiAdapter: ProviderAdapter = {
   createClient(params) {
-    return new OpenAI({ apiKey: params.apiKey, baseURL: params.baseUrl || undefined });
+    return new OpenAI({
+      apiKey: params.apiKey,
+      baseURL: params.baseUrl || undefined,
+      timeout: LLM_CALL_TIMEOUT_MS,
+      maxRetries: 1,
+    });
   },
   buildRequest(params) {
     return {
@@ -78,7 +87,11 @@ const openaiAdapter: ProviderAdapter = {
 
 const anthropicAdapter: ProviderAdapter = {
   createClient(params) {
-    return new Anthropic({ apiKey: params.apiKey });
+    return new Anthropic({
+      apiKey: params.apiKey,
+      timeout: LLM_CALL_TIMEOUT_MS,
+      maxRetries: 1,
+    });
   },
   buildRequest(params) {
     return {

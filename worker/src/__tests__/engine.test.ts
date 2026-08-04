@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { FlowExecutor, HitlPauseError, PauseExecutionError } from '../executor/engine.js';
+import { callLLM } from '../providers/index.js';
 import type { FlowDefinition, FlowNode, FlowEdge } from 'core-agents-shared';
 import type { ExecutionContext } from '../executor/engine.js';
 
@@ -1251,6 +1252,50 @@ describe('FlowExecutor', () => {
         [],
       );
       await expect(executor.execute(flow, {}, onEvent, context)).rejects.toThrow('not found');
+    });
+  });
+
+  describe('llm-agent tool loop failure recovery', () => {
+    const defaultCallLLM = vi.fn(() => Promise.resolve({ text: 'mock LLM response' }));
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('l1', 'llm-agent', {
+          config: { endpointId: 'ep1', model: 'claude-3', systemPrompt: '', responseFormat: 'text' },
+        }),
+      ],
+      [makeEdge('e1', 'trigger', 'l1')],
+    );
+
+    it('recovers from a transient LLM failure and keeps looping', async () => {
+      const mockCallLLM = vi.mocked(callLLM);
+      mockCallLLM.mockClear();
+      let calls = 0;
+      mockCallLLM.mockImplementation(async () => {
+        calls++;
+        if (calls === 1) throw new Error('connection reset');
+        if (calls === 2) return { text: '', toolCalls: [{ id: 't1', name: 'store_get', input: { key: 'k' } }] };
+        return { text: 'wrapped up', toolCalls: [] };
+      });
+
+      const result = await executor.execute(flow, { message: 'hi' }, onEvent, context);
+
+      expect(calls).toBe(3);
+      const msgs = mockCallLLM.mock.calls[1][0].messages;
+      expect(msgs.some((m: any) => m.role === 'user' && String(m.content).includes('LLM API call failed'))).toBe(true);
+      expect((result.output as any).l1.content).toBe('wrapped up');
+      mockCallLLM.mockImplementation(defaultCallLLM);
+    });
+
+    it('fails the node after two consecutive LLM failures instead of hanging', async () => {
+      const mockCallLLM = vi.mocked(callLLM);
+      mockCallLLM.mockClear();
+      mockCallLLM.mockRejectedValue(new Error('rate limited'));
+
+      await expect(executor.execute(flow, { message: 'hi' }, onEvent, context)).rejects.toThrow(
+        'LLM API call failed repeatedly',
+      );
+      mockCallLLM.mockImplementation(defaultCallLLM);
     });
   });
 

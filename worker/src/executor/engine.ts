@@ -935,23 +935,41 @@ export class FlowExecutor {
         // Track all tool calls for the execution log
         const executedTools: Array<{ name: string; input: any; result: string }> = [];
         const result: Record<string, unknown> = { content: '' };
+        let consecutiveLlmFailures = 0;
 
         for (let round = 0; ; round++) {
           if (this.abortController.signal.aborted) break;
 
-          const response = await callLLM(
-            {
-              endpointId: config.endpointId,
-              model: config.model || endpoint.providerType,
-              systemPrompt: resolvedPrompt,
-              messages: conversation,
-              temperature: 0.7,
-              onToken,
-              tools: allTools.length > 0 ? allTools : undefined,
-              signal: this.abortController.signal,
-            },
-            endpoint,
-          );
+          let response: Awaited<ReturnType<typeof callLLM>>;
+          try {
+            response = await callLLM(
+              {
+                endpointId: config.endpointId,
+                model: config.model || endpoint.providerType,
+                systemPrompt: resolvedPrompt,
+                messages: conversation,
+                temperature: 0.7,
+                onToken,
+                tools: allTools.length > 0 ? allTools : undefined,
+                signal: this.abortController.signal,
+              },
+              endpoint,
+            );
+            consecutiveLlmFailures = 0;
+          } catch (err) {
+            // A hung/timed-out provider must not freeze the loop: tell the LLM
+            // what happened so it can wrap up or retry. Two consecutive
+            // failures fail the node instead of retrying forever.
+            consecutiveLlmFailures++;
+            const failMsg = config.responseFormat === 'json_object'
+              ? `The LLM API call failed: ${err instanceof Error ? err.message : String(err)}. If you have enough information, call structured_output with your final answer now. Otherwise retry your next action.`
+              : `The LLM API call failed: ${err instanceof Error ? err.message : String(err)}. If you have enough information, provide your final summary now and stop. Otherwise retry your next action.`;
+            conversation.push({ role: 'user' as const, content: failMsg });
+            if (consecutiveLlmFailures >= 2) {
+              throw new Error(`LLM API call failed repeatedly: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            continue;
+          }
 
           if (this.abortController.signal.aborted) break;
 
