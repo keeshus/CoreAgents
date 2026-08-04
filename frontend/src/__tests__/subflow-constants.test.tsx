@@ -12,7 +12,7 @@ const NODE_ICONS: Record<string, string> = {
   output: 'check_circle',
   subflow: 'account_tree',
   switch: 'alt_route',
-  http: 'http_post',
+  http: 'webhook',
   loop: 'loop',
   delay: 'timer',
   'ai-action': 'auto_awesome',
@@ -56,7 +56,7 @@ describe('subflow NODE_LABELS', () => {
   it('includes http icon and label', () => {
     expect(NODE_ICONS).toHaveProperty('http');
     expect(NODE_LABELS).toHaveProperty('http');
-    expect(NODE_ICONS.http).toBe('http_post');
+    expect(NODE_ICONS.http).toBe('webhook');
     expect(NODE_LABELS.http).toBe('HTTP Request');
   });
 
