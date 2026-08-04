@@ -57,7 +57,7 @@ test.describe('SSO with mock OIDC', () => {
 
     // Admin user is part of 'core-agents-admin' group → mapped to admin role
     await expect(page).toHaveURL(/localhost:3000/);
-    await expect(page.locator('h1').filter({ hasText: 'Core Agents' }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('h1').filter({ hasText: 'OrcheStream.AI' }).first()).toBeVisible({ timeout: 10000 });
 
     const meRes = await page.request.get(`${API_URL}/auth/me`);
     const me = await meRes.json();

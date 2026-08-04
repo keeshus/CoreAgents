@@ -109,7 +109,7 @@ function buildSystemPrompt(pageContext: PageContext | null, tools: AssistantTool
   let redirectNote = '';
   try { redirectNote = sessionStorage.getItem('copilot:redirect') || ''; } catch {}
   return [
-    'You are Co-Pilot, an AI assistant for Core Agents — a visual LLM agent builder.',
+    'You are Co-Pilot, an AI assistant for OrcheStream.AI — a visual LLM agent builder.',
     '',
     `Current page: ${pageContext?.description || 'Unknown page'}`,
     ...(redirectNote ? ['', redirectNote, ''] : []),

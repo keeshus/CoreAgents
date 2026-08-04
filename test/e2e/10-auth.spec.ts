@@ -25,9 +25,9 @@ test.describe('Auth flows', () => {
 
   test('session persists across page reload', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('h1').filter({ hasText: 'Core Agents' }).first()).toBeVisible();
+    await expect(page.locator('h1').filter({ hasText: 'OrcheStream.AI' }).first()).toBeVisible();
     await page.reload();
-    await expect(page.locator('h1').filter({ hasText: 'Core Agents' }).first()).toBeVisible();
+    await expect(page.locator('h1').filter({ hasText: 'OrcheStream.AI' }).first()).toBeVisible();
   });
 
   // ─── Login error UI ─────────────────────────────────────
@@ -50,7 +50,7 @@ test.describe('Auth flows', () => {
 
   test('UI logout redirects to /login and invalidates the session', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('h1').filter({ hasText: 'Core Agents' }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('h1').filter({ hasText: 'OrcheStream.AI' }).first()).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('button', { name: 'Sign Out' }).click();
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });

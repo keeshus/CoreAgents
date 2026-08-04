@@ -6,6 +6,7 @@ import { useAssistantContext } from '@/hooks/useAssistantContext';
 import { useConfirm } from '@/lib/useConfirm';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
+import { BrandLogo } from '@/components/BrandLogo';
 import { TextField } from '@/components/ui/TextField';
 import { SelectField } from '@/components/ui/SelectField';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -185,8 +186,10 @@ export default function FlowsListPage() {
     return (
       <div className="min-h-screen bg-surface-container flex items-center justify-center">
         <div className="max-w-md mx-auto text-center px-6">
-          <Icon name="account_tree" className="text-6xl text-primary mx-auto mb-6" />
-          <h1 className="text-3xl font-bold text-on-surface mb-3">Core Agents</h1>
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <BrandLogo size="lg" />
+            <h1 className="text-3xl font-bold text-on-surface">OrcheStream.AI</h1>
+          </div>
           <p className="text-on-surface-variant mb-8">Visual LLM agent builder. Build, test, and deploy AI workflows with a drag-and-drop editor.</p>
           <div className="space-y-3">
             {hasSso && (
@@ -207,9 +210,12 @@ export default function FlowsListPage() {
     <div className="min-h-screen bg-surface-container">
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-on-surface">Core Agents</h1>
-            {!isReader && <p className="text-sm text-on-surface-variant mt-1">Build and manage your LLM agent workflows</p>}
+          <div className="flex items-center gap-3">
+            <BrandLogo size="sm" />
+            <div>
+              <h1 className="text-2xl font-bold text-on-surface">OrcheStream.AI</h1>
+              {!isReader && <p className="text-sm text-on-surface-variant mt-0.5">Build and manage your LLM agent workflows</p>}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {authLoading ? null : user ? (
@@ -281,7 +287,7 @@ export default function FlowsListPage() {
           </div>
         ) : !user ? (
           <div className="text-center py-16 bg-surface rounded-xl border max-w-lg mx-auto">
-            <h2 className="text-xl font-bold text-on-surface mb-2">Welcome to Core Agents</h2>
+            <h2 className="text-xl font-bold text-on-surface mb-2">Welcome to OrcheStream.AI</h2>
             <p className="text-sm text-on-surface-variant mb-6">Build and manage your LLM agent workflows with a visual drag-and-drop editor.</p>
           </div>
         ) : activeTab === 'flows' ? (

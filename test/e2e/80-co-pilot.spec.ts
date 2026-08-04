@@ -164,7 +164,7 @@ test.describe('Co-Pilot AI Assistant', () => {
     await textarea.fill('ECHO_SYSTEM_PROMPT');
     await page.keyboard.press('Enter');
 
-    await expect(page.getByText('You are Co-Pilot, an AI assistant for Core Agents').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('You are Co-Pilot, an AI assistant for OrcheStream.AI').first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/Available tools:/).first()).toBeVisible({ timeout: 5000 });
     // Flows-list page tools are advertised and page capability text is present
     await expect(page.getByText(/list_flows/).first()).toBeVisible({ timeout: 5000 });
@@ -212,7 +212,7 @@ test.describe('Co-Pilot AI Assistant', () => {
 
       // Editor prompt: read-only endpoint tools + navigation present, but no
       // endpoint:write tools (editor role lacks endpoint:write).
-      await expect(page.getByText('You are Co-Pilot, an AI assistant for Core Agents').first()).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText('You are Co-Pilot, an AI assistant for OrcheStream.AI').first()).toBeVisible({ timeout: 15000 });
       await expect(page.getByText(/list_endpoints/).first()).toBeVisible({ timeout: 5000 });
       await expect(page.getByText(/navigate_to/).first()).toBeVisible({ timeout: 5000 });
       await expect(page.getByText(/create_endpoint/)).toHaveCount(0);

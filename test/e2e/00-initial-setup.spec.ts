@@ -12,7 +12,7 @@ test.describe('Initial Setup — fresh install', () => {
 
     await page.goto('/');
     await expect(page).toHaveURL(/\/setup/);
-    await expect(page.getByText('Welcome to Core Agents')).toBeVisible();
+    await expect(page.getByText('Welcome to OrcheStream.AI')).toBeVisible();
   });
 
   test('shows error from backend on empty submit', async ({ page }) => {
@@ -67,7 +67,7 @@ test.describe('Initial Setup — fresh install', () => {
       await page.getByLabel('Email').fill(E2E_USER.email);
       await page.getByLabel('Password', { exact: true }).fill(E2E_USER.password);
       await page.getByRole('button', { name: /sign.?in/i }).click();
-      await expect(page.locator('h1').filter({ hasText: 'Core Agents' }).first()).toBeVisible();
+      await expect(page.locator('h1').filter({ hasText: 'OrcheStream.AI' }).first()).toBeVisible();
 
       // Verify admin role via profile endpoint (reads from DB)
       const profileRes = await page.request.get(`${API_URL}/auth/profile`);
@@ -89,7 +89,7 @@ test.describe('Initial Setup — fresh install', () => {
     await page.getByRole('button', { name: 'Create Admin Account' }).click();
 
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.locator('h1').filter({ hasText: 'Core Agents' }).first()).toBeVisible();
+    await expect(page.locator('h1').filter({ hasText: 'OrcheStream.AI' }).first()).toBeVisible();
 
     // Verify admin role via profile endpoint (reads from DB)
     const profileRes = await page.request.get(`${API_URL}/auth/profile`);
