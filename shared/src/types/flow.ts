@@ -57,8 +57,6 @@ export interface LLMAgentNodeData extends BaseNodeData {
     endpointId: string;
     model: string;
     systemPrompt: string;
-    temperature: number;
-    maxTokens: number;
     responseFormat: 'text' | 'json_object';
     outputSchema?: string;
     inputFields?: string[];

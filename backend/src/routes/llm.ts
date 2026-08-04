@@ -50,7 +50,6 @@ router.post('/chat', asyncHandler(async (req, res) => {
         systemPrompt: systemPrompt || 'You are a helpful AI assistant.',
         messages: chatMessages,
         temperature: 0.7,
-        maxTokens: 4096,
         onToken: (token: string) => emitSSE({ type: 'token', content: token }),
         tools: tools || undefined,
       },

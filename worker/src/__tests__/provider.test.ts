@@ -14,7 +14,6 @@ const baseParams: LLMCallParams = {
   systemPrompt: 'You are helpful.',
   messages: [{ role: 'user', content: 'Hello!' }],
   temperature: 0.7,
-  maxTokens: 1024,
 };
 
 function mockOpenAI(client: object) {

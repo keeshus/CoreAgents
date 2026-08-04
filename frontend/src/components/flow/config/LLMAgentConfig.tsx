@@ -16,8 +16,6 @@ interface LLMAgentConfigProps {
     endpointId: string;
     model: string;
     systemPrompt: string;
-    temperature: number;
-    maxTokens: number;
     responseFormat: 'text' | 'json_object';
     outputSchema?: string;
     contextIds?: string[];
@@ -151,30 +149,6 @@ export function LLMAgentConfig({ config, onChange, suggestions, flow }: LLMAgent
         />
         <p className="mt-1 text-[10px] text-on-surface-variant">Use {'{{'}input.Label.field{'}}'} to reference upstream data.</p>
       </label>
-
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-xs font-medium text-on-surface-variant">Temperature: {config.temperature}</span>
-          <span className="text-xs font-medium text-on-surface-variant" data-field-label="Temperature">Temperature</span>
-          <input
-            type="range"
-            min="0"
-            max="2"
-            step="0.1"
-            className="mt-1 block w-full"
-            value={config.temperature}
-            onChange={(e) =>
-              onChange({ ...config, temperature: parseFloat(e.target.value) })
-            }
-          />
-        </label>
-        <TextField
-          label="Max Tokens"
-          type="number"
-          value={String(config.maxTokens)}
-          onChange={(v) => onChange({ ...config, maxTokens: parseInt(v) || 4096 })}
-        />
-      </div>
 
       <SelectField
         label="Response Format"

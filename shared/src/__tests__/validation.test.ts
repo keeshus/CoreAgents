@@ -12,8 +12,6 @@ describe('LLMAgentNodeData', () => {
         endpointId: 'ep-1',
         model: 'claude-sonnet-4',
         systemPrompt: 'You are a helpful assistant',
-        temperature: 0.7,
-        maxTokens: 2048,
         responseFormat: 'text' as const,
         inputFields: ['query', 'context'],
       },
@@ -33,8 +31,6 @@ describe('LLMAgentNodeData', () => {
         endpointId: '',
         model: '',
         systemPrompt: '',
-        temperature: 0.7,
-        maxTokens: 4096,
         responseFormat: 'text' as const,
       },
     };

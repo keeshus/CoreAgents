@@ -6,7 +6,6 @@ export interface LLMCallParams {
   systemPrompt: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   temperature: number;
-  maxTokens: number;
   onToken?: (token: string) => void;
   tools?: ToolDefinition[];
   signal?: AbortSignal;
@@ -29,7 +28,6 @@ export async function callLLM(params: LLMCallParams, endpoint: ResolvedEndpoint)
       systemPrompt: params.systemPrompt,
       messages: params.messages,
       temperature: params.temperature,
-      maxTokens: params.maxTokens,
       onToken: params.onToken,
       tools: params.tools,
       signal: params.signal,

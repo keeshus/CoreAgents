@@ -19,7 +19,6 @@ export interface LLMCallParams {
   systemPrompt: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   temperature: number;
-  maxTokens: number;
   onToken?: (token: string) => void;
   tools?: ToolDefinition[];
   signal?: AbortSignal;
@@ -48,7 +47,6 @@ const openaiAdapter: ProviderAdapter = {
         ...params.messages.map(m => ({ role: m.role, content: m.content })),
       ],
       temperature: params.temperature,
-      max_tokens: params.maxTokens,
       tools: params.tools?.map(t => ({ type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.input_schema } })),
       tool_choice: params.tools?.length ? 'auto' : undefined,
     };
@@ -88,7 +86,9 @@ const anthropicAdapter: ProviderAdapter = {
       system: params.systemPrompt ? [{ type: 'text' as const, text: params.systemPrompt }] : undefined,
       messages: params.messages.map(m => ({ role: m.role, content: m.content })),
       temperature: params.temperature,
-      max_tokens: params.maxTokens,
+      // The Anthropic API requires max_tokens — pin it to the model ceiling so
+      // there is effectively no token limit on responses.
+      max_tokens: 32000,
       tools: params.tools?.map(t => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
     };
   },

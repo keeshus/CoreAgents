@@ -24,6 +24,11 @@ const slugify = (s: string) =>
 const HTTP_RESPONSE_MAX_BYTES = 10 * 1024 * 1024;
 const HTTP_MAX_REDIRECTS = 5;
 
+// How often the llm-agent tool loop asks the LLM for a status check.
+// The loop itself is unbounded — it ends only when the LLM stops calling
+// tools or the run is aborted.
+const TOOL_LOOP_CHECK_INTERVAL = 5;
+
 // Cap on items a single loop node may iterate — override via MAX_LOOP_ITEMS env
 const MAX_LOOP_ITEMS = (() => {
   const raw = parseInt(process.env.MAX_LOOP_ITEMS ?? '1000', 10);
@@ -940,8 +945,7 @@ export class FlowExecutor {
               model: config.model || endpoint.providerType,
               systemPrompt: resolvedPrompt,
               messages: conversation,
-              temperature: config.temperature ?? 0.7,
-              maxTokens: config.maxTokens ?? 4096,
+              temperature: 0.7,
               onToken,
               tools: allTools.length > 0 ? allTools : undefined,
               signal: this.abortController.signal,
@@ -1096,11 +1100,16 @@ export class FlowExecutor {
           // structured_output is the final response — no more rounds needed
           if (structuredOutputUsed) break;
 
-          // Progress check: ask the LLM if it's still making progress or should wrap up
-          const progressMsg = config.responseFormat === 'json_object'
-            ? 'Are you making progress? If you have enough information, call structured_output with your final answer. If you need more data, continue with your next action.'
-            : 'Are you making progress toward the goal? If yes, continue with your next action. If you have completed the task or are stuck, provide a summary of what you did and stop.';
-          conversation.push({ role: 'user' as const, content: progressMsg });
+          // Periodic status check: the tool loop runs indefinitely — it only
+          // ends when the LLM stops requesting tools (or the run is aborted).
+          // Every few rounds, ask the LLM whether it is still making progress
+          // so it can re-orient, but never suggest wrapping up early.
+          if ((round + 1) % TOOL_LOOP_CHECK_INTERVAL === 0) {
+            const progressMsg = config.responseFormat === 'json_object'
+              ? `Status check (round ${round + 1}): Are you still making progress? If yes, continue with your next action. If you are done, call structured_output with your final answer.`
+              : `Status check (round ${round + 1}): Are you still making progress? If yes, continue with your next action. If the task is fully complete and there is nothing left to do, provide your final summary and stop.`;
+            conversation.push({ role: 'user' as const, content: progressMsg });
+          }
         }
 
         result.content = finalContent;
@@ -1733,7 +1742,7 @@ export class FlowExecutor {
 
       case 'ai-action': {
         const aiConfig = (nodeData as any).config || {};
-        const { endpointId, model, prompt, temperature = 0.7, maxTokens = 1024 } = aiConfig;
+        const { endpointId, model, prompt, temperature = 0.7 } = aiConfig;
         if (!endpointId) throw new Error('AI Action node: endpointId is required');
         if (!model) throw new Error('AI Action node: model is required');
         if (!prompt) throw new Error('AI Action node: prompt is required');
@@ -1747,7 +1756,6 @@ export class FlowExecutor {
           systemPrompt: '',
           messages: [{ role: 'user', content: resolvedPrompt }],
           temperature,
-          maxTokens,
         }, endpoint);
         return { content: result.text };
       }
