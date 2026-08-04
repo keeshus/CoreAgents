@@ -30,12 +30,13 @@ function getInputMessageFromFlow(flow: any): Record<string, unknown> | undefined
 export async function reconcileSchedules(db: any, flowsTable: any, eq: any): Promise<void> {
   try {
     const allFlows = await db.select({ id: flowsTable.id, nodes: flowsTable.nodes }).from(flowsTable);
-    const repeatableJobs = await executionQueue.getRepeatableJobs();
+    // BullMQ 6: repeatable jobs are managed as Job Schedulers.
+    const schedulers = await executionQueue.getJobSchedulers();
 
     const bullJobs = new Map<string, string>();
-    for (const job of repeatableJobs) {
-      const flowId = job.id?.replace(/^schedule:/, '');
-      if (flowId && job.pattern) bullJobs.set(flowId, job.pattern);
+    for (const scheduler of schedulers) {
+      const flowId = scheduler.name?.replace(/^schedule:/, '');
+      if (flowId && scheduler.pattern) bullJobs.set(flowId, scheduler.pattern);
     }
 
     for (const flow of allFlows) {
@@ -44,16 +45,13 @@ export async function reconcileSchedules(db: any, flowsTable: any, eq: any): Pro
       if (dbCron) {
         const bullPattern = bullJobs.get(flow.id);
         if (!bullPattern || bullPattern !== dbCron) {
-          if (bullPattern) {
-            await executionQueue.removeRepeatable(`schedule:${flow.id}`, { pattern: bullPattern });
-          }
-          await executionQueue.add(`schedule:${flow.id}`, { flowId: flow.id, inputMessage: getInputMessageFromFlow(flow) }, {
-            repeat: { pattern: dbCron },
-            jobId: `schedule:${flow.id}`,
+          await executionQueue.upsertJobScheduler(`schedule:${flow.id}`, { pattern: dbCron }, {
+            name: `schedule:${flow.id}`,
+            data: { flowId: flow.id, inputMessage: getInputMessageFromFlow(flow) },
           });
         }
       } else if (bullJobs.has(flow.id)) {
-        await executionQueue.removeRepeatable(`schedule:${flow.id}`, { pattern: bullJobs.get(flow.id)! });
+        await executionQueue.removeJobScheduler(`schedule:${flow.id}`);
       }
     }
   } catch (err) {

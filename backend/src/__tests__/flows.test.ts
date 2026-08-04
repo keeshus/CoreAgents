@@ -70,7 +70,9 @@ vi.mock('../../../worker/src/executor/dag.js', () => ({
 vi.mock('../../../worker/src/queue.js', () => ({
   executionQueue: {
     add: vi.fn().mockResolvedValue(undefined),
-    removeRepeatable: vi.fn().mockResolvedValue(undefined),
+    upsertJobScheduler: vi.fn().mockResolvedValue(undefined),
+    removeJobScheduler: vi.fn().mockResolvedValue(undefined),
+    getJobSchedulers: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -597,10 +599,10 @@ describe('flows routes', () => {
 
       await getHandler(router, 'post', '/')(req, res);
 
-      expect(executionQueue.add).toHaveBeenCalledWith(
+      expect(executionQueue.upsertJobScheduler).toHaveBeenCalledWith(
         'schedule:flow-1',
-        { flowId: 'flow-1', inputMessage: { task: 'check' } },
-        expect.objectContaining({ repeat: { pattern: '0 * * * *' } }),
+        { pattern: '0 * * * *' },
+        expect.objectContaining({ name: 'schedule:flow-1', data: { flowId: 'flow-1', inputMessage: { task: 'check' } } }),
       );
     });
 
@@ -775,21 +777,21 @@ describe('flows routes', () => {
 
       await getHandler(router, 'put', '/:id')(req, res);
 
-      expect(executionQueue.add).toHaveBeenCalledWith(
+      expect(executionQueue.upsertJobScheduler).toHaveBeenCalledWith(
         `schedule:${flowId}`,
-        { flowId, inputMessage: { task: 'check' } },
-        expect.objectContaining({ repeat: { pattern: '0 */2 * * *' } }),
+        { pattern: '0 */2 * * *' },
+        expect.objectContaining({ name: `schedule:${flowId}`, data: { flowId, inputMessage: { task: 'check' } } }),
       );
     });
 
-    it('handles removeRepeatable rejection gracefully on update', async () => {
+    it('handles removeJobScheduler rejection gracefully on update', async () => {
       const updateChain = mockChain();
       updateChain.returning.mockResolvedValue([makeUpdateFlow({
         nodes: [{ id: 't1', data: { type: 'trigger', config: { triggerType: 'schedule', cronExpression: '0 * * * *' } } }],
       })]);
       db.update.mockReturnValue(updateChain);
       const { executionQueue } = await import('../../../worker/src/queue.js');
-      vi.mocked(executionQueue.removeRepeatable).mockRejectedValueOnce(new Error('Remove failed'));
+      vi.mocked(executionQueue.removeJobScheduler).mockRejectedValueOnce(new Error('Remove failed'));
 
       const flowId = '550e8400-e29b-41d4-a716-446655440000';
       const req = makeReq({
@@ -802,7 +804,7 @@ describe('flows routes', () => {
 
       // The catch should swallow the error; execution should still succeed
       expect(res.json).toHaveBeenCalled();
-      expect(executionQueue.add).toHaveBeenCalled();
+      expect(executionQueue.upsertJobScheduler).toHaveBeenCalled();
     });
 
     it('handles add rejection gracefully on update', async () => {
@@ -909,17 +911,16 @@ describe('flows routes', () => {
 
       await getHandler(router, 'delete', '/:id')(req, res);
 
-      expect(executionQueue.removeRepeatable).toHaveBeenCalledWith(
+      expect(executionQueue.removeJobScheduler).toHaveBeenCalledWith(
         `schedule:${flowId}`,
-        { pattern: '0 * * * *' },
       );
     });
 
-    it('handles removeRepeatable rejection on delete gracefully', async () => {
+    it('handles removeJobScheduler rejection on delete gracefully', async () => {
       const existingFlowChain = mockChain([{ nodes: [{ id: 't1', data: { type: 'trigger', config: { triggerType: 'schedule', cronExpression: '0 * * * *' } } }] }]);
       db.select.mockReturnValue(existingFlowChain);
       const { executionQueue } = await import('../../../worker/src/queue.js');
-      vi.mocked(executionQueue.removeRepeatable).mockRejectedValueOnce(new Error('Remove failed'));
+      vi.mocked(executionQueue.removeJobScheduler).mockRejectedValueOnce(new Error('Remove failed'));
 
       const flowId = '550e8400-e29b-41d4-a716-446655440000';
       const mockTx = {

@@ -26,6 +26,15 @@ vi.mock('../tools/bash.js', async () => {
   };
 });
 
+// The http node fetches via the undici package (same version as its Agent
+// dispatcher) — route it through a mock so http node tests don't hit the
+// network. The http node test describe wires this up as its fetch mock.
+const { httpMockFetch } = vi.hoisted(() => ({ httpMockFetch: vi.fn() }));
+vi.mock('undici', async () => {
+  const actual = await vi.importActual('undici');
+  return { ...actual, fetch: httpMockFetch };
+});
+
 // Mock sidecar client to prevent HTTP calls — eval records payloads instead of executing them
 vi.mock('../sandbox/sidecar-client.js', () => ({
   createSidecarClient: vi.fn(() => ({
@@ -598,7 +607,7 @@ describe('FlowExecutor', () => {
     let mockFetch: ReturnType<typeof vi.fn>;
 
     beforeAll(() => {
-      mockFetch = vi.fn();
+      mockFetch = httpMockFetch;
       vi.stubGlobal('fetch', mockFetch);
     });
 

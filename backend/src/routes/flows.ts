@@ -280,12 +280,12 @@ router.post(
       personalApiKey = { rawKey: raw, prefix };
     }
 
-    // ── Schedule hook: register repeatable BullMQ job ────────
+    // ── Schedule hook: register BullMQ job scheduler ────────
     const scheduleCron = getScheduleCron(flowNodes);
     if (scheduleCron) {
-      executionQueue.add(`schedule:${createdFlow.id}`, { flowId: createdFlow.id, inputMessage: getScheduleInputMessage(flowNodes) }, {
-        repeat: { pattern: scheduleCron },
-        jobId: `schedule:${createdFlow.id}`,
+      executionQueue.upsertJobScheduler(`schedule:${createdFlow.id}`, { pattern: scheduleCron }, {
+        name: `schedule:${createdFlow.id}`,
+        data: { flowId: createdFlow.id, inputMessage: getScheduleInputMessage(flowNodes) },
       }).catch(err => console.error(`Failed to register schedule for flow ${createdFlow.id}:`, err));
     }
 
@@ -386,23 +386,18 @@ router.put(
       }
     }
 
-    // ── Schedule hook: update repeatable BullMQ job ──────────
+    // ── Schedule hook: update BullMQ job scheduler ──────────
     const oldNodes = (result[0].nodes || []) as any[];
     const oldCron = getScheduleCron(oldNodes);
     const newCron = getScheduleCron(flowNodes);
 
-    if (oldCron && oldCron !== newCron) {
-      executionQueue.removeRepeatable(`schedule:${id}`, { pattern: oldCron })
-        .catch(err => console.error(`Failed to remove old schedule for flow ${id}:`, err));
-    }
-
     if (newCron) {
-      executionQueue.add(`schedule:${id}`, { flowId: id, inputMessage: getScheduleInputMessage(flowNodes) }, {
-        repeat: { pattern: newCron },
-        jobId: `schedule:${id}`,
+      executionQueue.upsertJobScheduler(`schedule:${id}`, { pattern: newCron }, {
+        name: `schedule:${id}`,
+        data: { flowId: id, inputMessage: getScheduleInputMessage(flowNodes) },
       }).catch(err => console.error(`Failed to register schedule for flow ${id}:`, err));
     } else if (oldCron) {
-      executionQueue.removeRepeatable(`schedule:${id}`, { pattern: oldCron })
+      executionQueue.removeJobScheduler(`schedule:${id}`)
         .catch(err => console.error(`Failed to remove schedule for flow ${id}:`, err));
     }
 
@@ -440,7 +435,7 @@ router.delete(
     if (existingFlow) {
       const cron = getScheduleCron((existingFlow.nodes || []) as any[]);
       if (cron) {
-        executionQueue.removeRepeatable(`schedule:${id}`, { pattern: cron })
+        executionQueue.removeJobScheduler(`schedule:${id}`)
           .catch(err => console.error(`Failed to remove schedule for flow ${id}:`, err));
       }
     }

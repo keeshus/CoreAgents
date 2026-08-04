@@ -20,7 +20,6 @@
     "frontend:dev": "npm run dev -w frontend",
     "frontend:build": "npm run build -w frontend",
     "frontend:start": "npm run start -w frontend -- -H 0.0.0.0",
-
     "sidecar:dev": "tsx watch --env-file=.env sidecar/src/index.ts --ttl-hours=168",
     "sidecar:build": "npm run build -w sidecar",
     "shared:typecheck": "npm run typecheck -w shared",
@@ -37,6 +36,7 @@
   "devDependencies": {
     "concurrently": "^10.0.4",
     "nodemon": "^3.1.14",
+    "typescript": "^6.0.3",
     "wait-on": "^9.1.0"
   },
   "type": "module"

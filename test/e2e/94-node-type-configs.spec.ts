@@ -268,15 +268,13 @@ test.describe('Node type config fields', () => {
   test('llm-agent: system prompt persists after save and reload', async ({ page }) => {
     await openNode(page, 'LLM');
     await page.getByPlaceholder(LLM_SYSTEM_PROMPT_PLACEHOLDER).fill('Persisted system prompt for E2E');
-    await page.getByLabel('Max Tokens').fill('512');
     await saveAndReload(page, (flow) => {
       const cfg = flow.nodes.find((n: any) => n.data?.type === 'llm-agent')?.data?.config;
-      return cfg?.systemPrompt === 'Persisted system prompt for E2E' && cfg?.maxTokens === 512;
+      return cfg?.systemPrompt === 'Persisted system prompt for E2E';
     });
 
     await openNode(page, 'LLM');
     await expect(page.getByPlaceholder(LLM_SYSTEM_PROMPT_PLACEHOLDER)).toHaveValue('Persisted system prompt for E2E');
-    await expect(page.getByLabel('Max Tokens')).toHaveValue('512');
   });
 
   test('http: URL persists after save and reload', async ({ page }) => {
@@ -299,7 +297,8 @@ test.describe('Node type config fields', () => {
     await expect(page.getByText('Expected Input Schema')).toBeVisible({ timeout: 5000 });
     await expect(page.getByLabel('Webhook Secret')).toBeVisible();
     await page.getByLabel('Webhook Secret').fill('super-secret-123');
-    await page.getByText('Expected Input Schema').locator('xpath=following-sibling::textarea').fill('{"type":"object","properties":{"data":{"type":"string"}},"required":["data"]}');
+    await page.getByTestId('json-schema-mode-raw').click();
+    await page.getByTestId('json-schema-raw-input').fill('{"type":"object","properties":{"data":{"type":"string"}},"required":["data"]}');
 
     // Webhook → Schedule: cron field appears
     await page.locator('[data-field-label="Trigger Type"]').click();
@@ -429,7 +428,7 @@ test.describe('Node config — deep field tests', () => {
     await openNode(page, 'LLM');
     await expect(page.locator('[data-field-label="LLM Endpoint"]')).toBeVisible();
     await expect(page.getByPlaceholder(LLM_SYSTEM_PROMPT_PLACEHOLDER)).toBeVisible();
-    await expect(page.getByLabel('Max Tokens')).toBeVisible();
+    await expect(page.locator('[data-field-label="Response Format"]')).toBeVisible();
     await page.getByLabel('Node name').fill('My LLM');
     await expect(page.getByLabel('Node name')).toHaveValue('My LLM');
   });

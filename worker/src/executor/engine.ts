@@ -1584,9 +1584,14 @@ export class FlowExecutor {
         // undici's Agent lets us override the DNS lookup used at connect time,
         // pinning each request to the IPs validated by assertSafeFetchUrl —
         // a fast-flux/rebinding domain cannot swap to a private IP after the check.
+        // The Agent and the fetch MUST come from the same undici package: the
+        // worker declares its own undici (which may differ from Node's bundled
+        // fetch), and passing a dispatcher from another undici version to the
+        // global fetch fails with "invalid onRequestStart method".
         let pinnedDispatcher: any;
+        let pinnedFetch: (input: any, init?: any) => Promise<any> = fetch;
         try {
-          const { Agent } = await import('undici');
+          const { Agent, fetch: undiciFetch } = await import('undici');
           pinnedDispatcher = new Agent({
             connect: {
               // Ignore the hostname — the caller pins the exact validated IPs.
@@ -1601,6 +1606,7 @@ export class FlowExecutor {
             headersTimeout: timeout,
             bodyTimeout: timeout,
           });
+          pinnedFetch = undiciFetch;
         } catch {
           pinnedDispatcher = undefined;
         }
@@ -1621,7 +1627,7 @@ export class FlowExecutor {
               signal: controller.signal,
             };
             if (pinnedDispatcher) fetchOptions.dispatcher = pinnedDispatcher;
-            const response = await fetch(fetchUrl, fetchOptions);
+            const response = await pinnedFetch(fetchUrl, fetchOptions);
             if (followRedirects && REDIRECT_STATUSES.has(response.status)) {
               const location = response.headers.get('location');
               if (redirectCount >= HTTP_MAX_REDIRECTS) {

@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock BullMQ queue
-const mockAdd = vi.fn();
-const mockRemoveRepeatable = vi.fn();
-const mockGetRepeatableJobs = vi.fn();
+// Mock BullMQ queue (BullMQ 6 Job Scheduler API)
+const mockUpsertJobScheduler = vi.fn();
+const mockRemoveJobScheduler = vi.fn();
+const mockGetJobSchedulers = vi.fn();
 
 vi.mock('../queue.js', () => ({
   executionQueue: {
-    add: mockAdd,
-    removeRepeatable: mockRemoveRepeatable,
-    getRepeatableJobs: mockGetRepeatableJobs,
+    upsertJobScheduler: mockUpsertJobScheduler,
+    removeJobScheduler: mockRemoveJobScheduler,
+    getJobSchedulers: mockGetJobSchedulers,
   },
 }));
 
@@ -31,24 +31,24 @@ describe('reconcileSchedules', () => {
     vi.clearAllMocks();
   });
 
-  it('adds a repeatable job for a new schedule flow', async () => {
-    mockGetRepeatableJobs.mockResolvedValue([]);
+  it('adds a job scheduler for a new schedule flow', async () => {
+    mockGetJobSchedulers.mockResolvedValue([]);
     const db = mockDb([
       { id: 'flow-1', nodes: [{ data: { type: 'trigger', config: { triggerType: 'schedule', cronExpression: '*/5 * * * *', inputMessage: '{"task":"check"}' } } }] },
     ]);
 
     await reconcileSchedules(db, mockFlowsTable, mockEq);
 
-    expect(mockAdd).toHaveBeenCalledWith(
+    expect(mockUpsertJobScheduler).toHaveBeenCalledWith(
       'schedule:flow-1',
-      { flowId: 'flow-1', inputMessage: { task: 'check' } },
-      { repeat: { pattern: '*/5 * * * *' }, jobId: 'schedule:flow-1' },
+      { pattern: '*/5 * * * *' },
+      { name: 'schedule:flow-1', data: { flowId: 'flow-1', inputMessage: { task: 'check' } } },
     );
   });
 
-  it('updates a repeatable job when cron changes', async () => {
-    mockGetRepeatableJobs.mockResolvedValue([
-      { id: 'schedule:flow-1', pattern: '0 * * * *' },
+  it('updates the scheduler when cron changes', async () => {
+    mockGetJobSchedulers.mockResolvedValue([
+      { name: 'schedule:flow-1', pattern: '0 * * * *' },
     ]);
     const db = mockDb([
       { id: 'flow-1', nodes: [{ data: { type: 'trigger', config: { triggerType: 'schedule', cronExpression: '*/5 * * * *' } } }] },
@@ -56,17 +56,17 @@ describe('reconcileSchedules', () => {
 
     await reconcileSchedules(db, mockFlowsTable, mockEq);
 
-    expect(mockRemoveRepeatable).toHaveBeenCalledWith('schedule:flow-1', { pattern: '0 * * * *' });
-    expect(mockAdd).toHaveBeenCalledWith(
+    expect(mockUpsertJobScheduler).toHaveBeenCalledWith(
       'schedule:flow-1',
-      expect.objectContaining({ flowId: 'flow-1' }),
-      { repeat: { pattern: '*/5 * * * *' }, jobId: 'schedule:flow-1' },
+      { pattern: '*/5 * * * *' },
+      expect.objectContaining({ data: expect.objectContaining({ flowId: 'flow-1' }) }),
     );
+    expect(mockRemoveJobScheduler).not.toHaveBeenCalled();
   });
 
-  it('removes a repeatable job when schedule trigger is removed', async () => {
-    mockGetRepeatableJobs.mockResolvedValue([
-      { id: 'schedule:flow-1', pattern: '0 * * * *' },
+  it('removes the scheduler when the schedule trigger is removed', async () => {
+    mockGetJobSchedulers.mockResolvedValue([
+      { name: 'schedule:flow-1', pattern: '0 * * * *' },
     ]);
     const db = mockDb([
       { id: 'flow-1', nodes: [{ data: { type: 'trigger', config: { triggerType: 'manual' } } }] },
@@ -74,13 +74,13 @@ describe('reconcileSchedules', () => {
 
     await reconcileSchedules(db, mockFlowsTable, mockEq);
 
-    expect(mockRemoveRepeatable).toHaveBeenCalledWith('schedule:flow-1', { pattern: '0 * * * *' });
-    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockRemoveJobScheduler).toHaveBeenCalledWith('schedule:flow-1');
+    expect(mockUpsertJobScheduler).not.toHaveBeenCalled();
   });
 
   it('does nothing when schedule flow already has correct cron', async () => {
-    mockGetRepeatableJobs.mockResolvedValue([
-      { id: 'schedule:flow-1', pattern: '*/5 * * * *' },
+    mockGetJobSchedulers.mockResolvedValue([
+      { name: 'schedule:flow-1', pattern: '*/5 * * * *' },
     ]);
     const db = mockDb([
       { id: 'flow-1', nodes: [{ data: { type: 'trigger', config: { triggerType: 'schedule', cronExpression: '*/5 * * * *' } } }] },
@@ -88,12 +88,12 @@ describe('reconcileSchedules', () => {
 
     await reconcileSchedules(db, mockFlowsTable, mockEq);
 
-    expect(mockAdd).not.toHaveBeenCalled();
-    expect(mockRemoveRepeatable).not.toHaveBeenCalled();
+    expect(mockUpsertJobScheduler).not.toHaveBeenCalled();
+    expect(mockRemoveJobScheduler).not.toHaveBeenCalled();
   });
 
   it('handles flows without schedule trigger gracefully', async () => {
-    mockGetRepeatableJobs.mockResolvedValue([]);
+    mockGetJobSchedulers.mockResolvedValue([]);
     const db = mockDb([
       { id: 'flow-1', nodes: [{ data: { type: 'trigger', config: { triggerType: 'manual' } } }] },
       { id: 'flow-2', nodes: [] },
@@ -101,7 +101,7 @@ describe('reconcileSchedules', () => {
 
     await reconcileSchedules(db, mockFlowsTable, mockEq);
 
-    expect(mockAdd).not.toHaveBeenCalled();
-    expect(mockRemoveRepeatable).not.toHaveBeenCalled();
+    expect(mockUpsertJobScheduler).not.toHaveBeenCalled();
+    expect(mockRemoveJobScheduler).not.toHaveBeenCalled();
   });
 });
