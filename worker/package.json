@@ -15,7 +15,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "openai": "^7.2.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "bullmq": "^5.81.3",
+    "bullmq": "^6.0.3",
     "ioredis": "^5.11.1",
     "undici": "^6.28.0"
   },
