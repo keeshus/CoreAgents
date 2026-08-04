@@ -92,6 +92,13 @@ describe('resolveTemplate', () => {
     expect(result).toBe('env-value');
   });
 
+  it('resolves scoped env prefixes {{env.app.}}/{{env.group.}}/{{env.flow.}}', async () => {
+    const context = { sandboxEnv: { DB_URL: 'postgres://localhost' } } as any;
+    expect(await resolveTemplate('{{env.app.DB_URL}}', {}, context)).toBe('postgres://localhost');
+    expect(await resolveTemplate('{{env.group.DB_URL}}', {}, context)).toBe('postgres://localhost');
+    expect(await resolveTemplate('{{env.flow.DB_URL}}', {}, context)).toBe('postgres://localhost');
+  });
+
   it('returns empty string for missing env var', async () => {
     const context = { sandboxEnv: {} } as any;
     const result = await resolveTemplate('{{env.MISSING}}', {}, context);

@@ -306,6 +306,25 @@ test.describe('Flow Editor DOM tools', () => {
     ).toBe(1); // Only the processor→output edge remains
   });
 
+  test('edge deletion via UI — select an edge and click the delete button', async ({ page }) => {
+    await expect.poll(() =>
+      page.evaluate(() => (window as any).__flowCanvasEdges?.length || 0),
+      { timeout: 10000 },
+    ).toBe(2);
+
+    // Select the first edge by clicking it — the DeletableEdge X button appears
+    const edge = page.locator('.react-flow__edge').first();
+    await edge.click({ force: true });
+    const deleteBtn = page.getByRole('button', { name: 'Delete edge' });
+    await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    await deleteBtn.click();
+
+    await expect.poll(() =>
+      page.evaluate(() => (window as any).__flowCanvasEdges?.length || 0),
+      { timeout: 10000 },
+    ).toBe(1);
+  });
+
   test('update_flow changes the flow name via API', async ({ request }) => {
     const flowRes = await request.get(`${API_URL}/flows/${flowId}`);
     expect(flowRes.ok()).toBe(true);

@@ -306,8 +306,57 @@ describe('FlowExecutor', () => {
     ).rejects.toMatchObject({ nodeId: 'hitl2' });
   });
 
+  it('exits a HITL feedback loop via the max_iterations handle when maxIterations is reached', async () => {
+    // trigger → code → hitl(buttons: retry) → feedback edge back to code
+    const flow = makeFlow(
+      [
+        makeNode('trigger', 'trigger'),
+        makeNode('code', 'code', { config: { code: 'return { attempt: (input._iterationCount || 0) + 1 };' } }),
+        makeNode('hitl', 'hitl', {
+          config: {
+            prompt: 'Retry?', displayFields: [], forwardFields: [],
+            buttons: [{ label: 'Retry', value: 'retry' }],
+            maxIterations: 2,
+          },
+        }),
+        makeNode('out', 'output', { config: { inputFields: [] } }),
+      ],
+      [
+        makeEdge('e1', 'trigger', 'code'),
+        makeEdge('e2', 'code', 'hitl', { sourceHandle: 'output-0', targetHandle: 'input-0' }),
+        // Feedback edge: hitl retry → back to code
+        makeEdge('e3', 'hitl', 'code', { sourceHandle: 'output-0', targetHandle: 'input-0' }),
+        makeEdge('e4', 'hitl', 'out', { sourceHandle: 'output-1', targetHandle: 'input-0' }),
+      ],
+    );
+
+    // Round 1: fresh run — the HITL node pauses for human input
+    await expect(executor.execute(flow, { start: true }, onEvent, context)).rejects.toThrow(HitlPauseError);
+
+    // Round 2: replay the HITL with decision=retry → feedback loop re-runs the
+    // upstream code node and pauses again at the HITL
+    await expect(executor.execute(
+      flow,
+      { start: true, _iterationCount: 0 },
+      onEvent,
+      context,
+      { replayFrom: 'hitl', replayOutputs: { 'hitl:__approved': { decision: 'retry', feedback: 'again' } }, inputOverride: { start: true, _iterationCount: 0 }, initialIteration: 1 },
+    )).rejects.toThrow(HitlPauseError);
+
+    // Round 3: maxIterations (2) reached → the HITL exits via the
+    // max_iterations handle (output-1) and the output node runs
+    const result = await executor.execute(
+      flow,
+      { start: true, _iterationCount: 1 },
+      onEvent,
+      context,
+      { replayFrom: 'hitl', replayOutputs: { 'hitl:__approved': { decision: 'retry', feedback: 'again' } }, inputOverride: { start: true, _iterationCount: 1 }, initialIteration: 2 },
+    );
+    expect(result.output.hitl).toMatchObject({ decision: 'max_iterations' });
+    expect(result.output.out).toBeDefined();
+  });
+
   it('executes all sub-nodes in a parallel node', async () => {
-    // Parallel node with non-code sub-nodes (output nodes skip the sidecar import path)
     const subNodes: FlowNode[] = [
       makeNode('sub-a', 'output', { config: { inputFields: [] } }),
       makeNode('sub-b', 'output', { config: { inputFields: [] } }),
@@ -1224,6 +1273,106 @@ describe('FlowExecutor', () => {
       );
       const result = await executor.execute(flow, {}, onEvent, context);
       expect(result.output.map).toHaveProperty('missing', null);
+    });
+  });
+
+  describe('condition node defaultPath', () => {
+    it('routes to the configured default path when the condition value matches no label', async () => {
+      mockEval.mockResolvedValue({ ok: true, result: 'unknown-value' });
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('cond', 'condition', {
+            config: {
+              condition: 'input.value',
+              outputLabels: ['yes', 'no'],
+              defaultPath: 'no',
+            },
+          }),
+          makeNode('out-yes', 'output', { config: { inputFields: [] } }),
+          makeNode('out-no', 'output', { config: { inputFields: [] } }),
+        ],
+        [
+          makeEdge('e1', 'trigger', 'cond'),
+          makeEdge('e2', 'cond', 'out-yes', { sourceHandle: 'output-0', targetHandle: 'input-0' }),
+          makeEdge('e3', 'cond', 'out-no', { sourceHandle: 'output-1', targetHandle: 'input-0' }),
+        ],
+      );
+      const result = await executor.execute(flow, { value: 'unmatched' }, onEvent, context);
+      // The default path ('no') is followed; the unmatched 'yes' branch is skipped
+      expect(result.output['out-no']).toBeDefined();
+      expect(result.output['out-yes']).toEqual({ skipped: true, reason: 'No matching route' });
+    });
+  });
+
+  describe('parallel node failure handling', () => {
+    it('aborts sibling sub-nodes when one sub-node throws', async () => {
+      const bashMock = await import('../tools/bash.js') as any;
+      const slowFn = bashMock.executeCode;
+      slowFn.mockImplementation(async (_c: any, _e: string, code: string, input: unknown) => {
+        if (code.includes('throw')) throw new Error('sub-node exploded');
+        await new Promise(resolve => setTimeout(resolve, 30));
+        return { ok: true };
+      });
+
+      const subNodes: FlowNode[] = [
+        makeNode('sub-fail', 'code', { config: { code: 'throw new Error("sub-node exploded")' } }),
+        makeNode('sub-slow', 'code', { config: { code: 'return { ok: true }' } }),
+      ];
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('parallel', 'parallel', { config: { subNodes } }),
+        ],
+        [makeEdge('e1', 'trigger', 'parallel')],
+      );
+
+      await expect(executor.execute(flow, { start: true }, onEvent, context)).rejects.toThrow('sub-node exploded');
+
+      // Restore the default executeCode implementation
+      slowFn.mockImplementation((_client: any, _executionId: string, code: string, input: unknown) => {
+        return new Function('input', code)(input);
+      });
+    });
+  });
+
+  describe('loop error collection', () => {
+    it('collects per-iteration errors without failing the whole flow', async () => {
+      const bashMock = await import('../tools/bash.js') as any;
+      const codeFn = bashMock.executeCode;
+      codeFn.mockImplementation(async (_c: any, _e: string, code: string, input: any) => {
+        if (input?.item?.id === 1) throw new Error('iteration 1 failed');
+        return { processed: input?.item?.id };
+      });
+
+      const items = [{ id: 0 }, { id: 1 }, { id: 2 }];
+      const flow = makeFlow(
+        [
+          makeNode('trigger', 'trigger'),
+          makeNode('loop', 'loop', {
+            config: {
+              itemsField: 'trigger.items',
+              itemVariable: 'item',
+              collectResults: true,
+              subNodes: [makeNode('sub', 'code', { config: { code: 'return { processed: input.item.id }' } })],
+              subEdges: [],
+            },
+          }),
+        ],
+        [makeEdge('e1', 'trigger', 'loop')],
+      );
+
+      const result = await executor.execute(flow, { items }, onEvent, context);
+      const loopOutput = result.output.loop as any;
+      expect(loopOutput.count).toBe(3);
+      // The failing iteration is recorded, the flow completes
+      expect(loopOutput.errors).toBeDefined();
+      expect(Array.isArray(loopOutput.errors)).toBe(true);
+      expect(loopOutput.errors.length).toBeGreaterThanOrEqual(1);
+
+      codeFn.mockImplementation((_client: any, _executionId: string, code: string, input: unknown) => {
+        return new Function('input', code)(input);
+      });
     });
   });
 });

@@ -522,8 +522,13 @@ export class FlowExecutor {
 
               if (targetIdx >= 0 && targetIdx < i) {
                 if (decision === buttonValue) {
-                  // This is a feedback edge — re-execute from target
-                  const isMaxIter = hitlConfig.maxIterations > 0 && (feedbackLoopCount + 1) >= hitlConfig.maxIterations;
+                  // This is a feedback edge — re-execute from target. The
+                  // iteration counter travels across replays via
+                  // initialIteration (backend sets it from _nextIteration), so
+                  // maxIterations is evaluated against the accumulated count.
+                  // With maxIterations = N, iterations 0..N-1 may re-enter the
+                  // feedback loop; iteration N exits via max_iterations.
+                  const isMaxIter = hitlConfig.maxIterations > 0 && currentIteration >= hitlConfig.maxIterations;
                   if (isMaxIter) {
                     nodeOutputs.set(node.id, { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: currentIteration });
                     nodeOutputs.set(slugify(node.data?.label || node.id), { decision: 'max_iterations', feedback: hitlOutput?.feedback || '', _iterationCount: currentIteration });
@@ -1441,6 +1446,12 @@ export class FlowExecutor {
           ? (replayOutputs[`${node.id}:__approved`] as { decision?: string; feedback?: string } | undefined)
           : undefined;
         if (nodeApproval) {
+          // Consume the approval so a feedback-loop re-execution of this HITL
+          // node pauses again instead of silently re-approving from the stale
+          // replay state. The human must decide on each retry's result.
+          if (this.currentOptions?.replayOutputs) {
+            delete this.currentOptions.replayOutputs[`${node.id}:__approved`];
+          }
           return { decision: nodeApproval.decision || 'approved', feedback: nodeApproval.feedback || '', reviewedContent: (inp as any)?._reviewedContent || inp, _iterationCount: (inp as any)?._iterationCount || 0 };
         }
         if (inp?._approved && !replayFrom) {
@@ -1555,6 +1566,8 @@ export class FlowExecutor {
                 void hostname; void opts;
                 cb(null, pinnedAddresses);
               }) as any,
+              // Honor the node's "Verify SSL" toggle (sslVerify: false).
+              rejectUnauthorized: sslVerify !== false,
             },
             connectTimeout: timeout,
             headersTimeout: timeout,
