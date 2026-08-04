@@ -1121,11 +1121,12 @@ export class FlowExecutor {
           // Periodic status check: the tool loop runs indefinitely — it only
           // ends when the LLM stops requesting tools (or the run is aborted).
           // Every few rounds, ask the LLM whether it is still making progress
-          // so it can re-orient, but never suggest wrapping up early.
+          // so it can re-orient. Never suggest wrapping up — the model decides
+          // on its own when it is done.
           if ((round + 1) % TOOL_LOOP_CHECK_INTERVAL === 0) {
             const progressMsg = config.responseFormat === 'json_object'
-              ? `Status check (round ${round + 1}): Are you still making progress? If yes, continue with your next action. If you are done, call structured_output with your final answer.`
-              : `Status check (round ${round + 1}): Are you still making progress? If yes, continue with your next action. If the task is fully complete and there is nothing left to do, provide your final summary and stop.`;
+              ? `Status check (round ${round + 1}): Are you still making progress? If yes, continue with your next action. If you have gathered everything you need, call structured_output with your final answer.`
+              : `Status check (round ${round + 1}): Are you still making progress? If yes, continue with your next action.`;
             conversation.push({ role: 'user' as const, content: progressMsg });
           }
         }
