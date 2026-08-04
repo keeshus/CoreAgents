@@ -30,7 +30,7 @@ export class MCPHub {
     const tryTransport = async (transport: any, label: string): Promise<Client | null> => {
       try {
         const client = new Client(
-          { name: 'core-agents-worker', version: '1.0.0' },
+          { name: 'orchestream-ai-worker', version: '1.0.0' },
           { capabilities: {} }
         );
         await client.connect(transport);

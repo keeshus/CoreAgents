@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FlowExecutor, HitlPauseError, FlowStopError } from '../executor/engine.js';
-import type { FlowDefinition, FlowNode, FlowEdge } from 'core-agents-shared';
+import type { FlowDefinition, FlowNode, FlowEdge } from 'orchestream-ai-shared';
 import type { ExecutionContext } from '../executor/engine.js';
 
 vi.mock('../providers/index.js', () => ({

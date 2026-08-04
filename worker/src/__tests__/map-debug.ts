@@ -1,5 +1,5 @@
 import { FlowExecutor } from '../executor/engine.js';
-import type { FlowDefinition } from 'core-agents-shared';
+import type { FlowDefinition } from 'orchestream-ai-shared';
 
 async function main() {
   const flow: FlowDefinition = {id:'test',name:'test',description:'',nodes:[

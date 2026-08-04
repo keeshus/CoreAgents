@@ -712,7 +712,7 @@ router.get('/openapi.json', asyncHandler(async (req, res) => {
   res.json({
     openapi: '3.0.3',
     info: {
-      title: 'Core Agents — Webhook Flows API',
+      title: 'OrcheStream.AI — Webhook Flows API',
       version: '1.0.0',
       description: 'Dynamically generated API for all webhook-triggered flows. Endpoints appear and update automatically.',
     },
@@ -877,7 +877,7 @@ The spec is fully dynamic — every `GET /api/openapi.json` query:
 ## 8. End-to-End Caller Flow
 
 ```
-Caller                              Core Agents Backend
+Caller                              OrcheStream.AI Backend
   │                                       │
   │  POST /api/webhook/payment-processor  │
   │  Authorization: Bearer wh_xxx         │
@@ -931,7 +931,7 @@ The caller uses the `pollingUrl` returned in the POST response to check status. 
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Core Agents — Webhook Flows API",
+    "title": "OrcheStream.AI — Webhook Flows API",
     "version": "1.0.0",
     "description": "Dynamically generated API for all webhook-triggered flows."
   },

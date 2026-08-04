@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { FlowExecutor, HitlPauseError, PauseExecutionError } from '../executor/engine.js';
 import { callLLM } from '../providers/index.js';
-import type { FlowDefinition, FlowNode, FlowEdge } from 'core-agents-shared';
+import type { FlowDefinition, FlowNode, FlowEdge } from 'orchestream-ai-shared';
 import type { ExecutionContext } from '../executor/engine.js';
 
 // Mock callLLM to avoid real API calls in LLM agent node tests

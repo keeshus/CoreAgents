@@ -1,1 +1,1 @@
-export * from "core-agents-shared";
+export * from "orchestream-ai-shared";

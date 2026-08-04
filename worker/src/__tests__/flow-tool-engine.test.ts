@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FlowExecutor } from '../executor/engine.js';
-import type { FlowDefinition, FlowNode, FlowEdge } from 'core-agents-shared';
+import type { FlowDefinition, FlowNode, FlowEdge } from 'orchestream-ai-shared';
 
 vi.mock('../providers/index.js', () => ({
   callLLM: vi.fn(() => Promise.resolve({ text: 'mock LLM response' })),

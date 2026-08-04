@@ -35,7 +35,7 @@ vi.mock('drizzle-orm', () => ({
   or: vi.fn((...args: any[]) => ({ op: 'or', args })),
 }));
 
-vi.mock('core-agents-shared', () => ({
+vi.mock('orchestream-ai-shared', () => ({
   flows: { _: { name: 'flows' } },
   flowVersions: { _: { name: 'flow_versions' } },
   users: { _: { name: 'users' } },

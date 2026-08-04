@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "core-agents.fullname" . }}-worker
+  name: {{ include "orchestream-ai.fullname" . }}-worker
   labels:
-    {{- include "core-agents.labels" . | nindent 4 }}
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.worker.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "core-agents.fullname" . }}-worker
+      app: {{ include "orchestream-ai.fullname" . }}-worker
   template:
     metadata:
       labels:
-        app: {{ include "core-agents.fullname" . }}-worker
+        app: {{ include "orchestream-ai.fullname" . }}-worker
     spec:
       # Pod-level hardening: run as non-root, restrict to the default seccomp profile
       securityContext:
@@ -40,27 +40,27 @@ spec:
               mountPath: /tmp
           env:
             - name: VALKEY_HOST
-              value: {{ include "core-agents.fullname" . }}-valkey
+              value: {{ include "orchestream-ai.fullname" . }}-valkey
             - name: VALKEY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "core-agents.secretName" . }}
+                  name: {{ include "orchestream-ai.secretName" . }}
                   key: valkey-password
             - name: SIDECAR_URL
               value: "http://localhost:4001"
             - name: SIDECAR_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "core-agents.secretName" . }}
+                  name: {{ include "orchestream-ai.secretName" . }}
                   key: sidecar-token
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "core-agents.secretName" . }}
+                  name: {{ include "orchestream-ai.secretName" . }}
                   key: database-url
           envFrom:
             - secretRef:
-                name: {{ include "core-agents.secretName" . }}
+                name: {{ include "orchestream-ai.secretName" . }}
           # The worker is a BullMQ consumer with no HTTP server of its own —
           # probe the backend Service (same release, cluster-internal DNS) as
           # a proxy for cluster availability. NOT localhost: the worker pod
@@ -70,7 +70,7 @@ spec:
               command:
                 - node
                 - -e
-                - fetch('http://{{ include "core-agents.fullname" . }}-backend:{{ .Values.backend.port }}/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+                - fetch('http://{{ include "orchestream-ai.fullname" . }}-backend:{{ .Values.backend.port }}/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
@@ -88,7 +88,7 @@ spec:
             - name: SIDECAR_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "core-agents.secretName" . }}
+                  name: {{ include "orchestream-ai.secretName" . }}
                   key: sidecar-token
           volumeMounts:
             - name: flow-data

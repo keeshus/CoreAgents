@@ -21,7 +21,7 @@ async function main() {
       console.error('     docker compose up -d postgres');
     } else if (err.message?.includes('does not exist')) {
       console.error('   → Database does not exist. Create it with:');
-      console.error('     createdb coreagents');
+      console.error('     createdb orchestream_ai');
     } else if (err.message?.includes('role') || err.message?.includes('password')) {
       console.error('   → Wrong credentials. Check your .env file.');
     } else {

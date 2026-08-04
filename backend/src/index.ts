@@ -70,7 +70,7 @@ app.use((req, res, next) => {
 app.get(
   '/api/health',
   asyncHandler(async (_req: Request, res: Response) => {
-    res.json({ status: 'ok', project: 'Core Agents' });
+    res.json({ status: 'ok', project: 'OrcheStream.AI' });
   }),
 );
 

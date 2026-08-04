@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { NodeCatalogEntry } from 'core-agents-shared';
+import type { NodeCatalogEntry } from 'orchestream-ai-shared';
 import { asyncHandler } from '../utils/async-handler.js';
 
 const router = Router();

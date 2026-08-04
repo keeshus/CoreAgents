@@ -8,7 +8,7 @@ import { getStore, listStores } from '../vector-stores/index.js';
 import { requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { logger } from '../utils/logger.js';
-import type { SSEEvent, FlowDefinition, ExecutionStep, EnvVarEntry } from 'core-agents-shared';
+import type { SSEEvent, FlowDefinition, ExecutionStep, EnvVarEntry } from 'orchestream-ai-shared';
 import { createSidecarClient, createSandboxManager } from '../../../worker/src/sandbox/index.js';
 
 const secretStore = new Map<string, string>();

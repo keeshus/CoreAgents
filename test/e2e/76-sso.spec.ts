@@ -8,13 +8,13 @@ test.describe('SSO with mock OIDC', () => {
     const res = await request.put(`${API_URL}/admin/sso-config`, {
       data: {
         provider: 'mock-oidc',
-        clientId: 'core-agents',
+        clientId: 'orchestream-ai',
         clientSecret: 'e2e-test-secret',
         issuer: 'http://mock-oidc-e2e:3004/dex',
         redirectUri: 'http://localhost:3001/api/auth/sso/callback',
         groupClaim: 'groups',
-        adminGroupMapping: ['core-agents-admin'],
-        editorGroupMapping: ['core-agents-editor'],
+        adminGroupMapping: ['orchestream-ai-admin'],
+        editorGroupMapping: ['orchestream-ai-editor'],
         enabled: true,
       },
     });
@@ -55,7 +55,7 @@ test.describe('SSO with mock OIDC', () => {
     await page.locator('#password').fill('password');
     await page.locator('#submit-login').click();
 
-    // Admin user is part of 'core-agents-admin' group → mapped to admin role
+    // Admin user is part of 'orchestream-ai-admin' group → mapped to admin role
     await expect(page).toHaveURL(/localhost:3000/);
     await expect(page.locator('h1').filter({ hasText: 'OrcheStream.AI' }).first()).toBeVisible({ timeout: 10000 });
 
@@ -77,7 +77,7 @@ test.describe('SSO with mock OIDC', () => {
     await page.locator('#password').fill('password');
     await page.locator('#submit-login').click();
 
-    // Editor user is part of 'core-agents-editor' group → mapped to editor role
+    // Editor user is part of 'orchestream-ai-editor' group → mapped to editor role
     await expect(page).toHaveURL(/localhost:3000/);
 
     const meRes = await page.request.get(`${API_URL}/auth/me`);
@@ -146,20 +146,20 @@ test.describe('SSO with mock OIDC', () => {
     const meRes = await page.request.get(`${API_URL}/auth/me`);
     const me = await meRes.json();
     const groupNames = (me.user?.groups || []).map((g: any) => g.name);
-    expect(groupNames).toContain('core-agents-admin');
+    expect(groupNames).toContain('orchestream-ai-admin');
 
     // Verify group exists in DB with provider=mock-oidc
     const groupsRes = await request.get(`${API_URL}/groups`);
     const groups = await groupsRes.json();
-    const syncedGroup = groups.find((g: any) => g.name === 'core-agents-admin');
+    const syncedGroup = groups.find((g: any) => g.name === 'orchestream-ai-admin');
     expect(syncedGroup).toBeDefined();
     expect(syncedGroup.provider).toBe('mock-oidc');
 
     // SSO-provisioned groups are read-only on the groups settings page:
     // no Edit/Delete buttons and no "+ Add member" for non-local groups.
     await page.goto('/settings/groups');
-    await expect(page.getByText('core-agents-admin')).toBeVisible({ timeout: 10000 });
-    const ssoRow = page.locator('div.bg-surface.rounded-lg.border.border-outline-variant.p-4').filter({ hasText: 'core-agents-admin' }).first();
+    await expect(page.getByText('orchestream-ai-admin')).toBeVisible({ timeout: 10000 });
+    const ssoRow = page.locator('div.bg-surface.rounded-lg.border.border-outline-variant.p-4').filter({ hasText: 'orchestream-ai-admin' }).first();
     await expect(ssoRow.getByRole('button', { name: 'Edit' })).toHaveCount(0);
     await expect(ssoRow.getByRole('button', { name: 'Delete' })).toHaveCount(0);
     await expect(page.getByText('mock-oidc').first()).toBeVisible({ timeout: 5000 });
@@ -239,17 +239,17 @@ test.describe('SSO with mock OIDC', () => {
 
     // Form reflects the config saved in beforeEach
     await expect(page.getByLabel('Provider name')).toHaveValue('mock-oidc', { timeout: 5000 });
-    await expect(page.getByLabel('Client ID')).toHaveValue('core-agents');
+    await expect(page.getByLabel('Client ID')).toHaveValue('orchestream-ai');
     await expect(page.getByLabel('Issuer URL')).toHaveValue('http://mock-oidc-e2e:3004/dex');
     await expect(page.getByLabel('Redirect URI')).toHaveValue('http://localhost:3001/api/auth/sso/callback');
     await expect(page.getByLabel('Group claim name')).toHaveValue('groups');
-    await expect(page.getByLabel('Admin group mapping')).toHaveValue('core-agents-admin');
-    await expect(page.getByLabel('Editor group mapping')).toHaveValue('core-agents-editor');
+    await expect(page.getByLabel('Admin group mapping')).toHaveValue('orchestream-ai-admin');
+    await expect(page.getByLabel('Editor group mapping')).toHaveValue('orchestream-ai-editor');
     await expect(page.getByText('Enable SSO')).toBeVisible();
 
     // Edit via UI and save
     await page.getByLabel('Provider name').fill('mock-oidc-edited');
-    await page.getByLabel('Admin group mapping').fill('core-agents-admin, extra-admin-group');
+    await page.getByLabel('Admin group mapping').fill('orchestream-ai-admin, extra-admin-group');
     await page.getByRole('button', { name: 'Save Configuration' }).click();
     await expect(page.getByText('SSO configuration saved')).toBeVisible({ timeout: 5000 });
 
@@ -258,12 +258,12 @@ test.describe('SSO with mock OIDC', () => {
     expect(res.ok()).toBe(true);
     const config = await res.json();
     expect(config.provider).toBe('mock-oidc-edited');
-    expect(config.adminGroupMapping).toEqual(['core-agents-admin', 'extra-admin-group']);
-    expect(config.editorGroupMapping).toEqual(['core-agents-editor']);
+    expect(config.adminGroupMapping).toEqual(['orchestream-ai-admin', 'extra-admin-group']);
+    expect(config.editorGroupMapping).toEqual(['orchestream-ai-editor']);
 
     // Restore the original values for subsequent tests
     await request.put(`${API_URL}/admin/sso-config`, {
-      data: { provider: 'mock-oidc', adminGroupMapping: ['core-agents-admin'], editorGroupMapping: ['core-agents-editor'] },
+      data: { provider: 'mock-oidc', adminGroupMapping: ['orchestream-ai-admin'], editorGroupMapping: ['orchestream-ai-editor'] },
     });
   });
 
@@ -280,7 +280,7 @@ test.describe('SSO with mock OIDC', () => {
 
     // Fill them back → Save re-enabled
     await page.getByLabel('Provider name').fill('mock-oidc');
-    await page.getByLabel('Client ID').fill('core-agents');
+    await page.getByLabel('Client ID').fill('orchestream-ai');
     await page.getByLabel('Issuer URL').fill('http://mock-oidc-e2e:3004/dex');
     await expect(saveBtn).toBeEnabled({ timeout: 5000 });
 

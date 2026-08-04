@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "core-agents.fullname" . }}-frontend
+  name: {{ include "orchestream-ai.fullname" . }}-frontend
   labels:
-    {{- include "core-agents.labels" . | nindent 4 }}
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -12,23 +12,23 @@ spec:
       protocol: TCP
       name: http
   selector:
-    app: {{ include "core-agents.fullname" . }}-frontend
+    app: {{ include "orchestream-ai.fullname" . }}-frontend
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "core-agents.fullname" . }}-frontend
+  name: {{ include "orchestream-ai.fullname" . }}-frontend
   labels:
-    {{- include "core-agents.labels" . | nindent 4 }}
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.frontend.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "core-agents.fullname" . }}-frontend
+      app: {{ include "orchestream-ai.fullname" . }}-frontend
   template:
     metadata:
       labels:
-        app: {{ include "core-agents.fullname" . }}-frontend
+        app: {{ include "orchestream-ai.fullname" . }}-frontend
     spec:
       # Pod-level hardening: run as non-root, restrict to the default seccomp profile
       securityContext:
@@ -63,7 +63,7 @@ spec:
             - name: NEXT_PUBLIC_API_URL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "core-agents.fullname" . }}-config
+                  name: {{ include "orchestream-ai.fullname" . }}-config
                   key: frontend-api-url
           readinessProbe:
             httpGet:

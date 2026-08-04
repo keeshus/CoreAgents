@@ -197,7 +197,7 @@ test.describe('/v1/chat/completions execution', () => {
             config: {
               endpointId: mockEndpointId,
               model: 'mock-gpt-4',
-              systemPrompt: 'MOCK_RESPONSE: "Hello from Core Agents flow!"',
+              systemPrompt: 'MOCK_RESPONSE: "Hello from OrcheStream.AI flow!"',
               temperature: 0.7,
               maxTokens: 256,
               responseFormat: 'text',
@@ -248,7 +248,7 @@ test.describe('/v1/chat/completions execution', () => {
     expect(data.choices).toBeDefined();
     expect(data.choices.length).toBe(1);
     expect(data.choices[0].message.role).toBe('assistant');
-    expect(data.choices[0].message.content).toContain('Hello from Core Agents');
+    expect(data.choices[0].message.content).toContain('Hello from OrcheStream.AI');
     expect(data.choices[0].finish_reason).toBe('stop');
     expect(data.id).toMatch(/^chatcmpl-/);
     expect(data.model).toBe('mock-gpt-4');
@@ -268,7 +268,7 @@ test.describe('/v1/chat/completions execution', () => {
     });
     expect(res.ok).toBe(true);
     const data = await res.json();
-    expect(data.choices[0].message.content).toContain('Hello from Core Agents');
+    expect(data.choices[0].message.content).toContain('Hello from OrcheStream.AI');
   });
 
   test('streaming returns SSE chunks', async () => {
@@ -323,7 +323,7 @@ test.describe('/v1/chat/completions execution', () => {
     });
     expect(r1.ok).toBe(true);
     const d1 = await r1.json();
-    expect(d1.choices[0].message.content).toContain('Hello from Core Agents');
+    expect(d1.choices[0].message.content).toContain('Hello from OrcheStream.AI');
 
     // Turn 2 — carries the prior assistant reply as conversation history
     const r2 = await fetch(`${OPENAI_URL}/v1/chat/completions`, {

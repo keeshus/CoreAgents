@@ -1,5 +1,5 @@
 {
-  "name": "core-agents-worker",
+  "name": "orchestream-ai-worker",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "bullmq": "^6.0.3",
-    "core-agents-shared": "*",
+    "orchestream-ai-shared": "*",
     "ioredis": "^6.0.0",
     "openai": "^7.2.0",
     "undici": "^8.9.0"

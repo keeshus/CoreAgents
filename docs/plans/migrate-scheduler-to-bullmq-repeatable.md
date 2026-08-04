@@ -29,7 +29,7 @@ In `backend/src/routes/flows.ts`, add BullMQ calls on create, update, and delete
 After the insert succeeds and the webhook hook runs, check if the trigger node has `triggerType: 'schedule'` with a `cronExpression`. If so:
 
 ```ts
-import { executionQueue } from 'core-agents-worker/queue';
+import { executionQueue } from 'orchestream-ai-worker/queue';
 
 // Inline worker import to avoid circular dep; or extract queue access to shared lib
 await executionQueue.add(
@@ -82,7 +82,7 @@ if (triggerType === 'schedule' && cronExpression) {
 - Remove `scheduler/Dockerfile`
 - Remove `scheduler/package.json`
 - Remove scheduler service from `docker-compose.yml`
-- Remove scheduler from `helm/core-agents/templates/scheduler.yaml`
+- Remove scheduler from `helm/orchestream-ai/templates/scheduler.yaml`
 - Remove scheduler from any CI/CD or deployment scripts
 
 ### 3. Create a reconciliation job
@@ -93,8 +93,8 @@ Add a lightweight **reconciliation worker** that periodically checks DB against 
 
 ```ts
 // backend/src/services/schedule-reconciliation.ts
-import { executionQueue } from 'core-agents-worker/queue';
-import { db, flows } from 'core-agents-shared';
+import { executionQueue } from 'orchestream-ai-worker/queue';
+import { db, flows } from 'orchestream-ai-shared';
 
 async function isRepeatableRegistered(flowId: string, cronExpression: string): Promise<boolean> {
   const repeatable = await executionQueue.getRepeatableJobs();
@@ -205,8 +205,8 @@ This avoids storing the full flow definition in every repeatable job, keeping Re
 | `worker/src/executor/runner.ts` | Handle `{ flowId }` payload (load from DB) |
 | `scheduler/` (entire directory) | Delete |
 | `docker-compose.yml` | Remove scheduler service |
-| `helm/core-agents/templates/scheduler.yaml` | Delete |
-| `helm/core-agents/values.yaml` | Remove scheduler config |
+| `helm/orchestream-ai/templates/scheduler.yaml` | Delete |
+| `helm/orchestream-ai/values.yaml` | Remove scheduler config |
 | `package.json` (root workspaces) | Remove `scheduler` workspace |
 | `.github/workflows/*.yml` | Remove scheduler build/deploy steps |
 
@@ -220,7 +220,7 @@ This avoids storing the full flow definition in every repeatable job, keeping Re
 | **Cron expression invalid** | Validate in the backend before `queue.add()`; reject with 400 |
 | **Redis down on flow save** | Catch error and defer to reconciliation (it will auto-fix within 1h) |
 | **Migration — existing schedules orphaned** | Run reconciliation once as part of the deploy |
-| **Backend needs worker queue import** | Extract queue creation to `core-agents-shared` or inject via config |
+| **Backend needs worker queue import** | Extract queue creation to `orchestream-ai-shared` or inject via config |
 
 ---
 

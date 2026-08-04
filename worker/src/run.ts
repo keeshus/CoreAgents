@@ -11,7 +11,7 @@ import { startReconciliation, stopReconciliation } from './schedule-reconciliati
 async function main() {
   console.log('Worker started, waiting for jobs...');
 
-  const { getDb, flows, executions, executionSteps, agentContexts, agentStore, groups, userAssignments } = await import('core-agents-shared');
+  const { getDb, flows, executions, executionSteps, agentContexts, agentStore, groups, userAssignments } = await import('orchestream-ai-shared');
   const { db } = getDb();
   const { eq, and, inArray } = await import('drizzle-orm');
 

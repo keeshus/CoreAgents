@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ Core Agents
+# ⚡ OrcheStream.AI
 
 **Visual LLM Agent Builder** — design, compose, and deploy intelligent agent workflows on a drag-and-drop canvas.
 
@@ -95,8 +95,8 @@
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/keeshus/CoreAgents.git
-cd core-agents
+git clone https://github.com/keeshus/OrcheStream.AI.git
+cd orchestream-ai
 npm install
 
 # 2. Start infrastructure (PostgreSQL, Qdrant, Valkey)
@@ -131,7 +131,7 @@ cd frontend && npm run dev
 
 ```bash
 # Kubernetes (recommended for production)
-helm install core-agents ./helm/core-agents \
+helm install orchestream-ai ./helm/orchestream-ai \
   --set dbPassword=change-me \
   --set anthropicApiKey=sk-ant-... \
   --set openaiApiKey=sk-...
@@ -219,7 +219,7 @@ npm test
 ## 🗂️ Project Structure
 
 ```
-core-agents/
+orchestream-ai/
 ├── frontend/                 # Next.js 16 Pages Router
 │   ├── pages/                # Flow editor, chat, settings, executions
 │   ├── src/components/assistant/  # Co-Pilot AI assistant

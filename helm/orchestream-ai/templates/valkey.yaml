@@ -2,18 +2,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "core-agents.fullname" . }}-valkey
+  name: {{ include "orchestream-ai.fullname" . }}-valkey
   labels:
-    {{- include "core-agents.labels" . | nindent 4 }}
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: {{ include "core-agents.fullname" . }}-valkey
+      app: {{ include "orchestream-ai.fullname" . }}-valkey
   template:
     metadata:
       labels:
-        app: {{ include "core-agents.fullname" . }}-valkey
+        app: {{ include "orchestream-ai.fullname" . }}-valkey
     spec:
       # valkey:7-alpine ships a non-root `valkey` user (uid 999, gid 1000);
       # fsGroup matches so the PVC is writable.
@@ -43,7 +43,7 @@ spec:
             - name: VALKEY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "core-agents.secretName" . }}
+                  name: {{ include "orchestream-ai.secretName" . }}
                   key: valkey-password
           volumeMounts:
             - name: data
@@ -53,14 +53,14 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "core-agents.fullname" . }}-valkey-pvc
+            claimName: {{ include "orchestream-ai.fullname" . }}-valkey-pvc
         - name: tmp
           emptyDir: {}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "core-agents.fullname" . }}-valkey-pvc
+  name: {{ include "orchestream-ai.fullname" . }}-valkey-pvc
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -70,11 +70,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "core-agents.fullname" . }}-valkey
+  name: {{ include "orchestream-ai.fullname" . }}-valkey
 spec:
   type: ClusterIP
   ports:
     - port: 6379
   selector:
-    app: {{ include "core-agents.fullname" . }}-valkey
+    app: {{ include "orchestream-ai.fullname" . }}-valkey
 {{- end }}

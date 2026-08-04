@@ -127,16 +127,16 @@ describe('resolveRoleFromGroups', () => {
     return 'reader';
   }
 
-  const adminMapping = ['core-agents-admin', 'admin'];
-  const editorMapping = ['core-agents-editor', 'editor'];
+  const adminMapping = ['orchestream-ai-admin', 'admin'];
+  const editorMapping = ['orchestream-ai-editor', 'editor'];
 
   it('returns admin for admin group', () => {
-    expect(resolveRoleFromGroups(['core-agents-admin'], adminMapping, editorMapping)).toBe('admin');
+    expect(resolveRoleFromGroups(['orchestream-ai-admin'], adminMapping, editorMapping)).toBe('admin');
     expect(resolveRoleFromGroups(['admin'], adminMapping, editorMapping)).toBe('admin');
   });
 
   it('returns editor for editor group', () => {
-    expect(resolveRoleFromGroups(['core-agents-editor'], adminMapping, editorMapping)).toBe('editor');
+    expect(resolveRoleFromGroups(['orchestream-ai-editor'], adminMapping, editorMapping)).toBe('editor');
     expect(resolveRoleFromGroups(['editor'], adminMapping, editorMapping)).toBe('editor');
   });
 

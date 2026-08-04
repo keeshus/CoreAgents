@@ -1,4 +1,4 @@
-import type { FlowNode, FlowEdge } from 'core-agents-shared';
+import type { FlowNode, FlowEdge } from 'orchestream-ai-shared';
 
 export interface TopologicalSortResult {
   sorted: FlowNode[];

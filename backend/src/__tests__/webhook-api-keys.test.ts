@@ -20,7 +20,7 @@ vi.mock('../middleware/auth.js', () => ({
 
 vi.mock('../db/connection.js', () => ({ db: { select: vi.fn(), insert: vi.fn(), update: vi.fn() } }));
 
-vi.mock('core-agents-shared', () => ({
+vi.mock('orchestream-ai-shared', () => ({
   apiDeployments: { _: { name: 'api_deployments' } },
   apiKeys: { _: { name: 'api_keys' } },
   flows: { _: { name: 'flows' } },

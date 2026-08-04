@@ -6,7 +6,7 @@ import type {
   ExecutionStep,
   NodeData,
   ConditionNodeData,
-} from 'core-agents-shared';
+} from 'orchestream-ai-shared';
 import { topologicalSort } from './dag.js';
 import { callLLM, type ResolvedEndpoint } from '../providers/index.js';
 import { randomUUID } from 'node:crypto';

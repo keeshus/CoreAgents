@@ -4,7 +4,7 @@ const DRZZLE_NAME = Symbol.for('drizzle:Name');
 
 describe('database schema', () => {
   async function loadSchema() {
-    return await import('core-agents-shared');
+    return await import('orchestream-ai-shared');
   }
 
   describe('table exports', () => {
@@ -144,7 +144,7 @@ describe('database schema', () => {
   });
 
   describe('backend re-exports match', () => {
-    it('backend/src/db/schema re-exports all from core-agents-shared', async () => {
+    it('backend/src/db/schema re-exports all from orchestream-ai-shared', async () => {
       const backendSchema = await import('../db/schema.js');
       const keys = Object.keys(backendSchema).sort();
       expect(keys.length).toBeGreaterThan(30);

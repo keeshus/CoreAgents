@@ -107,7 +107,7 @@ scheduler/
 ```
 
 **Dependencies** (only what it needs):
-- `core-agents-shared` — types (FlowDefinition)
+- `orchestream-ai-shared` — types (FlowDefinition)
 - `bullmq` — enqueue jobs
 - `ioredis` — BullMQ Redis client
 - `drizzle-orm` + `pg` — DB access (same as shared DB package)
@@ -180,12 +180,12 @@ shared/
 | `shared/tsconfig.json` | types only | Add `src/db/` to include |
 | `backend/src/db/connection.ts` | `./schema.js` → `db/schema.js` | Moved to `shared/src/db/connection.ts` |
 | `backend/src/db/schema.ts` | standalone | Moved to `shared/src/db/schema.ts` |
-| `backend/src/db/migrate.ts` | imports from `./connection.js` | imports from `core-agents-shared` |
-| `backend/src/routes/*.ts` | `../db/connection.js` | `core-agents-shared` |
-| `worker/src/run.ts` | `../../backend/src/db/connection.js` | `core-agents-shared` |
+| `backend/src/db/migrate.ts` | imports from `./connection.js` | imports from `orchestream-ai-shared` |
+| `backend/src/routes/*.ts` | `../db/connection.js` | `orchestream-ai-shared` |
+| `worker/src/run.ts` | `../../backend/src/db/connection.js` | `orchestream-ai-shared` |
 | `worker/tsconfig.json` | `include: ["src", "../backend/src/db"]` | Removed the backend include |
 | `worker/tsconfig.build.json` | no change needed | Works without backend include |
-| `scheduler/src/index.ts` | doesn't exist | imports from `core-agents-shared` |
+| `scheduler/src/index.ts` | doesn't exist | imports from `orchestream-ai-shared` |
 
 **Benefit:** One source of truth for DB schema. No more relative path imports across packages. Each service creates its own connection from the shared factory.
 
@@ -640,9 +640,9 @@ scheduler:
   build:
     context: ./scheduler
     dockerfile: Dockerfile
-  container_name: core-agents-scheduler
+  container_name: orchestream-ai-scheduler
   environment:
-    - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
+    - DATABASE_URL=postgres://orchestream_ai:orchestream_ai@postgres:5432/orchestream_ai
     - VALKEY_HOST=valkey
     - VALKEY_PASSWORD=${VALKEY_PASSWORD:-dev-valkey}
   depends_on:
@@ -655,7 +655,7 @@ sidecar:
   build:
     context: ./sidecar
     dockerfile: Dockerfile
-  container_name: core-agents-sidecar
+  container_name: orchestream-ai-sidecar
   # No env vars — zero secrets
   volumes:
     - flow-data:/var/flow-data
@@ -709,18 +709,18 @@ Current `scheduler.yaml` uses the worker image with a custom command. Change it 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "core-agents.fullname" . }}-scheduler
+  name: {{ include "orchestream-ai.fullname" . }}-scheduler
   labels:
-    {{- include "core-agents.labels" . | nindent 4 }}
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.scheduler.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "core-agents.fullname" . }}-scheduler
+      app: {{ include "orchestream-ai.fullname" . }}-scheduler
   template:
     metadata:
       labels:
-        app: {{ include "core-agents.fullname" . }}-scheduler
+        app: {{ include "orchestream-ai.fullname" . }}-scheduler
     spec:
       containers:
         - name: scheduler
@@ -728,10 +728,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: VALKEY_HOST
-              value: {{ include "core-agents.fullname" . }}-valkey
+              value: {{ include "orchestream-ai.fullname" . }}-valkey
           envFrom:
             - secretRef:
-                name: {{ include "core-agents.fullname" . }}-secret
+                name: {{ include "orchestream-ai.fullname" . }}-secret
           resources:
             {{- toYaml .Values.scheduler.resources | nindent 12 }}
 ```
@@ -742,18 +742,18 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "core-agents.fullname" . }}-worker
+  name: {{ include "orchestream-ai.fullname" . }}-worker
   labels:
-    {{- include "core-agents.labels" . | nindent 4 }}
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.worker.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "core-agents.fullname" . }}-worker
+      app: {{ include "orchestream-ai.fullname" . }}-worker
   template:
     metadata:
       labels:
-        app: {{ include "core-agents.fullname" . }}-worker
+        app: {{ include "orchestream-ai.fullname" . }}-worker
     spec:
       volumes:
         - name: flow-data
@@ -764,12 +764,12 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: VALKEY_HOST
-              value: {{ include "core-agents.fullname" . }}-valkey
+              value: {{ include "orchestream-ai.fullname" . }}-valkey
             - name: SIDECAR_URL
               value: "http://localhost:4001"
           envFrom:
             - secretRef:
-                name: {{ include "core-agents.fullname" . }}-secret
+                name: {{ include "orchestream-ai.fullname" . }}-secret
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
         - name: sidecar
@@ -805,7 +805,7 @@ Same pattern: add `flow-data` emptyDir volume, sidecar container with `securityC
 
 ```yaml
 image:
-  repository: ghcr.io/kees/core-agents
+  repository: ghcr.io/kees/orchestream-ai
   tag: latest
   pullPolicy: IfNotPresent
   # Each service appends its suffix:
@@ -864,13 +864,13 @@ sidecar:
 | `shared/src/db/schema.ts` | **Moved from** `backend/src/db/schema.ts`. All table definitions. |
 | `backend/src/db/connection.ts` | Remove or re-export from shared |
 | `backend/src/db/schema.ts` | Remove or re-export from shared |
-| `backend/src/routes/*.ts` | Import db/schema from `core-agents-shared` instead of relative paths |
+| `backend/src/routes/*.ts` | Import db/schema from `orchestream-ai-shared` instead of relative paths |
 | `backend/src/routes/execution.ts` | Add `sidecar.setup()` on debug start, `sidecar.teardown()` on completion/failure, **skip teardown** on HITL pause |
 | `backend/Dockerfile` | Remove CLI tools (moved to sidecar). Keep minimal. |
 | `backend/Dockerfile.e2e` | Same |
 | `worker/package.json` | Remove `dev:scheduler` script. Remove `scheduler-run.ts` reference. |
 | `worker/tsconfig.json` | Remove `include: ["src", "../backend/src/db"]` — no longer needs backend DB files |
-| `worker/src/run.ts` | Import from `core-agents-shared` instead of `../../backend/src/db/`. Start reaper on boot. |
+| `worker/src/run.ts` | Import from `orchestream-ai-shared` instead of `../../backend/src/db/`. Start reaper on boot. |
 | `worker/src/executor/runner.ts` | Wrap execution with sandbox lifecycle (setup/teardown) |
 | `worker/src/executor/engine.ts` | Inject `bash` tool. Remove `file_*`/`fetch` injection. Add sandbox CLI list to system prompt. |
 | `worker/src/tools/built-in.ts` | Remove `file_*` and `fetch` handlers. Keep `store_*`, `now`, `uuid`, `log`. |
@@ -879,11 +879,11 @@ sidecar:
 | `shared/src/types/flow.ts` | Add `bash` to auto-injected tool set. Add sandbox system prompt template. |
 | `docker-compose.yml` | Add `scheduler` service, `sidecar` service, `flow-data` volume. Wire sidecar to worker + backend. |
 | `docker-compose.e2e.yml` | Same pattern with `-e2e` suffix |
-| `helm/core-agents/Chart.yaml` | Bump version |
-| `helm/core-agents/values.yaml` | Add `sidecar.resources`, update `scheduler` section |
-| `helm/core-agents/templates/worker.yaml` | Add sidecar container, flow-data volume, SIDECAR_URL env |
-| `helm/core-agents/templates/backend.yaml` | Add sidecar container, flow-data volume, SIDECAR_URL env |
-| `helm/core-agents/templates/scheduler.yaml` | Use dedicated scheduler image instead of worker image |
+| `helm/orchestream-ai/Chart.yaml` | Bump version |
+| `helm/orchestream-ai/values.yaml` | Add `sidecar.resources`, update `scheduler` section |
+| `helm/orchestream-ai/templates/worker.yaml` | Add sidecar container, flow-data volume, SIDECAR_URL env |
+| `helm/orchestream-ai/templates/backend.yaml` | Add sidecar container, flow-data volume, SIDECAR_URL env |
+| `helm/orchestream-ai/templates/scheduler.yaml` | Use dedicated scheduler image instead of worker image |
 
 ---
 
@@ -913,11 +913,11 @@ sidecar:
 Each service gets its own image via a naming convention:
 
 ```
-ghcr.io/kees/core-agents-worker:latest     ← worker/src/
-ghcr.io/kees/core-agents-backend:latest    ← backend/src/
-ghcr.io/kees/core-agents-frontend:latest   ← frontend/
-ghcr.io/kees/core-agents-scheduler:latest  ← scheduler/
-ghcr.io/kees/core-agents-sidecar:latest    ← sidecar/
+ghcr.io/kees/orchestream-ai-worker:latest     ← worker/src/
+ghcr.io/kees/orchestream-ai-backend:latest    ← backend/src/
+ghcr.io/kees/orchestream-ai-frontend:latest   ← frontend/
+ghcr.io/kees/orchestream-ai-scheduler:latest  ← scheduler/
+ghcr.io/kees/orchestream-ai-sidecar:latest    ← sidecar/
 ```
 
 Each has its own `Dockerfile` at the service root. The monorepo root `package.json` and `shared/` are COPY'd in during build for workspace resolution.

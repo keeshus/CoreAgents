@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "orchestream-ai.fullname" . }}-config
+  labels:
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
+data:
+  frontend-api-url: {{ .Values.frontend.apiUrl | default (printf "http://%s-backend:%d/api" (include "orchestream-ai.fullname" .) (int .Values.backend.port)) | quote }}

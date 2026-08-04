@@ -28,7 +28,7 @@ test.describe('Webhook OpenAPI spec', () => {
     const spec = await specRes.json();
 
     expect(spec.openapi).toBe('3.0.3');
-    expect(spec.info.title).toBe('Core Agents — Webhook Flows API');
+    expect(spec.info.title).toBe('OrcheStream.AI — Webhook Flows API');
     expect(spec.paths).toBeDefined();
     expect(spec.components.securitySchemes.apiKey).toBeDefined();
 

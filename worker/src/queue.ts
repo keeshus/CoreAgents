@@ -1,5 +1,5 @@
 import { Queue, Worker as QueueWorker } from 'bullmq';
-import type { FlowDefinition } from 'core-agents-shared';
+import type { FlowDefinition } from 'orchestream-ai-shared';
 
 const connection = {
   host: process.env.VALKEY_HOST || 'localhost',

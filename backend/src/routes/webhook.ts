@@ -5,7 +5,7 @@ import { flows, apiDeployments, executions } from '../db/schema.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { authenticateWebhookRequest, enforceWebhookRateLimit, enforceWebhookIpRateLimit } from './webhook-security.js';
-import type { NodeData, FlowDefinition } from 'core-agents-shared';
+import type { NodeData, FlowDefinition } from 'orchestream-ai-shared';
 
 const router = Router();
 

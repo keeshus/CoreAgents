@@ -22,7 +22,7 @@ vi.mock('../middleware/auth.js', () => ({
 
 vi.mock('../db/connection.js', () => ({ db: { select: vi.fn(), insert: vi.fn(), update: vi.fn() } }));
 
-vi.mock('core-agents-shared', () => ({
+vi.mock('orchestream-ai-shared', () => ({
   appEnvVars: { _: { name: 'app_env_vars' } },
   groupVaultConfig: { _: { name: 'group_vault_config' } },
   groupMembers: { _: { name: 'group_members' } },

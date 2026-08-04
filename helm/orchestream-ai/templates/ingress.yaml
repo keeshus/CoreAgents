@@ -4,9 +4,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "core-agents.fullname" . }}
+  name: {{ include "orchestream-ai.fullname" . }}
   labels:
-    {{- include "core-agents.labels" . | nindent 4 }}
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -36,7 +36,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "core-agents.fullname" $ }}-frontend
+                name: {{ include "orchestream-ai.fullname" $ }}-frontend
                 port:
                   number: {{ $.Values.service.frontendPort }}
           {{- end }}

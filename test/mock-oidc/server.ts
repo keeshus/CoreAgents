@@ -17,7 +17,7 @@ import crypto from 'crypto';
 
 const PORT = 3004;
 const ISSUER = `http://mock-oidc-e2e:${PORT}/dex`;
-const CLIENT_ID = 'core-agents';
+const CLIENT_ID = 'orchestream-ai';
 const CLIENT_SECRET = 'e2e-test-secret';
 
 // ── RSA key pair for JWT signing ──────────────────────────────────────
@@ -46,8 +46,8 @@ interface MockUser {
 }
 
 const USERS: Record<string, MockUser> = {
-  'admin@mock.local':   { email: 'admin@mock.local',   password: 'password', name: 'Admin',   groups: ['core-agents-admin'] },
-  'editor@mock.local':  { email: 'editor@mock.local',  password: 'password', name: 'Editor',  groups: ['core-agents-editor'] },
+  'admin@mock.local':   { email: 'admin@mock.local',   password: 'password', name: 'Admin',   groups: ['orchestream-ai-admin'] },
+  'editor@mock.local':  { email: 'editor@mock.local',  password: 'password', name: 'Editor',  groups: ['orchestream-ai-editor'] },
   'reader@mock.local':  { email: 'reader@mock.local',  password: 'password', name: 'Reader',  groups: ['some-other-group'] },
   'nogroup@mock.local': { email: 'nogroup@mock.local', password: 'password', name: 'NoGroup', groups: [] },
 };

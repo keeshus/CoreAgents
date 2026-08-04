@@ -1,5 +1,5 @@
 {
-  "name": "core-agents-sidecar",
+  "name": "orchestream-ai-sidecar",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
-    "core-agents-shared": "*"
+    "orchestream-ai-shared": "*"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

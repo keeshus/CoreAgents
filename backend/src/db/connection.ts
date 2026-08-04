@@ -1,4 +1,4 @@
-import { getDb } from "core-agents-shared";
+import { getDb } from "orchestream-ai-shared";
 
 const { db, pool } = getDb();
 

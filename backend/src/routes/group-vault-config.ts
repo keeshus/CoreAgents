@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db/connection.js';
-import { groupVaultConfig, groupMembers, groups, secretVaults } from 'core-agents-shared';
+import { groupVaultConfig, groupMembers, groups, secretVaults } from 'orchestream-ai-shared';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/async-handler.js';
 

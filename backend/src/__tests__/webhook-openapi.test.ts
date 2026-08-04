@@ -3,7 +3,7 @@ import { resetRateLimiters } from '../routes/webhook-security.js';
 
 vi.mock('../db/connection.js', () => ({ db: { select: vi.fn(), insert: vi.fn(), update: vi.fn() } }));
 
-vi.mock('core-agents-shared', () => ({
+vi.mock('orchestream-ai-shared', () => ({
   flows: { _: { name: 'flows' } },
   apiDeployments: { _: { name: 'api_deployments' } },
   apiKeys: { _: { name: 'api_keys' } },
@@ -760,7 +760,7 @@ describe('webhook-openapi routes', () => {
       const spec = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
 
       expect(spec.openapi).toBe('3.0.3');
-      expect(spec.info.title).toBe('Core Agents — Webhook Flows API');
+      expect(spec.info.title).toBe('OrcheStream.AI — Webhook Flows API');
       expect(spec.paths).toHaveProperty('/api/webhook/my-flow');
       expect(spec.paths).toHaveProperty('/api/webhook/my-flow/executions/{executionId}');
       expect(spec.paths).toHaveProperty('/api/webhook/my-flow/executions');

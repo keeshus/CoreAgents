@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/connection.js';
-import { appEnvVars, groupVaultConfig, groupMembers } from 'core-agents-shared';
+import { appEnvVars, groupVaultConfig, groupMembers } from 'orchestream-ai-shared';
 import { eq, and } from 'drizzle-orm';
 import { requirePermission } from '../middleware/auth.js';
 

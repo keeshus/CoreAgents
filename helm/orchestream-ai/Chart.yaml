@@ -1,0 +1,12 @@
+apiVersion: v2
+name: orchestream-ai
+description: OrcheStream.AI — Visual LLM Agent Builder
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - llm
+  - agents
+  - ai
+  - workflow
+home: https://github.com/kees/orchestream-ai

@@ -2,20 +2,20 @@ services:
   postgres:
     # postgres:17-alpine pinned by digest
     image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
-    container_name: core-agents-db
+    container_name: orchestream-ai-db
     # Bind to loopback only — DB must not be exposed to the network
     ports:
       - "127.0.0.1:5432:5432"
     environment:
       # WARNING: Change these credentials for any non-local deployment
-      POSTGRES_USER: coreagents
-      POSTGRES_PASSWORD: coreagents
-      POSTGRES_DB: coreagents
+      POSTGRES_USER: orchestream_ai
+      POSTGRES_PASSWORD: orchestream_ai
+      POSTGRES_DB: orchestream_ai
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: pg_isready -U coreagents
+      test: pg_isready -U orchestream_ai
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,7 +23,7 @@ services:
   qdrant:
     # qdrant/qdrant:v1.18.0 pinned by digest
     image: qdrant/qdrant:v1.18.0@sha256:b3063c673f3973877c038eeecc392bad5011f072ee7892b56c9a8e204a3bdea9
-    container_name: core-agents-qdrant
+    container_name: orchestream-ai-qdrant
     # Bind to loopback only
     ports:
       - "127.0.0.1:6333:6333"
@@ -35,7 +35,7 @@ services:
   valkey:
     # valkey/valkey:7-alpine pinned by digest
     image: valkey/valkey:7-alpine@sha256:211d9cb02395987d3740b11fdbb7be0cb66c5f36a065640ce5753c933700d6cc
-    container_name: core-agents-valkey
+    container_name: orchestream-ai-valkey
     # Bind to loopback only
     ports:
       - "127.0.0.1:6379:6379"
@@ -46,7 +46,7 @@ services:
     build:
       context: .
       dockerfile: sidecar/Dockerfile
-    container_name: core-agents-sidecar
+    container_name: orchestream-ai-sidecar
     tmpfs: /var/flow-data
     cap_add:
       - SYS_ADMIN
@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   backend:
-    container_name: core-agents-backend
+    container_name: orchestream-ai-backend
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -68,7 +68,7 @@ services:
         condition: service_healthy
     environment:
       - PORT=3001
-      - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
+      - DATABASE_URL=postgres://orchestream_ai:orchestream_ai@postgres:5432/orchestream_ai
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
       - SIDECAR_URL=http://sidecar:4001
       - SIDECAR_TOKEN=${SIDECAR_TOKEN:-dev-sidecar-token-change-me}
@@ -86,7 +86,7 @@ services:
       start_period: 20s
 
   worker:
-    container_name: core-agents-worker
+    container_name: orchestream-ai-worker
     build:
       context: .
       dockerfile: worker/Dockerfile
@@ -99,13 +99,13 @@ services:
       - VALKEY_PASSWORD=${VALKEY_PASSWORD:-dev-valkey}
       - SIDECAR_URL=http://sidecar:4001
       - SIDECAR_TOKEN=${SIDECAR_TOKEN:-dev-sidecar-token-change-me}
-      - DATABASE_URL=postgres://coreagents:coreagents@postgres:5432/coreagents
+      - DATABASE_URL=postgres://orchestream_ai:orchestream_ai@postgres:5432/orchestream_ai
     depends_on:
       - valkey
       - sidecar
 
   frontend:
-    container_name: core-agents-frontend
+    container_name: orchestream-ai-frontend
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -117,7 +117,7 @@ services:
     init: true
 
   proxy:
-    container_name: core-agents-proxy
+    container_name: orchestream-ai-proxy
     # nginx:1.27-alpine pinned by digest
     image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
     ports:

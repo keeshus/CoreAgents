@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add a layered secrets management system to Core Agents with three scopes (app-wide, group, flow) plus CyberArk vault integration at the group level. Introduce a `group_admin` role for delegated group management.
+Add a layered secrets management system to OrcheStream.AI with three scopes (app-wide, group, flow) plus CyberArk vault integration at the group level. Introduce a `group_admin` role for delegated group management.
 
 **Bold text below marks what already exists** from the merged groups feature — everything else is new work.
 

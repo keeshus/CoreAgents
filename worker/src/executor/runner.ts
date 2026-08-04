@@ -4,7 +4,7 @@
  */
 import { FlowExecutor, HitlPauseError, FlowStopError, PauseExecutionError } from './engine.js';
 import type { ExecutionContext } from './engine.js';
-import type { FlowDefinition, SSEEvent } from 'core-agents-shared';
+import type { FlowDefinition, SSEEvent } from 'orchestream-ai-shared';
 import { createSidecarClient, createSandboxManager } from '../sandbox/index.js';
 import { executionQueue } from '../queue.js';
 

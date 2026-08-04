@@ -5,7 +5,7 @@ import { db } from '../db/connection.js';
 import { flows, chatSessions, chatMessages, chatApiKeys, chatApiDeployments, llmEndpoints, mcpServers, embeddingProviders, vectorStores, groups, agentContexts, agentStore } from '../db/schema.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { enforceChatRateLimit } from './webhook-security.js';
-import type { OpenAIChatCompletionRequest, OpenAIChatCompletionResponse, OpenAIChatCompletionChunk } from 'core-agents-shared';
+import type { OpenAIChatCompletionRequest, OpenAIChatCompletionResponse, OpenAIChatCompletionChunk } from 'orchestream-ai-shared';
 
 // Augment Express Request for custom properties set by our middleware
 declare module 'express' {

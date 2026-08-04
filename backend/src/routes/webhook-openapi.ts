@@ -5,7 +5,7 @@ import { flows, apiDeployments, executions } from '../db/schema.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { enqueueExecution } from '../../../worker/src/queue.js';
 import { authenticateWebhookRequest, enforceWebhookRateLimit, enforceWebhookIpRateLimit } from './webhook-security.js';
-import type { FlowDefinition } from 'core-agents-shared';
+import type { FlowDefinition } from 'orchestream-ai-shared';
 
 const router = Router();
 
@@ -415,7 +415,7 @@ router.get(
     res.json({
       openapi: '3.0.3',
       info: {
-        title: 'Core Agents — Webhook Flows API',
+        title: 'OrcheStream.AI — Webhook Flows API',
         version: '1.0.0',
         description: 'Dynamically generated API for all webhook-triggered flows. Endpoints appear and update automatically.',
       },

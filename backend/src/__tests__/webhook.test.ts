@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../db/connection.js', () => ({ db: { select: vi.fn(), insert: vi.fn(), update: vi.fn() } }));
 
-vi.mock('core-agents-shared', () => ({
+vi.mock('orchestream-ai-shared', () => ({
   flows: { _: { name: 'flows' } },
   apiDeployments: { _: { name: 'api_deployments' } },
   apiKeys: { _: { name: 'api_keys' } },

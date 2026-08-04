@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { topologicalSort } from '../executor/dag.js';
-import type { FlowNode, FlowEdge } from 'core-agents-shared';
+import type { FlowNode, FlowEdge } from 'orchestream-ai-shared';
 
 function makeNode(id: string, type: string = 'code'): FlowNode {
   return {

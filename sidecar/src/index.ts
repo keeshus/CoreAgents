@@ -202,7 +202,7 @@ async function handleSetup(body: Record<string, unknown>) {
   for (const dir of ['home', 'tmp', '.cache', '.config']) {
     mkdirSync(join(base, dir), { recursive: true });
   }
-  const gitconfig = `[user]\n\tname = Core Agents\n\temail = core@agents.local\n`;
+  const gitconfig = `[user]\n\tname = OrcheStream.AI\n\temail = core@agents.local\n`;
   writeFileSync(join(base, '.gitconfig'), gitconfig);
   return { status: 200, body: { success: true } };
 }

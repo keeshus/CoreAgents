@@ -1,4 +1,4 @@
-# ── Core Agents E2E Test (app + infra in Docker, Playwright on host) ─
+# ── OrcheStream.AI E2E Test (app + infra in Docker, Playwright on host) ─
 # Start:  docker compose -f docker-compose.e2e.yml up -d --wait
 # Stop:   docker compose -f docker-compose.e2e.yml down -v --timeout 10
 # Run:    npx playwright test --config frontend/playwright.config.ts
@@ -7,16 +7,16 @@
 services:
   postgres-e2e:
     image: postgres:17-alpine
-    container_name: core-agents-e2e-db
+    container_name: orchestream-ai-e2e-db
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: coreagents
-      POSTGRES_PASSWORD: coreagents
-      POSTGRES_DB: coreagents
+      POSTGRES_USER: orchestream_ai
+      POSTGRES_PASSWORD: orchestream_ai
+      POSTGRES_DB: orchestream_ai
     tmpfs: /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U coreagents"]
+      test: ["CMD-SHELL", "pg_isready -U orchestream_ai"]
       interval: 2s
       timeout: 3s
       retries: 15
@@ -24,7 +24,7 @@ services:
 
   qdrant-e2e:
     image: qdrant/qdrant:v1.18.0
-    container_name: core-agents-e2e-qdrant
+    container_name: orchestream-ai-e2e-qdrant
     ports:
       - "6333:6333"
     tmpfs: /qdrant/storage
@@ -32,7 +32,7 @@ services:
 
   valkey-e2e:
     image: valkey/valkey:7-alpine
-    container_name: core-agents-e2e-valkey
+    container_name: orchestream-ai-e2e-valkey
     ports:
       - "6379:6379"
     command: valkey-server --requirepass dev-valkey
@@ -42,14 +42,14 @@ services:
   db-migrate-e2e:
     # node:24-alpine (current LTS) pinned by digest — node:25 is EOL since 2026-03-31
     image: node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3
-    container_name: core-agents-e2e-migrate
+    container_name: orchestream-ai-e2e-migrate
     working_dir: /repo
     volumes:
       - .:/repo
     entrypoint:
       - sh
       - -c
-      - cd backend && DATABASE_URL=postgres://coreagents:coreagents@postgres-e2e:5432/coreagents npx drizzle-kit push --config drizzle.config.ts
+      - cd backend && DATABASE_URL=postgres://orchestream_ai:orchestream_ai@postgres-e2e:5432/orchestream_ai npx drizzle-kit push --config drizzle.config.ts
     depends_on:
       postgres-e2e:
         condition: service_healthy
@@ -58,12 +58,12 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.e2e
-    container_name: core-agents-e2e-backend
+    container_name: orchestream-ai-e2e-backend
     ports:
       - "3001:3001"
     environment:
       PORT: "3001"
-      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
+      DATABASE_URL: postgres://orchestream_ai:orchestream_ai@postgres-e2e:5432/orchestream_ai
       JWT_SECRET: e2e-test-secret
       NODE_ENV: e2e
       FRONTEND_URL: http://localhost:3000
@@ -86,7 +86,7 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile.e2e
-    container_name: core-agents-e2e-frontend
+    container_name: orchestream-ai-e2e-frontend
     ports:
       - "3000:3000"
     environment:
@@ -100,9 +100,9 @@ services:
     build:
       context: .
       dockerfile: worker/Dockerfile.e2e
-    container_name: core-agents-e2e-worker
+    container_name: orchestream-ai-e2e-worker
     environment:
-      DATABASE_URL: postgres://coreagents:coreagents@postgres-e2e:5432/coreagents
+      DATABASE_URL: postgres://orchestream_ai:orchestream_ai@postgres-e2e:5432/orchestream_ai
       VALKEY_HOST: valkey-e2e
       VALKEY_PASSWORD: dev-valkey
       SECRETS_ENCRYPTION_KEY: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
@@ -122,7 +122,7 @@ services:
     build:
       context: .
       dockerfile: sidecar/Dockerfile.e2e
-    container_name: core-agents-e2e-sidecar
+    container_name: orchestream-ai-e2e-sidecar
     tmpfs: /var/flow-data
     cap_add:
       - SYS_ADMIN
@@ -135,7 +135,7 @@ services:
     build:
       context: ./test/mock-llm
       dockerfile: Dockerfile
-    container_name: core-agents-e2e-mock-llm
+    container_name: orchestream-ai-e2e-mock-llm
     ports:
       - "3002:3002"
 
@@ -143,7 +143,7 @@ services:
     build:
       context: ./test/mock-mcp
       dockerfile: Dockerfile
-    container_name: core-agents-e2e-mock-mcp
+    container_name: orchestream-ai-e2e-mock-mcp
     ports:
       - "3003:3003"
 
@@ -151,7 +151,7 @@ services:
     build:
       context: ./test/mock-oidc
       dockerfile: Dockerfile
-    container_name: core-agents-e2e-mock-oidc
+    container_name: orchestream-ai-e2e-mock-oidc
     ports:
       - "3004:3004"
 
@@ -159,10 +159,10 @@ services:
     build:
       context: ./test/mock-cyberark
       dockerfile: Dockerfile
-    container_name: core-agents-e2e-mock-cyberark
+    container_name: orchestream-ai-e2e-mock-cyberark
     ports:
       - "3005:3005"
 
 networks:
   default:
-    name: core-agents-e2e
+    name: orchestream-ai-e2e

@@ -1,0 +1,37 @@
+# PodDisruptionBudget — ensure the API/frontend/worker stay available
+# during voluntary disruptions (node drains, upgrades).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "orchestream-ai.fullname" . }}-backend
+  labels:
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: {{ include "orchestream-ai.fullname" . }}-backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "orchestream-ai.fullname" . }}-worker
+  labels:
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: {{ include "orchestream-ai.fullname" . }}-worker
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "orchestream-ai.fullname" . }}-frontend
+  labels:
+    {{- include "orchestream-ai.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: {{ include "orchestream-ai.fullname" . }}-frontend

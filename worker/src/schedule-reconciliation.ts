@@ -1,5 +1,5 @@
 import { executionQueue } from './queue.js';
-import type { FlowDefinition } from 'core-agents-shared';
+import type { FlowDefinition } from 'orchestream-ai-shared';
 
 let reconciliationInterval: NodeJS.Timeout | null = null;
 

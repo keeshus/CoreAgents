@@ -1,9 +1,9 @@
-# ── Core Agents Helm Values ──────────────────────────────────────
+# ── OrcheStream.AI Helm Values ──────────────────────────────────────
 
 replicaCount: 1
 
 image:
-  repository: ghcr.io/kees/core-agents
+  repository: ghcr.io/kees/orchestream-ai
   # Pinned to the current release version (matches root package.json version) —
   # never use "latest" in production. IfNotPresent is correct for an immutable tag.
   tag: 1.0.0
@@ -27,12 +27,12 @@ postgres:
 # Connection string (overrides postgres settings if external)
 databaseUrl: ""
 
-dbUser: coreagents
+dbUser: orchestream_ai
 # REQUIRED — chart render fails if unset (or if no databaseUrl/existingSecret is provided).
 # Set via: --set dbPassword=...   or a values file / secret. Never commit a real password.
 # Prefer an out-of-band Kubernetes Secret referenced via `existingSecret`.
 dbPassword: null
-dbName: coreagents
+dbName: orchestream_ai
 
 # ── Existing Secret (preferred over inline values) ───────────────
 # Reference an externally-managed Kubernetes Secret (same namespace) containing the keys:
@@ -139,7 +139,7 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: core-agents.local
+    - host: orchestream-ai.local
       paths:
         - path: /
           pathType: Prefix
@@ -147,8 +147,8 @@ ingress:
   # Example:
   # tls:
   #   - hosts:
-  #       - core-agents.local        # ← replace with your real domain
-  #     secretName: core-agents-tls # ← cert-manager / Let's Encrypt secret
+  #       - orchestream-ai.local        # ← replace with your real domain
+  #     secretName: orchestream-ai-tls # ← cert-manager / Let's Encrypt secret
   tls: []
 
 # ── Service ──────────────────────────────────────────────────────
