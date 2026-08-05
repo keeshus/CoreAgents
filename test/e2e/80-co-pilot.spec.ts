@@ -171,6 +171,22 @@ test.describe('Co-Pilot AI Assistant', () => {
     await expect(page.getByText(/This page shows a list of all flows/).first()).toBeVisible({ timeout: 5000 });
   });
 
+  test('co-pilot knows which tab is active on the flows page', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+    // Switch to the Agent Contexts tab, then ask the co-pilot for its page
+    // description — the echoed system prompt must mention the active tab.
+    await page.getByRole('button', { name: /Agent Contexts/ }).click();
+    await page.waitForTimeout(500);
+    const textarea = await openPanel(page);
+
+    await textarea.fill('ECHO_SYSTEM_PROMPT');
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText(/Agent Contexts tab/).first()).toBeVisible({ timeout: 15000 });
+  });
+
   test('co-pilot hides permission-gated tools from an editor on the endpoints page', async ({ page, request }) => {
     // Register an editor (no endpoint:write) via direct fetch so the shared
     // request fixture keeps its admin cookie.

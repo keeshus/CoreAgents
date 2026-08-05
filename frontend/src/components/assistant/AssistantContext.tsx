@@ -181,6 +181,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   // Save/restore conversation on page context change
   const prevKeyRef = useRef<string | null>(null);
+  // Depends on user?.id too: the memory key is user-scoped, and the user
+  // loads async (auth /me) — without re-running here, a conversation saved
+  // under the real user id would be looked up under 'anon' before login
+  // resolves and lost on reload.
   useEffect(() => {
     if (!pageContext?.pageKey) return;
     const prevKey = prevKeyRef.current;
@@ -197,7 +201,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
     // Clear redirect context to prevent stale context on future navigations
     try { sessionStorage.removeItem('copilot:redirect'); } catch {}
-  }, [pageContext?.pageKey]);
+  }, [pageContext?.pageKey, user?.id]);
 
   // Permission check: tool → required permission map
   // Mirrors the backend requirePermission() gates so the panel only exposes

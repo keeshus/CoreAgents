@@ -40,15 +40,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // The API returns the user as { userId, email, name, role, permissions } —
+  // normalize to the frontend User type ({ id, ... }) once at the boundary.
+  const normalizeUser = useCallback((raw: any): User | null => {
+    if (!raw) return null;
+    return {
+      id: raw.id ?? raw.userId,
+      email: raw.email,
+      name: raw.name,
+      role: raw.role,
+      permissions: Array.isArray(raw.permissions) ? raw.permissions : [],
+      groups: raw.groups,
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     fetch(`${API_URL}/auth/me`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : Promise.reject('Not authenticated'))
-      .then(data => { if (mounted) setUser(data.user); })
+      .then(data => { if (mounted) setUser(normalizeUser(data.user)); })
       .catch(() => { if (mounted) setUser(null); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, []);
+  }, [normalizeUser]);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await fetch(`${API_URL}/auth/login`, {
@@ -62,8 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error);
     }
     const data = await res.json();
-    setUser(data.user);
-  }, []);
+    setUser(normalizeUser(data.user));
+  }, [normalizeUser]);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
     const res = await fetch(`${API_URL}/auth/register`, {
@@ -77,8 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error);
     }
     const data = await res.json();
-    setUser(data.user);
-  }, []);
+    setUser(normalizeUser(data.user));
+  }, [normalizeUser]);
 
   const logout = useCallback(async () => {
     await fetch(`${API_URL}/auth/logout`, {
