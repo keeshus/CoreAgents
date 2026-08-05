@@ -165,13 +165,19 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     return { id: `welcome_${Date.now()}`, role: 'assistant', content: greeting, timestamp: Date.now() };
   }, []);
 
-  // Load default endpoint on mount
+  // Load default endpoint — re-fetch when the user changes (the provider
+  // mounts on the login page before a session exists, so an empty-deps fetch
+  // would never pick up the endpoint after sign-in)
   useEffect(() => {
+    if (!user) {
+      setDefaultEndpointId(null);
+      return;
+    }
     fetch(`${API}/llm-endpoints/default`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.id) setDefaultEndpointId(data.id); })
       .catch(() => {});
-  }, []);
+  }, [user?.id]);
 
   // Save/restore conversation on page context change
   const prevKeyRef = useRef<string | null>(null);
