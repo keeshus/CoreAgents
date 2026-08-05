@@ -41,7 +41,16 @@ export default function FlowsListPage() {
   const [contextFilterGroupId, setContextFilterGroupId] = useState('');
   const contextDeleteConfirm = useConfirm({ title: 'Delete context?', message: 'Are you sure you want to delete this agent context? Flows using it will no longer receive it.' });
 
-  useAssistantContext({ pageKey: 'flows-list', description: 'Viewing all flows' });
+  useAssistantContext({
+    pageKey: 'flows-list',
+    description:
+      activeTab === 'subflows'
+        ? 'Viewing the Subflows tab — a list of flows marked as subflows that can be embedded and called from other flows.'
+        : activeTab === 'contexts'
+          ? 'Viewing the Agent Contexts tab — manage agent contexts (title, description, content, optional group scope) that LLM agents can include in their system prompt.'
+          : 'Viewing the Flows tab — a list of all flows with their name, description, and version.',
+    data: { activeTab },
+  });
   const can = (perm: string) => user?.permissions?.includes(perm) ?? false;
   const isReader = user && !can('flow:create');
   const isAdmin = can('admin');
