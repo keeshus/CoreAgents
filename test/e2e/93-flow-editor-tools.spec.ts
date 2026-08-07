@@ -7,6 +7,29 @@ const API_URL = process.env.E2E_API_URL || 'http://localhost:3001/api';
 
 test.describe('Flow Editor DOM tools', () => {
   let flowId: string;
+  let mockEndpointId: string | null = null;
+
+  test.beforeAll(async ({ request }) => {
+    // The co-pilot panel needs a default LLM endpoint to send messages
+    const llmRes = await request.post(`${API_URL}/llm-endpoints`, {
+      data: {
+        name: 'E2E Flow Editor LLM',
+        providerType: 'openai',
+        baseUrl: 'http://mock-llm-e2e:3002/v1',
+        apiKey: 'mock-key',
+        defaultModel: 'mock-gpt-4',
+        models: ['mock-gpt-4'],
+      },
+    });
+    expect(llmRes.ok()).toBe(true);
+    const ep = await llmRes.json();
+    mockEndpointId = ep.id;
+    await request.put(`${API_URL}/llm-endpoints/${ep.id}`, { data: { isDefault: true } });
+  });
+
+  test.afterAll(async ({ request }) => {
+    if (mockEndpointId) await request.delete(`${API_URL}/llm-endpoints/${mockEndpointId}`).catch(() => {});
+  });
 
   test.beforeEach(async ({ page, request }) => {
     const name = uniqueFlowName('DomToolTest');
@@ -207,7 +230,8 @@ test.describe('Flow Editor DOM tools', () => {
     const catalog = await res.json();
     expect(Array.isArray(catalog)).toBe(true);
     const types = catalog.map((e: any) => e.type);
-    for (const expected of ['trigger', 'llm-agent', 'code', 'condition', 'output', 'hitl', 'http', 'mcp-tool']) {
+    expect(types).not.toContain('trigger'); // triggers are auto-created, not addable from the catalog
+    for (const expected of ['llm-agent', 'code', 'condition', 'output', 'hitl', 'http', 'mcp-tool']) {
       expect(types).toContain(expected);
     }
     const code = catalog.find((e: any) => e.type === 'code');
@@ -398,7 +422,8 @@ test.describe('Flow Editor DOM tools', () => {
     const res = await request.get(`${API_URL}/catalog`);
     expect(res.ok()).toBe(true);
     const catalog = await res.json();
-    for (const type of ['trigger', 'llm-agent', 'code', 'condition', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool']) {
+    expect(catalog.some((e: any) => e.type === 'trigger')).toBe(false);
+    for (const type of ['llm-agent', 'code', 'condition', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool']) {
       const entry = catalog.find((e: any) => e.type === type);
       expect(entry, `catalog entry for ${type}`).toBeDefined();
       expect(entry.description).toBeDefined();
@@ -425,5 +450,48 @@ test.describe('Flow Editor DOM tools', () => {
       const body = await res.json();
       return body.data?.map((e: any) => e.id) || [];
     }, { timeout: 10000 }).toContain(executionId);
+  });
+
+  test('set_node_output_schema configures a code node structured output', async ({ page, request }) => {
+    // Open the co-pilot panel first (the node config modal would otherwise
+    // cover the FAB), then open the code node config — the panel stacks above
+    // the modal so it stays interactive.
+    const toggleBtn = page.getByTestId('co-pilot-toggle');
+    await expect(toggleBtn).toBeVisible({ timeout: 10000 });
+    await toggleBtn.click();
+    const panelInput = page.getByPlaceholder('Ask anything...');
+    await expect(panelInput).toBeVisible({ timeout: 5000 });
+
+    await page.locator('.react-flow__node').nth(1).click();
+    await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 10000 });
+
+    // Invoke the tool through the co-pilot panel — the mock LLM executes any
+    // tool named after MOCK_TOOL_CALL and passes the JSON args.
+    const args = JSON.stringify({ schema: '{"result":"string","count":"number"}' });
+    await panelInput.fill(`MOCK_TOOL_CALL: set_node_output_schema ${args}`);
+    await page.keyboard.press('Enter');
+
+    // The tool ran and reported the normalized schema
+    await expect(page.getByText(/🔧 set_node_output_schema/).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Structured output schema set/).first()).toBeVisible({ timeout: 5000 });
+
+    // The code node config now carries the full JSON Schema in raw mode
+    await expect(page.getByTestId('json-schema-raw-input')).toHaveValue(/"properties"/, { timeout: 5000 });
+    await expect(page.getByTestId('json-schema-raw-input')).toHaveValue(/"count"/, { timeout: 5000 });
+
+    // Close the panel and modal, then persist and verify the node config on the server
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Close' }).click().catch(() => {});
+    await saveFlowViaUi(page, request, flowId, (f) =>
+      (f.nodes || []).find((n: any) => n.id === 'c1')?.data?.config?.outputSchema?.includes('"count"'),
+    );
+
+    const savedRes = await request.get(`${API_URL}/flows/${flowId}`);
+    const saved = await savedRes.json();
+    const codeNode = saved.nodes.find((n: any) => n.id === 'c1');
+    const outputSchema = JSON.parse(codeNode.data.config.outputSchema);
+    expect(outputSchema.type).toBe('object');
+    expect(outputSchema.properties).toEqual({ result: { type: 'string' }, count: { type: 'number' } });
+    expect(outputSchema.required).toEqual(['result', 'count']);
   });
 });

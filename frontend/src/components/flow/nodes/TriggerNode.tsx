@@ -6,6 +6,7 @@ const TRIGGER_INFO: Record<string, { label: string; desc: string; color: string 
   chat: { label: 'Chat', desc: 'User message + history', color: 'bg-success-container text-success' },
   webhook: { label: 'Webhook', desc: 'POST body → next node', color: 'bg-secondary-container text-on-secondary-container' },
   schedule: { label: 'Schedule', desc: 'Cron-triggered', color: 'bg-tertiary-container text-on-tertiary-container' },
+  subflow: { label: 'Subflow', desc: 'Called from another flow', color: 'bg-primary-container text-primary' },
 };
 
 export function TriggerNode(props: NodeProps) {

@@ -51,7 +51,7 @@ export function TextField({
     <div className={`relative ${className}`}>
       <div className={`rounded-t bg-surface-container-high border-b-2 transition-colors ${
         error ? 'border-error' : focused ? 'border-primary' : 'border-outline-variant'
-      } ${multiline ? '' : 'flex items-center'}`}>
+      } ${multiline ? '' : 'flex items-center min-h-[48px]'}`}>
         <Tag
           id={label ? inputId : undefined}
           ref={inputRef as any}
@@ -65,7 +65,7 @@ export function TextField({
           disabled={disabled}
           onKeyDown={onKeyDown}
           className={`w-full bg-transparent text-on-surface outline-none px-4 transition-all ${
-            multiline ? 'pt-5 pb-3 text-sm resize-y' : label ? `${float ? 'pt-5 pb-2' : 'py-2'} text-sm` : 'py-2 text-sm'
+            multiline ? 'pt-5 pb-3 text-sm resize-y' : label ? 'pt-5 pb-2 text-sm leading-[1.5]' : 'py-2 text-sm leading-[1.5]'
           } ${disabled ? 'opacity-40' : ''} ${showPasswordToggle ? 'pr-10' : ''}`}
         />
         {showPasswordToggle && type === 'password' && (

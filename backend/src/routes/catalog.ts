@@ -6,15 +6,6 @@ const router = Router();
 
 export const catalog: NodeCatalogEntry[] = [
   {
-    type: 'trigger',
-    label: 'Trigger',
-    category: 'input',
-    description: 'Start a flow manually, via chat, webhook, or on a schedule.',
-    defaultConfig: { triggerType: 'manual' },
-    inputs: 0,
-    outputs: 1,
-  },
-  {
     type: 'llm-agent',
     label: 'LLM Agent',
     category: 'processing',

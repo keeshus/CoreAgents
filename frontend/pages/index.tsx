@@ -39,6 +39,9 @@ export default function FlowsListPage() {
   const [contextContent, setContextContent] = useState('');
   const [contextGroupId, setContextGroupId] = useState('');
   const [contextFilterGroupId, setContextFilterGroupId] = useState('');
+  const [contextSort, setContextSort] = useState<'updated_at' | 'created_at'>('updated_at');
+  const [contextSearch, setContextSearch] = useState('');
+  const [flowFilterGroupId, setFlowFilterGroupId] = useState('');
   const contextDeleteConfirm = useConfirm({ title: 'Delete context?', message: 'Are you sure you want to delete this agent context? Flows using it will no longer receive it.' });
 
   useAssistantContext({
@@ -82,22 +85,22 @@ export default function FlowsListPage() {
     if (!user || isReader) { setLoading(false); return; }
     if (activeTab === 'contexts') return;
     const isSubflowFilter = activeTab === 'subflows';
-    api.flows.list({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, search: search || undefined, sort, is_subflow: isSubflowFilter }).then(({ data, total }) => { setFlows(data || []); setTotal(total || 0); }).catch(() => { setFlows([]); setTotal(0); }).finally(() => setLoading(false));
-  }, [user, authLoading, isReader, page, search, sort, activeTab]);
+    api.flows.list({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, search: search || undefined, sort, is_subflow: isSubflowFilter, group_id: flowFilterGroupId || undefined }).then(({ data, total }) => { setFlows(data || []); setTotal(total || 0); }).catch(() => { setFlows([]); setTotal(0); }).finally(() => setLoading(false));
+  }, [user, authLoading, isReader, page, search, sort, activeTab, flowFilterGroupId]);
 
   // Fetch agent contexts when tab switches
   useEffect(() => {
     if (activeTab !== 'contexts') return;
     setContextsLoading(true);
     const url = contextFilterGroupId
-      ? `/api/agent-contexts?group_id=${contextFilterGroupId}`
-      : '/api/agent-contexts';
+      ? `/api/agent-contexts?sort=${contextSort}&group_id=${contextFilterGroupId}`
+      : `/api/agent-contexts?sort=${contextSort}`;
     fetch(url, { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(setContexts)
       .catch(() => setContexts([]))
       .finally(() => setContextsLoading(false));
-  }, [activeTab, contextFilterGroupId]);
+  }, [activeTab, contextFilterGroupId, contextSort]);
 
   const handleLogout = async () => {
     await logout();
@@ -182,6 +185,17 @@ export default function FlowsListPage() {
       setContexts(prev => prev.filter(c => c.id !== id));
     } catch { /* ignore */ }
   };
+
+  const visibleContexts = (() => {
+    const q = contextSearch.trim().toLowerCase();
+    if (!q) return contexts;
+    return contexts.filter(ctx =>
+      (ctx.title || '').toLowerCase().includes(q)
+      || (ctx.description || '').toLowerCase().includes(q)
+      || (ctx.content || '').toLowerCase().includes(q)
+      || (ctx.group_name || '').toLowerCase().includes(q)
+    );
+  })();
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
     { key: 'flows', label: 'Flows', icon: 'account_tree' },
@@ -307,6 +321,16 @@ export default function FlowsListPage() {
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <TextField label="Search" value={search} onChange={(v) => { setSearch(v); setPage(0); }} className="flex-1" />
+                {contextGroups.length > 0 && (
+                  <SearchableSelect
+                    label="Filter by group"
+                    value={flowFilterGroupId}
+                    onChange={(v) => { setFlowFilterGroupId(v); setPage(0); }}
+                    items={contextGroups}
+                    includeAll={true}
+                    allLabel="All groups"
+                  />
+                )}
                 <SelectField
                   label="Sort"
                   value={sort}
@@ -355,6 +379,12 @@ export default function FlowsListPage() {
                                 <Tooltip content="Runs automatically on a cron schedule — configure in flow editor">
                                   <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
                                     <Icon name="calendar_today" className="text-sm" />
+                                  </span>
+                                </Tooltip>
+                              ) : triggerType === 'subflow' ? (
+                                <Tooltip content="Subflow — called from other flows">
+                                  <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                                    <Icon name="call_split" className="text-sm" />
                                   </span>
                                 </Tooltip>
                               ) : (
@@ -466,6 +496,16 @@ export default function FlowsListPage() {
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <TextField label="Search" value={search} onChange={(v) => { setSearch(v); setPage(0); }} className="flex-1" />
+                {contextGroups.length > 0 && (
+                  <SearchableSelect
+                    label="Filter by group"
+                    value={flowFilterGroupId}
+                    onChange={(v) => { setFlowFilterGroupId(v); setPage(0); }}
+                    items={contextGroups}
+                    includeAll={true}
+                    allLabel="All groups"
+                  />
+                )}
                 <SelectField
                   label="Sort"
                   value={sort}
@@ -516,6 +556,12 @@ export default function FlowsListPage() {
                                     <Icon name="calendar_today" className="text-sm" />
                                   </span>
                                 </Tooltip>
+                              ) : triggerType === 'subflow' ? (
+                                <Tooltip content="Subflow — called from other flows">
+                                  <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
+                                    <Icon name="call_split" className="text-sm" />
+                                  </span>
+                                </Tooltip>
                               ) : (
                                 <Tooltip content="Triggered manually via the Run button or debug overlay">
                                   <span className="flex items-center gap-1 px-2 py-1 text-xs text-on-surface-variant bg-surface-container-high rounded">
@@ -564,28 +610,34 @@ export default function FlowsListPage() {
         ) : (
           /* ── Agent Contexts tab ── */
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-on-surface-variant">Reusable context prompts that can be attached to LLM Agent nodes in any flow.</p>
-              {can('flow:create') && (
-                <button onClick={() => { resetContextForm(); setShowContextForm(true); }} className="m3-button gap-2 shrink-0">
-                  <Icon name="add" className="text-base" /> New Context
-                </button>
-              )}
-            </div>
-
-            {/* Group filter */}
-            {contextGroups.length > 0 && (
-              <div className="mb-4 max-w-xs">
+            <div className="flex items-center gap-3 mb-4">
+              <TextField label="Search" value={contextSearch} onChange={(v) => { setContextSearch(v); setShowContextForm(false); }} className="flex-1" />
+              {/* Group filter */}
+              {contextGroups.length > 0 && (
                 <SearchableSelect
                   label="Filter by group"
                   value={contextFilterGroupId}
                   onChange={(v) => { setContextFilterGroupId(v); setShowContextForm(false); }}
                   items={contextGroups}
                   includeAll={true}
-                  allLabel="All items"
+                  allLabel="All groups"
                 />
-              </div>
-            )}
+              )}
+              <SelectField
+                label="Sort"
+                value={contextSort}
+                onChange={(v) => { setContextSort(v as 'updated_at' | 'created_at'); setShowContextForm(false); }}
+                options={[
+                  { value: 'updated_at', label: 'Last updated' },
+                  { value: 'created_at', label: 'Created' },
+                ]}
+              />
+              {can('flow:create') && (
+                <button onClick={() => { resetContextForm(); setShowContextForm(true); }} className="m3-button gap-2 shrink-0">
+                  <Icon name="add" className="text-base" /> New Context
+                </button>
+              )}
+            </div>
 
             {showContextForm && (
               <div className="bg-surface rounded-lg border p-4 mb-4 space-y-3">
@@ -627,16 +679,16 @@ export default function FlowsListPage() {
 
             {contextsLoading ? (
               <p className="text-on-surface-variant text-sm">Loading...</p>
-            ) : contexts.length === 0 ? (
+            ) : visibleContexts.length === 0 ? (
               <div className="text-center py-16 bg-surface rounded-xl border">
-                <p className="text-on-surface-variant mb-2">No agent contexts yet</p>
-                {can('flow:create') && (
+                <p className="text-on-surface-variant mb-2">{contextSearch ? 'No agent contexts match your search' : 'No agent contexts yet'}</p>
+                {can('flow:create') && !contextSearch && (
                   <button onClick={() => { resetContextForm(); setShowContextForm(true); }} className="text-primary hover:text-primary text-sm font-medium">Create your first context</button>
                 )}
               </div>
             ) : (
               <div className="space-y-3">
-                {contexts.map(ctx => (
+                {visibleContexts.map(ctx => (
                   <div key={ctx.id} className="bg-surface rounded-lg border p-4">
                     <div className="flex items-start justify-between">
                       <div className="min-w-0 flex-1">
@@ -645,6 +697,11 @@ export default function FlowsListPage() {
                           <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary-container text-secondary">{ctx.group_name}</span>
                         )}
                         {ctx.description && <p className="text-xs text-on-surface-variant mt-0.5">{ctx.description}</p>}
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-on-surface-variant">
+                          <span>Created: {new Date(ctx.created_at).toLocaleString('nl-NL')}</span>
+                          <span>·</span>
+                          <span>Updated: {new Date(ctx.updated_at).toLocaleString('nl-NL')}</span>
+                        </div>
                         {ctx.content && (
                           <pre className="mt-2 text-xs font-mono text-on-surface-variant bg-surface-container-high rounded p-2 overflow-hidden max-h-20 whitespace-pre-wrap">{ctx.content}</pre>
                         )}

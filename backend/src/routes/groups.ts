@@ -96,6 +96,41 @@ router.delete('/:id', requirePermission('group:write'), asyncHandler(async (req,
   res.json({ status: 'deleted' });
 }));
 
+// GET /api/groups/:id/context — group context (members and admins)
+router.get('/:id/context', asyncHandler(async (req, res) => {
+  const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
+  const [group] = await db.select({ id: groups.id, context: groups.context }).from(groups).where(eq(groups.id, id));
+  if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
+  if (!req.user!.permissions.includes('admin')) {
+    const [membership] = await db.select().from(groupMembers).where(
+      and(eq(groupMembers.group_id, id), eq(groupMembers.user_id, req.user!.userId))
+    );
+    if (!membership) { res.status(403).json({ error: 'You are not a member of this group' }); return; }
+  }
+  res.json({ context: group.context || '' });
+}));
+
+// PUT /api/groups/:id/context — set group context (admins and group admins)
+router.put('/:id/context', asyncHandler(async (req, res) => {
+  const id = req.params.id as string;
+  if (!isValidUUID(id)) { res.status(404).json({ error: 'Group not found' }); return; }
+  const [group] = await db.select().from(groups).where(eq(groups.id, id));
+  if (!group) { res.status(404).json({ error: 'Group not found' }); return; }
+  const { context = '' } = req.body || {};
+  if (!req.user!.permissions.includes('admin')) {
+    const [membership] = await db.select({ role: groupMembers.role }).from(groupMembers).where(
+      and(eq(groupMembers.group_id, id), eq(groupMembers.user_id, req.user!.userId))
+    );
+    if (!membership || membership.role !== 'admin') {
+      res.status(403).json({ error: 'Only group admins can update the group context' });
+      return;
+    }
+  }
+  await db.update(groups).set({ context }).where(eq(groups.id, id));
+  res.json({ status: 'ok', context });
+}));
+
 // POST /api/groups/:id/members — add member to group (local groups only)
 router.post('/:id/members', requirePermission('group:write'), asyncHandler(async (req, res) => {
   const id = req.params.id as string;

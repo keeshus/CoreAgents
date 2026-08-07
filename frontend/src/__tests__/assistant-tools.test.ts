@@ -24,7 +24,7 @@ function getToolGroupNames(pageKey: string): string[] {
   else if (pageKey === 'settings:secrets') groups.push('secret-crud', 'group-vault-config');
   else if (pageKey === 'settings:secret-vaults') groups.push('vault-crud');
   else if (pageKey === 'settings:groups') groups.push('group-vault-config', 'group-context-crud', 'groups-crud', 'agent-contexts-crud');
-  else if (pageKey === 'settings:global-context') groups.push('global-context-crud');
+  else if (pageKey === 'settings:global-context') groups.push('global-context-crud', 'group-context-crud');
   else if (pageKey === 'settings:sso') groups.push('sso-crud');
   else if (pageKey === 'settings:env-vars') groups.push('env-vars-crud');
   else if (pageKey === 'settings:executions') groups.push('executions');

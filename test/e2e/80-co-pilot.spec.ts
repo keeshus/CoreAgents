@@ -126,6 +126,26 @@ test.describe('Co-Pilot AI Assistant', () => {
     await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 5000 });
   });
 
+  test('co-pilot knows about structured node outputs on the flow editor', async ({ page, request }) => {
+    const flowRes = await createFlow(request, { name: uniqueFlowName('CoPilot-Structured') });
+    expect(flowRes.ok()).toBe(true);
+    const flow = await flowRes.json();
+    createdFlowIds.push(flow.id);
+
+    await page.goto(`/flows/${flow.id}/edit`);
+    await expect(page.getByTestId('flow-canvas')).toBeVisible({ timeout: 15000 });
+
+    // Echo the system prompt — it must advertise the structured-output tool
+    // and the "Label.field" referencing convention.
+    const textarea = await openPanel(page);
+    await textarea.fill('ECHO_SYSTEM_PROMPT');
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText(/get_node_output_shape/).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/STRUCTURED OUTPUTS/).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Label\.field/).first()).toBeVisible({ timeout: 5000 });
+  });
+
   test('co-pilot executes a tool call (MOCK_TOOL_CALL) and shows the result bubble', async ({ page, request }) => {
     // Create a flow so list_flows returns real data
     const flowRes = await createFlow(request, { name: uniqueFlowName('CoPilot-Tool') });

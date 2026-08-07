@@ -136,3 +136,62 @@ test.describe('Flow save and reload', () => {
     await expect(page.getByLabel('Flow name')).toHaveValue(newName, { timeout: 5000 });
   });
 });
+
+test.describe('Flow Settings group selector scoping', () => {
+  test('non-admin editors only see their own groups in the Flow Settings group selector', async ({ page, request }) => {
+    const mine = (await (await request.post(`${API_URL}/groups`, { data: { name: `FS-Mine-${Date.now()}` } })).json());
+    const other = (await (await request.post(`${API_URL}/groups`, { data: { name: `FS-Other-${Date.now()}` } })).json());
+
+    const flowRes = await createFlow(request, {
+      name: uniqueFlowName('FS-Scope'),
+      nodes: [
+        { id: 't1', type: 'trigger', position: { x: 50, y: 50 }, data: { label: 'Trigger', type: 'trigger', config: { triggerType: 'manual' } } },
+        { id: 'o1', type: 'output', position: { x: 400, y: 50 }, data: { label: 'Output', type: 'output', config: {} } },
+      ],
+      edges: [{ id: 'e1', source: 't1', sourceHandle: 'output-0', target: 'o1', targetHandle: 'input-0' }],
+    });
+    const flow = await flowRes.json();
+
+    const email = `fs-editor-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'FS Editor', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    const roles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.post(`${API_URL}/groups/${mine.id}/members`, { data: { userId: regData.user.id } });
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      await expect.poll(async () => {
+        const meRes = await page.request.get(`${API_URL}/auth/me`);
+        if (!meRes.ok()) return 'ERR';
+        return (await meRes.json()).user?.role;
+      }, { timeout: 10000 }).toBe('editor');
+
+      await page.goto(`/flows/${flow.id}/edit`);
+      await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+
+      await page.getByTestId('flow-settings-btn').click();
+      await expect(page.getByText('Flow Settings')).toBeVisible({ timeout: 5000 });
+
+      // Open the Group selector — only the editor's own group is listed
+      await page.getByText('No group').first().click();
+      await expect(page.getByText(mine.name, { exact: true })).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText(other.name, { exact: true })).toHaveCount(0);
+    } finally {
+      await request.delete(`${API_URL}/users/${regData.user.id}`).catch(() => {});
+      await deleteFlow(request, flow.id).catch(() => {});
+      await request.delete(`${API_URL}/groups/${mine.id}`).catch(() => {});
+      await request.delete(`${API_URL}/groups/${other.id}`).catch(() => {});
+    }
+  });
+});

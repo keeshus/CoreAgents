@@ -9,6 +9,7 @@ test.describe('Agent contexts system', () => {
 const cleanupContextIds: string[] = [];
 const cleanupGroupIds: string[] = [];
 const cleanupFlowIds: string[] = [];
+const cleanupUserIds: string[] = [];
   let mockEndpointId: string | null = null;
 
   test.beforeAll(async ({ request }) => {
@@ -23,6 +24,10 @@ const cleanupFlowIds: string[] = [];
   });
 
   test.afterEach(async ({ request }) => {
+    for (const id of cleanupUserIds) {
+      await request.delete(`${API_URL}/users/${id}`).catch(() => {});
+    }
+    cleanupUserIds.length = 0;
     for (const id of cleanupContextIds) {
       await request.delete(`${API_URL}/agent-contexts/${id}`).catch(() => {});
     }
@@ -132,6 +137,117 @@ const cleanupFlowIds: string[] = [];
     await expect(page.getByText('Global Context')).toBeVisible();
     const link = page.locator('a').filter({ hasText: 'Global Context' }).first();
     await expect(link).toHaveAttribute('href', '/settings/global-context');
+  });
+
+  // ─── Global Context page: group scope + permissions ─────────────
+
+  test('global-context page: admin can edit a group context via UI', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: `GC-Admin-Group-${Date.now()}` } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+    cleanupGroupIds.push(group.id);
+
+    await page.goto('/settings/global-context');
+    await expect(page.locator('h1').filter({ hasText: 'Global Context' }).first()).toBeVisible({ timeout: 10000 });
+
+    // Admin sees all groups in the filter
+    await page.getByText('All groups').first().click();
+    await expect(page.getByText(group.name, { exact: true })).toBeVisible({ timeout: 5000 });
+    await page.getByText(group.name, { exact: true }).click();
+
+    const textarea = page.locator('textarea');
+    await expect(textarea).toBeEnabled({ timeout: 5000 });
+    await textarea.fill('Group context set by admin via UI');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText(/Context saved for/)).toBeVisible({ timeout: 5000 });
+
+    const ctxRes = await request.get(`${API_URL}/groups/${group.id}/context`);
+    expect(ctxRes.status()).toBe(200);
+    expect((await ctxRes.json()).context).toBe('Group context set by admin via UI');
+  });
+
+  test('global-context page: plain member sees only their group and it is read-only', async ({ page, request }) => {
+    const mine = (await (await request.post(`${API_URL}/groups`, { data: { name: `GC-Member-Group-${Date.now()}` } })).json());
+    const other = (await (await request.post(`${API_URL}/groups`, { data: { name: `GC-Hidden-Group-${Date.now()}` } })).json());
+    cleanupGroupIds.push(mine.id, other.id);
+
+    const email = `gc-member-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'GC Member', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+    const roles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.post(`${API_URL}/groups/${mine.id}/members`, { data: { userId: regData.user.id } });
+
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: /sign.?in/i }).click();
+    await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+    await expect.poll(async () => {
+      const meRes = await page.request.get(`${API_URL}/auth/me`);
+      if (!meRes.ok()) return 'ERR';
+      return (await meRes.json()).user?.role;
+    }, { timeout: 10000 }).toBe('editor');
+
+    // A plain member is not a group admin — no Global Context link in settings
+    await page.goto('/settings');
+    await expect(page.getByText('Global Context')).toHaveCount(0);
+
+    await page.goto('/settings/global-context');
+    await expect(page.locator('h1').filter({ hasText: 'Global Context' }).first()).toBeVisible({ timeout: 10000 });
+
+    // The filter lists only the member's own group
+    await page.getByText('All groups').first().click();
+    await expect(page.getByText(mine.name, { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(other.name, { exact: true })).toHaveCount(0);
+    await page.getByText(mine.name, { exact: true }).click();
+
+    // Group context is read-only for plain members — no Save button
+    const textarea = page.locator('textarea');
+    await expect(textarea).toBeDisabled({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
+  });
+
+  test('global-context page: user without groups sees no group filter', async ({ page, request }) => {
+    const email = `gc-nogroup-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'GC No Group', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+    const roles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: /sign.?in/i }).click();
+    await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+    await expect.poll(async () => {
+      const meRes = await page.request.get(`${API_URL}/auth/me`);
+      if (!meRes.ok()) return 'ERR';
+      return (await meRes.json()).user?.role;
+    }, { timeout: 10000 }).toBe('editor');
+
+    await page.goto('/settings/global-context');
+    await expect(page.locator('h1').filter({ hasText: 'Global Context' }).first()).toBeVisible({ timeout: 10000 });
+
+    // No groups → no group filter at all
+    await expect(page.getByText('Filter by group')).toHaveCount(0);
+    // Global context is read-only for non-admins
+    await expect(page.locator('textarea')).toBeDisabled({ timeout: 5000 });
+    await expect(page.getByText(/Global context is read-only/)).toBeVisible();
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -323,10 +439,105 @@ const cleanupFlowIds: string[] = [];
     await page.waitForTimeout(500);
     await expect(page.getByText('Group-Scoped').first()).toBeVisible({ timeout: 5000 });
 
-    await page.getByText('All items').first().click();
+    await page.getByText('All groups').first().click();
     await page.getByText(group.name).first().click();
     await page.waitForTimeout(500);
     await expect(page.getByText('Group-Scoped').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('agent contexts search filters contexts by title', async ({ page, request }) => {
+    const c1Res = await request.post(`${API_URL}/agent-contexts`, {
+      data: { title: 'Searchable-Pineapple', content: 'Fruit content.' },
+    });
+    const c2Res = await request.post(`${API_URL}/agent-contexts`, {
+      data: { title: 'Searchable-Banana', content: 'Other fruit.' },
+    });
+    expect(c1Res.status()).toBe(201);
+    expect(c2Res.status()).toBe(201);
+    const c1 = await c1Res.json();
+    const c2 = await c2Res.json();
+    cleanupContextIds.push(c1.id, c2.id);
+
+    await page.goto('/');
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: 'Agent Contexts' }).click();
+    await page.waitForTimeout(500);
+    await expect(page.getByText('Searchable-Pineapple').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Searchable-Banana').first()).toBeVisible();
+
+    // Type in the search field
+    await page.getByLabel('Search').fill('pineapple');
+    await page.waitForTimeout(500);
+    await expect(page.getByText('Searchable-Pineapple').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Searchable-Banana').first()).not.toBeVisible();
+
+    // No matches shows the empty state
+    await page.getByLabel('Search').fill('zzzz-no-match');
+    await page.waitForTimeout(500);
+    await expect(page.getByText('No agent contexts match your search')).toBeVisible({ timeout: 5000 });
+
+    // Clearing restores the full list
+    await page.getByLabel('Search').fill('');
+    await page.waitForTimeout(500);
+    await expect(page.getByText('Searchable-Banana').first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // ─── Agent Contexts: sort + timestamps ─────────────────────────
+
+  const openContextsTab = async (page: any) => {
+    await page.goto('/');
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: 'Agent Contexts' }).click();
+    await page.waitForTimeout(500);
+  };
+
+  const contextCards = (page: any) => page.locator('div.bg-surface.rounded-lg.border.p-4');
+
+  test('agent contexts default sort is by last updated and cards show timestamps', async ({ page, request }) => {
+    const c1 = await (await request.post(`${API_URL}/agent-contexts`, { data: { title: 'Sort-First', content: 'x' } })).json();
+    const c2 = await (await request.post(`${API_URL}/agent-contexts`, { data: { title: 'Sort-Second', content: 'x' } })).json();
+    const c3 = await (await request.post(`${API_URL}/agent-contexts`, { data: { title: 'Sort-Third', content: 'x' } })).json();
+    cleanupContextIds.push(c1.id, c2.id, c3.id);
+
+    // Bump c1's updated_at so it becomes the most recently updated
+    await request.put(`${API_URL}/agent-contexts/${c1.id}`, { data: { title: 'Sort-First', content: 'x' } });
+
+    await openContextsTab(page);
+
+    // Default sort (Last updated) — the updated context is first
+    await expect(contextCards(page).first()).toContainText('Sort-First', { timeout: 5000 });
+    await expect(contextCards(page).first()).not.toContainText('Sort-Third');
+
+    // Cards display created/updated timestamps
+    await expect(contextCards(page).first()).toContainText('Created:', { timeout: 5000 });
+    await expect(contextCards(page).first()).toContainText('Updated:');
+  });
+
+  test('agent contexts can be sorted by created date', async ({ page, request }) => {
+    const mk = async (title: string) => {
+      const c = await (await request.post(`${API_URL}/agent-contexts`, { data: { title, content: 'x' } })).json();
+      cleanupContextIds.push(c.id);
+      return c;
+    };
+    const c1 = await mk('Created-First');
+    await new Promise(r => setTimeout(r, 30));
+    const c2 = await mk('Created-Second');
+    await new Promise(r => setTimeout(r, 30));
+    const c3 = await mk('Created-Third');
+    // Bump the FIRST-created context — it must NOT win the "Created" sort
+    await request.put(`${API_URL}/agent-contexts/${c1.id}`, { data: { title: 'Created-First', content: 'x' } });
+
+    await openContextsTab(page);
+
+    // Switch the sort selector to "Created"
+    await page.locator('[data-field-label="Sort"]').click();
+    await page.getByRole('option', { name: 'Created' }).click();
+    await page.waitForTimeout(500);
+
+    // Newest created first: Created-Third, Created-Second, Created-First
+    await expect(contextCards(page).nth(0)).toContainText('Created-Third', { timeout: 5000 });
+    await expect(contextCards(page).nth(1)).toContainText('Created-Second');
+    await expect(contextCards(page).nth(2)).toContainText('Created-First');
   });
 
   test('agent contexts form group selector assigns context to group', async ({ page, request }) => {

@@ -388,8 +388,8 @@ test.describe('Secrets management', () => {
     const createBtn = page.getByRole('button', { name: 'Create Vault' });
     await expect(createBtn).toBeDisabled();
 
-    // Select the group in the form (SearchableSelect shows "Select..." when no group selected)
-    await page.getByText('Select...').first().click();
+    // Select the group in the form (the trigger exposes its label as accessible name)
+    await page.getByRole('button', { name: 'Bind to group (required)' }).click();
     await page.getByText(group.name).first().click();
     await page.waitForTimeout(300);
 
@@ -734,8 +734,8 @@ test.describe('Secrets management', () => {
     await page.getByLabel('URL').fill('http://mock-cyberark-e2e:3005');
     await page.getByLabel('Login').fill('host/myapp');
     await page.getByLabel('API Key').fill('myapp-api-key-456');
-    // Bind to group (the vault form's group select shows "Select..." placeholder)
-    await page.getByText('Select...').first().click();
+    // Bind to group (the vault form's group select trigger exposes its label as accessible name)
+    await page.getByRole('button', { name: 'Bind to group (required)' }).click();
     await page.getByText(group.name, { exact: true }).first().click();
     await page.waitForTimeout(300);
     await page.getByRole('button', { name: 'Create Vault' }).click();

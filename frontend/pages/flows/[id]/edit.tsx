@@ -18,10 +18,27 @@ import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { getNodeFields } from '@/components/flow/config/InputPreview';
 import { ChatApiSettings } from '@/components/flow/ChatApiSettings';
 
+// Eagerly create a draft flow with a client-generated id, retrying with a
+// numbered name if the default name is already taken.
+async function createDraftFlow(id: string, triggerNode: any, triggerType: string): Promise<any> {
+  const baseName = triggerType === 'subflow' ? 'New Subflow' : 'New Flow';
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const name = attempt === 0 ? baseName : `${baseName} ${attempt + 1}`;
+    try {
+      return await api.flows.create({ id, name, description: '', nodes: [triggerNode], edges: [] });
+    } catch (err: any) {
+      if (err?.status === 409) continue;
+      throw err;
+    }
+  }
+  throw new Error('Could not create draft flow');
+}
+
 export default function FlowEditPage() {
   const router = useRouter();
   const { id } = router.query;
   const [flow, setFlow] = useState<any>(null);
+  const [isNew, setIsNew] = useState(false);
   const [nodes, setNodes] = useState<any[]>([]);
   const [edges, setEdges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,10 +69,10 @@ export default function FlowEditPage() {
   useEffect(() => {
     if (!flow?.name?.trim()) { setNameAvailable(false); return; }
     const timer = setTimeout(() => {
-      api.flows.checkName(flow.name.trim(), flow.id === 'new' ? undefined : flow.id).then(r => setNameAvailable(r.available)).catch(() => {});
+      api.flows.checkName(flow.name.trim(), isNew ? undefined : flow.id).then(r => setNameAvailable(r.available)).catch(() => {});
     }, 300);
     return () => clearTimeout(timer);
-  }, [flow?.name, flow?.id]);
+  }, [flow?.name, flow?.id, isNew]);
 
   const isChatFlow = useMemo(() => nodes.some(n => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'chat'), [nodes]);
   const isSubflowFlow = useMemo(() => nodes.some(n => n.data?.type === 'trigger' && n.data?.config?.triggerType === 'subflow'), [nodes]);
@@ -197,16 +214,31 @@ export default function FlowEditPage() {
         position: { x: 100, y: 200 },
         data: { label: 'Trigger', type: 'trigger', config: { triggerType: triggerTypeFromQuery, inputSchema: '' } },
       };
-      setFlow({
-        id: 'new',
-        name: triggerTypeFromQuery === 'subflow' ? 'New Subflow' : 'New Flow',
-        description: '',
-        nodes: [triggerNode],
-        edges: [],
-        version: 1,
-      });
-      setNodes([triggerNode]);
-      setLoading(false);
+      // Give the flow a real GUID immediately so per-flow co-pilot history and
+      // flow-scoped secrets work from the first edit, before the first save.
+      const draftId = crypto.randomUUID();
+      setIsNew(true);
+      createDraftFlow(draftId, triggerNode, triggerTypeFromQuery)
+        .then((created) => {
+          setIsNew(false);
+          setFlow(created);
+          setNodes(created.nodes || []);
+          setEdges(created.edges || []);
+          router.replace(`/flows/${created.id}/edit`);
+        })
+        .catch(() => {
+          // Transient failure — keep editing locally; the Save button creates it.
+          setFlow({
+            id: draftId,
+            name: triggerTypeFromQuery === 'subflow' ? 'New Subflow' : 'New Flow',
+            description: '',
+            nodes: [triggerNode],
+            edges: [],
+            version: 1,
+          });
+          setNodes([triggerNode]);
+        })
+        .finally(() => setLoading(false));
       return;
     }
     api.flows.get(id).then((f) => {
@@ -225,10 +257,14 @@ export default function FlowEditPage() {
   const { user } = useAuth();
   useEffect(() => {
     if (!user) return;
-    fetch('/api/groups', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
-      .then(setGroups)
-      .catch(() => {});
+    if (user.permissions?.includes('admin')) {
+      fetch('/api/groups', { credentials: 'include' })
+        .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+        .then(setGroups)
+        .catch(() => {});
+    } else {
+      setGroups((user as any).groups || []);
+    }
   }, [user]);
 
   // Auto-open debug overlay from ?debug=1
@@ -240,10 +276,11 @@ export default function FlowEditPage() {
 
   const persistFlow = useCallback(async (updates: Record<string, any>) => {
     if (!flow) return;
-    if (flow.id === 'new') {
+    if (isNew) {
       const triggerNode = nodes.find((n: any) => n.data?.type === 'trigger');
       const isSubflow = triggerNode?.data?.config?.triggerType === 'subflow';
       const created = await api.flows.create({ ...flow, ...updates, is_subflow: isSubflow });
+      setIsNew(false);
       setFlow(created);
       if (created.personalApiKey?.rawKey) {
         setPersonalApiKey(created.personalApiKey.rawKey);
@@ -258,7 +295,7 @@ export default function FlowEditPage() {
         setShowKeyModal(true);
       }
     }
-  }, [flow, router, nodes]);
+  }, [flow, router, nodes, isNew]);
 
   const handleSave = useCallback(async () => {
     if (!flow || hasErrors) return;
@@ -420,7 +457,7 @@ export default function FlowEditPage() {
       const cyberResults: Array<{ value: string; label: string }> = [];
       const scopes = [{ url: '/api/secrets?scope=app', label: 'app' }];
       if (flow?.group_id) scopes.push({ url: `/api/secrets?scope=group&scopeId=${flow.group_id}`, label: 'group' });
-      if (flow?.id && flow.id !== 'new') scopes.push({ url: `/api/secrets?scope=flow&scopeId=${flow.id}`, label: 'flow' });
+      if (flow?.id) scopes.push({ url: `/api/secrets?scope=flow&scopeId=${flow.id}`, label: 'flow' });
       for (const scope of scopes) {
         try {
           const data = await fetch(scope.url, { credentials: 'include' }).then(r => r.ok ? r.json() : []);
@@ -439,7 +476,7 @@ export default function FlowEditPage() {
       setAvailableCyberArks(cyberResults);
     };
     fetchSecrets();
-  }, [flow?.id, flow?.group_id]);
+  }, [flow?.id, flow?.group_id, flowSecrets]);
 
   const openFlowSettings = useCallback(() => {
     setFlowSettingsDraft({
@@ -450,7 +487,7 @@ export default function FlowEditPage() {
     });
     setFlowEnvVars((flow as any)?.env_vars || []);
     loadInheritedData(flow?.group_id || null);
-    if (flow?.id && flow.id !== 'new') {
+    if (flow?.id) {
       fetch(`/api/secrets?scope=flow&scopeId=${flow.id}`, { credentials: 'include' })
         .then(r => r.ok ? r.json() : [])
         .then(setFlowSecrets)
@@ -462,7 +499,7 @@ export default function FlowEditPage() {
   }, [flow, loadInheritedData]);
 
   const saveFlowSettings = useCallback(async (extraFields?: Record<string, unknown>) => {
-    if (!flow || flow.id === 'new') return;
+    if (!flow || isNew) return;
     const { name, description, flow_context, group_id } = flowSettingsDraft;
     setFlow((prev: any) => ({ ...prev, name, description, flow_context, group_id: group_id || null, envVars: flowEnvVars }));
     await api.flows.update(flow.id, { name, description, flow_context, group_id: group_id || null, envVars: flowEnvVars, ...extraFields });
@@ -667,7 +704,7 @@ export default function FlowEditPage() {
               )}
 
               {/* ── Flow-level Secrets ── */}
-              {flow?.id && flow.id !== 'new' && (
+              {flow?.id && (
                 <div className="border-t border-outline-variant pt-4">
                   <span className="text-xs font-medium text-on-surface-variant block mb-2">Flow Secrets</span>
                   {flowSecrets.length > 0 && (
@@ -811,7 +848,7 @@ export default function FlowEditPage() {
                             onClick={async () => {
                               const updated = flowEnvVars.filter((_, i) => i !== idx);
                               setFlowEnvVars(updated);
-                              if (flow.id && flow.id !== 'new') {
+                              if (flow.id && !isNew) {
                                 await api.flows.update(flow.id, { envVars: updated }).catch(() => {});
                               }
                             }}
@@ -875,7 +912,7 @@ export default function FlowEditPage() {
                       setFlowEnvVars(updated);
                       setNewEnvVarName('');
                       setNewEnvVarValue('');
-                      if (flow.id && flow.id !== 'new') {
+                      if (flow.id && !isNew) {
                         await api.flows.update(flow.id, { envVars: updated }).catch(() => {});
                       }
                     }}
@@ -883,7 +920,7 @@ export default function FlowEditPage() {
                   ><Icon name="add" className="text-xs" /></button>
                 </div>
               </div>
-              {flow?.id && flow.id !== 'new' && isChatFlow && (
+              {flow?.id && !isNew && isChatFlow && (
                 <ChatApiSettings
                   flowId={flow.id}
                   isChatFlow={isChatFlow}

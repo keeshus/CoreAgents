@@ -678,3 +678,64 @@ test.describe('Flow Tool execution', () => {
     expect(completed!.data?.output?.l1?.content || '').toContain('Recovered after failure');
   });
 });
+
+test.describe('Flow Tool group filter scoping', () => {
+  test('non-admin editors only see their own groups in the Flow Tool filter', async ({ page, request }) => {
+    const mine = (await (await request.post(`${API_URL}/groups`, { data: { name: `FT-Mine-${Date.now()}` } })).json());
+    const other = (await (await request.post(`${API_URL}/groups`, { data: { name: `FT-Other-${Date.now()}` } })).json());
+
+    // A container flow with a single Flow Tool node
+    const containerRes = await createFlow(request, {
+      name: uniqueFlowName('FT-Scope'),
+      nodes: [
+        { id: 'ft1', type: 'flow-tool', position: { x: 0, y: 0 }, data: { label: 'Flow Tool', type: 'flow-tool', config: { flowIds: [], selectedFlows: [] } } },
+      ],
+      edges: [],
+    });
+    const container = await containerRes.json();
+
+    // Register an editor with membership in `mine` only
+    const email = `ft-editor-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'FT Editor', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    const roles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.post(`${API_URL}/groups/${mine.id}/members`, { data: { userId: regData.user.id } });
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      await expect.poll(async () => {
+        const meRes = await page.request.get(`${API_URL}/auth/me`);
+        if (!meRes.ok()) return 'ERR';
+        return (await meRes.json()).user?.role;
+      }, { timeout: 10000 }).toBe('editor');
+
+      await page.goto(`/flows/${container.id}/edit`);
+      await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
+      await page.locator('.react-flow__node').first().click();
+      const modal = page.getByTestId('node-config-modal');
+      await expect(modal).toBeVisible({ timeout: 5000 });
+
+      // The filter lists only the editor's own group
+      await expect(modal.getByText('Filter by group')).toBeVisible({ timeout: 5000 });
+      await modal.getByText('All groups').first().click();
+      await expect(modal.getByText(mine.name, { exact: true })).toBeVisible({ timeout: 5000 });
+      await expect(modal.getByText(other.name, { exact: true })).toHaveCount(0);
+    } finally {
+      await request.delete(`${API_URL}/users/${regData.user.id}`).catch(() => {});
+      await deleteFlow(request, container.id).catch(() => {});
+      await request.delete(`${API_URL}/groups/${mine.id}`).catch(() => {});
+      await request.delete(`${API_URL}/groups/${other.id}`).catch(() => {});
+    }
+  });
+});

@@ -23,6 +23,8 @@ export function SearchableSelect({ label, value, onChange, items, includeAll = t
   const ref = useRef<HTMLDivElement>(null);
 
   const selected = items.find(i => i.value === value);
+  const displayValue = selected?.label || (includeAll ? allLabel : '');
+  const float = open || displayValue.length > 0;
 
   const filtered = items.filter(i =>
     i.label.toLowerCase().includes(search.toLowerCase())
@@ -40,17 +42,28 @@ export function SearchableSelect({ label, value, onChange, items, includeAll = t
 
   return (
     <div ref={ref} className={`relative ${className}`}>
-      <label className="text-xs font-medium text-on-surface-variant block mb-1">{label}</label>
       <button
         type="button"
+        aria-label={displayValue ? `${label}: ${displayValue}` : label}
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between rounded-t bg-surface-container-high border-b-2 border-outline-variant min-h-[48px] px-4 text-left"
+        className={`w-full rounded-t bg-surface-container-high border-b-2 transition-colors flex items-center justify-between text-left cursor-pointer min-h-[48px] group ${
+          open ? 'border-primary' : 'border-outline-variant hover:border-outline'
+        }`}
       >
-        <span className={`text-sm truncate ${value ? 'text-on-surface pt-2' : 'text-outline'}`}>
-          {selected ? selected.label : includeAll ? allLabel : 'Select...'}
+        <span className="text-on-surface outline-none px-4 pt-5 pb-2 text-sm truncate leading-[1.5]">
+          {displayValue}
         </span>
-        <Icon name="arrow_drop_down" className={`text-lg text-on-surface-variant transition-transform ${open ? 'rotate-180' : ''}`} />
+        <Icon name="arrow_drop_down" className={`text-lg text-on-surface-variant pr-3 shrink-0 transition-transform group-data-[state=open]:rotate-180 ${open ? 'rotate-180' : ''}`} />
       </button>
+
+      <label className={`absolute left-4 transition-all pointer-events-none ${
+        float
+          ? 'text-[10px] top-1.5 text-on-surface-variant'
+          : 'text-sm top-2 text-outline'
+      } ${open ? '!text-primary' : ''}`}>
+        {label}
+      </label>
+
       {open && (
         <div className="absolute z-50 w-full bg-surface-container-high border border-outline-variant rounded-b shadow-m3-2 max-h-60 overflow-hidden">
           <div className="p-2 border-b border-outline-variant">

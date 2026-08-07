@@ -217,7 +217,7 @@ export default function GroupsSettingsPage() {
           </button>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-4 max-w-xs">
           <TextField label="Search groups" value={search} onChange={setSearch} />
         </div>
 

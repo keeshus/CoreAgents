@@ -28,18 +28,18 @@ test.describe('Flow editor', () => {
 
   test('opens node catalog when clicking + button', async ({ page }) => {
     await page.getByTestId('add-node-btn').click();
-    await expect(page.getByTestId('catalog-trigger')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('catalog-code')).toBeVisible({ timeout: 5000 });
   });
 
-  test('adds a trigger node from catalog', async ({ page }) => {
+  test('adds a code node from catalog', async ({ page }) => {
     await page.getByTestId('add-node-btn').click();
-    await page.getByTestId('catalog-trigger').click();
+    await page.getByTestId('catalog-code').click();
     await expect(page.locator('.react-flow__node')).toHaveCount(1, { timeout: 5000 });
   });
 
   test('adds multiple nodes', async ({ page }) => {
     await page.getByTestId('add-node-btn').click();
-    await page.getByTestId('catalog-trigger').click();
+    await page.getByTestId('catalog-code').click();
     await page.getByTestId('add-node-btn').click();
     await page.getByTestId('catalog-output').click();
     await expect(page.locator('.react-flow__node')).toHaveCount(2, { timeout: 5000 });
@@ -47,22 +47,22 @@ test.describe('Flow editor', () => {
 
   test('selects a node by clicking it', async ({ page }) => {
     await page.getByTestId('add-node-btn').click();
-    await page.getByTestId('catalog-trigger').click();
+    await page.getByTestId('catalog-code').click();
     const node = page.locator('.react-flow__node').first();
     await node.click();
     await expect(node).toHaveClass(/selected/, { timeout: 3000 });
   });
 
   test('keyboard delete removes a selected node', async ({ page }) => {
-    // Add a trigger (not deletable) and a code node
+    // Add two code nodes
     await page.getByTestId('add-node-btn').click();
-    await page.getByTestId('catalog-trigger').click();
+    await page.getByTestId('catalog-code').click();
     await page.getByTestId('add-node-btn').click();
     await page.getByTestId('catalog-code').click();
     await expect(page.locator('.react-flow__node')).toHaveCount(2, { timeout: 5000 });
 
-    // Clicking the code node opens its config modal and selects it
-    const codeNode = page.locator('.react-flow__node').filter({ hasText: 'code' });
+    // Clicking a node opens its config modal and selects it
+    const codeNode = page.locator('.react-flow__node').filter({ hasText: 'code' }).first();
     await codeNode.click();
     await expect(page.getByTestId('node-config-modal')).toBeVisible({ timeout: 5000 });
     await expect(codeNode).toHaveClass(/selected/);
@@ -70,7 +70,7 @@ test.describe('Flow editor', () => {
     // Press Delete — React Flow listens on the document and deletes selected nodes
     await page.keyboard.press('Delete');
     await expect(page.locator('.react-flow__node')).toHaveCount(1, { timeout: 5000 });
-    await expect(page.locator('.react-flow__node').filter({ hasText: 'code' })).toHaveCount(0);
+    await expect(page.locator('.react-flow__node').filter({ hasText: 'code' })).toHaveCount(1);
     // The config modal closes once the node is gone
     await expect(page.getByTestId('node-config-modal')).not.toBeVisible({ timeout: 3000 });
   });

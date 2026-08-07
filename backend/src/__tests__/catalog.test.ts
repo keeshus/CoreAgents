@@ -9,7 +9,7 @@ const NODE_CATEGORIES = ['input', 'processing', 'tools', 'output'] as const;
 describe('Node Catalog', () => {
   it('contains all expected node types', () => {
     const types = catalog.map(e => e.type);
-    expect(types).toContain('trigger');
+    expect(types).not.toContain('trigger'); // triggers are auto-created on new flows, not addable
     expect(types).toContain('llm-agent');
     expect(types).toContain('mcp-tool');
     expect(types).toContain('flow-tool');

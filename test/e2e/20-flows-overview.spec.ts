@@ -70,6 +70,37 @@ test.describe('Flows overview', () => {
     await deleteFlow(request, flow.id);
   });
 
+  test('group filter filters the flows list', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, { data: { name: uniqueFlowName('Flow Filter Group') } });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+
+    const res1 = await createFlow(request, { name: uniqueFlowName('Grouped Flow'), group_id: group.id });
+    const res2 = await createFlow(request, { name: uniqueFlowName('Ungrouped Flow') });
+    const flow1 = await res1.json();
+    const flow2 = await res2.json();
+
+    await page.goto('/');
+    await expect(page.getByText('Filter by group').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(flow1.name, { exact: true })).toBeVisible();
+    await expect(page.getByText(flow2.name, { exact: true })).toBeVisible();
+
+    // Open the group filter dropdown and pick the group
+    await page.getByText('All groups').first().click();
+    await page.getByText(group.name).first().click();
+    await expect(page.getByText(flow1.name, { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(flow2.name, { exact: true })).not.toBeVisible();
+
+    // Switch back to "All groups" to restore the full list
+    await page.getByText(group.name).first().click();
+    await page.getByText('All groups').first().click();
+    await expect(page.getByText(flow2.name, { exact: true })).toBeVisible({ timeout: 5000 });
+
+    await deleteFlow(request, flow1.id);
+    await deleteFlow(request, flow2.id);
+    await request.delete(`${API_URL}/groups/${group.id}`);
+  });
+
   test('delete flow removes it from list', async ({ page, request }) => {
     const res = await createFlow(request, { name: uniqueFlowName('Delete Me') });
     const flow = await res.json();

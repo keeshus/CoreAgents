@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { api } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth-context';
 
 interface FlowItem {
   id: string;
@@ -22,6 +23,8 @@ interface Props {
 }
 
 export function FlowToolConfig({ config, onChange }: Props) {
+  const { user, userGroups } = useAuth();
+  const canAdmin = user?.permissions?.includes('admin') ?? false;
   const [flows, setFlows] = useState<FlowItem[]>([]);
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [filterGroupId, setFilterGroupId] = useState('');
@@ -37,7 +40,7 @@ export function FlowToolConfig({ config, onChange }: Props) {
       try {
         const [flowData, groupData] = await Promise.all([
           api.flows.list({ trigger_type: 'webhook', group_id: filterGroupId || undefined, limit: 100 }),
-          api.groups.list(),
+          canAdmin ? api.groups.list() : Promise.resolve(userGroups),
         ]);
         setFlows((flowData as any)?.data || flowData || []);
         setGroups(groupData as GroupItem[] || []);
@@ -45,7 +48,7 @@ export function FlowToolConfig({ config, onChange }: Props) {
       setLoading(false);
     };
     load();
-  }, [filterGroupId]);
+  }, [filterGroupId, canAdmin, userGroups]);
 
   const filtered = flows.filter(f =>
     !search || f.name.toLowerCase().includes(search.toLowerCase())

@@ -1,4 +1,5 @@
 import type { AssistantTool } from '../AssistantContext';
+import { getNodeFields, getNodeRawFallback, accumulateUpstream } from '@/components/flow/config/InputPreview';
 
 const API = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -115,11 +116,12 @@ async function findModalField(label: string): Promise<HTMLElement | null> {
  * Falls back to legacy class selectors for any modal without the attribute.
  */
 function findOpenModal(): HTMLElement | null {
+  // Only match real dialogs/modals — never the co-pilot panel, its FAB, or
+  // other floating UI (all use .fixed.z-50).
   return (
     document.querySelector('[data-co-pilot-modal]') ||
     document.querySelector('[data-testid="node-config-modal"]') ||
-    document.querySelector('.fixed.inset-0.z-50') ||
-    document.querySelector('.fixed.z-50')
+    document.querySelector('.fixed.inset-0.z-50')
   ) as HTMLElement | null;
 }
 
@@ -145,6 +147,30 @@ function reactSetValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectEl
   nativeSetter?.call(el, value);
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+/**
+ * Open a Radix SelectField (identified by its data-field-label trigger) and
+ * pick the option whose visible text matches `label`. Radix items are rendered
+ * in a portal as [role="option"] inside [data-radix-select-viewport] — they do
+ * NOT carry a data-radix-select-item attribute. Returns true on success.
+ */
+async function selectRadixOption(fieldLabel: string, label: string, timeoutMs = 2000): Promise<boolean> {
+  const trigger = document.querySelector(`[data-field-label="${fieldLabel}"]`);
+  if (!trigger) return false;
+  (trigger as HTMLElement).click();
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const option = Array.from(document.querySelectorAll('[data-radix-select-viewport] [role="option"]')).find(
+      el => (el.textContent?.trim() || '').toLowerCase() === label.toLowerCase(),
+    );
+    if (option) {
+      (option as HTMLElement).click();
+      return true;
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return false;
 }
 
 // ── Node config tools (work with any open node config panel) ─────────────────
@@ -218,19 +244,9 @@ const updateNodeField: AssistantTool = {
 
     // Radix Select trigger (has data-field-label, is a button)
     if (field.tagName === 'BUTTON' && field.hasAttribute('data-field-label')) {
-      field.click();
-      // Wait for Radix popup to appear
-      await new Promise(r => setTimeout(r, 100));
-      // Find the option in the portal
-      const option = document.querySelector(`[data-radix-select-item][data-value="${value}"]`) ||
-        Array.from(document.querySelectorAll('[data-radix-select-item]')).find(
-          el => el.textContent?.trim().toLowerCase() === norm(value).toLowerCase()
-        );
-      if (option) {
-        (option as HTMLElement).click();
-        return `Set select "${label}" to "${value}".`;
-      }
-      const available = Array.from(document.querySelectorAll('[data-radix-select-item]')).map(el => el.textContent?.trim()).filter(Boolean).join(', ');
+      const matched = await selectRadixOption(field.getAttribute('data-field-label') as string, norm(value));
+      if (matched) return `Set select "${label}" to "${value}".`;
+      const available = Array.from(document.querySelectorAll('[data-radix-select-viewport] [role="option"]')).map(el => el.textContent?.trim()).filter(Boolean).join(', ');
       return `Value "${value}" is not a valid option for "${label}". Available options: ${available}`;
     }
 
@@ -951,9 +967,17 @@ const testVaultConnection: AssistantTool = {
 
 const listGroups: AssistantTool = {
   name: 'list_groups',
-  description: 'List all groups (teams) in the system.',
+  description: 'List groups (teams) in the system. Non-admins only see the groups they belong to.',
   inputSchema: { type: 'object', properties: {} },
-  async execute() { return apiFetch('/groups'); },
+  async execute() {
+    const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+    const me = meRes.ok ? await meRes.json() : null;
+    const user = me?.user;
+    if (user && !user.permissions?.includes('admin')) {
+      return JSON.stringify(user.groups || [], null, 2);
+    }
+    return apiFetch('/groups');
+  },
 };
 
 const getGroupVault: AssistantTool = {
@@ -1031,17 +1055,40 @@ const getSSOConfig: AssistantTool = {
 
 const getGroupContext: AssistantTool = {
   name: 'get_group_context',
-  description: 'Read the context text for a specific group.',
+  description: 'Read the context text for a specific group. Available to group members and admins.',
   inputSchema: {
     type: 'object',
     properties: { groupId: { type: 'string', description: 'The group ID' } },
     required: ['groupId'],
   },
   async execute({ groupId }) {
-    const res = await fetch(`/api/groups/${groupId}`, { credentials: 'include' });
-    if (!res.ok) return 'Failed to fetch group.';
+    const res = await fetch(`/api/groups/${groupId}/context`, { credentials: 'include' });
+    if (!res.ok) return 'Failed to fetch group context.';
     const data = await res.json();
-    return `Group context for ${data.name}:\n${data.context || '(empty)'}`;
+    return `Group context:\n${data.context || '(empty)'}`;
+  },
+};
+
+const updateGroupContext: AssistantTool = {
+  name: 'update_group_context',
+  description: 'Set the context text for a specific group. Admins and the group\'s admins can update it.',
+  inputSchema: {
+    type: 'object',
+    properties: { groupId: { type: 'string', description: 'The group ID' }, context: { type: 'string', description: 'The new context instructions injected into LLM prompts for flows in this group' } },
+    required: ['groupId', 'context'],
+  },
+  async execute({ groupId, context }) {
+    const res = await fetch(`/api/groups/${groupId}/context`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context }),
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update group context' }));
+      return `Failed to update group context: ${err.error || 'unknown error'}`;
+    }
+    return 'Group context updated.';
   },
 };
 
@@ -1088,9 +1135,21 @@ const removeGroupMember: AssistantTool = {
 
 const listAgentContexts: AssistantTool = {
   name: 'list_agent_contexts',
-  description: 'List all agent contexts (reusable prompt snippets) available to attach to LLM Agent nodes.',
-  inputSchema: { type: 'object', properties: {} },
-  async execute() { return apiFetch('/agent-contexts'); },
+  description: 'List all agent contexts (reusable prompt snippets) available to attach to LLM Agent nodes. Optionally filter by group or sort by updated_at (default) or created_at.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      groupId: { type: 'string', description: 'Optional group ID to filter contexts by' },
+      sort: { type: 'string', enum: ['updated_at', 'created_at'], description: 'Sort order (default: updated_at)' },
+    },
+  },
+  async execute({ groupId, sort }) {
+    const params = new URLSearchParams();
+    if (groupId) params.set('group_id', groupId);
+    if (sort) params.set('sort', sort);
+    const qs = params.toString();
+    return apiFetch(`/agent-contexts${qs ? `?${qs}` : ''}`);
+  },
 };
 
 const createAgentContext: AssistantTool = {
@@ -1511,6 +1570,139 @@ const listCanvasNodes: AssistantTool = {
   },
 };
 
+const getNodeOutputShape: AssistantTool = {
+  name: 'get_node_output_shape',
+  description: 'Inspect the structured output shape of a node and the data it receives from upstream nodes. Use this BEFORE configuring the output node, writing code, or setting templates — it tells you exactly which fields each node produces (e.g. "Transform" produces { result: string }) and how to reference them as "Label.field" paths.',
+  inputSchema: {
+    type: 'object',
+    properties: { label: { type: 'string', description: 'Optional label or type of the node to inspect. Omit to see the shapes of all nodes.' } },
+  },
+  async execute({ label }) {
+    const nodes = (window as any).__flowCanvasNodes;
+    const edges = (window as any).__flowCanvasEdges;
+    if (!Array.isArray(nodes) || nodes.length === 0) return 'No canvas state found. Open a flow in the editor first.';
+    if (!Array.isArray(edges)) return 'No edge state found. Open a flow in the editor first.';
+
+    const shapeOf = (node: any) => {
+      const fields = getNodeFields(node);
+      const raw = getNodeRawFallback(node);
+      return raw !== null
+        ? { kind: 'raw', note: raw }
+        : { kind: 'fields', fields };
+    };
+
+    const targets = label
+      ? nodes.filter((n: any) => (n.data?.label || n.data?.type || n.id).toLowerCase().includes((label as string).toLowerCase()))
+      : nodes;
+    if (label && targets.length === 0) {
+      return `No node matching "${label}". Nodes: ${nodes.map((n: any) => n.data?.label || n.data?.type).join(', ')}`;
+    }
+
+    const report = targets.map((node: any) => {
+      const nodeLabel = node.data?.label || node.data?.type || node.id;
+      const upstream = accumulateUpstream(node.id, edges, nodes).map((up) => {
+        const shape = shapeOf(nodes.find((n: any) => n.id === up.nodeId));
+        return {
+          source: up.label,
+          sourceId: up.nodeId,
+          fields: up.fields,
+          raw: up.raw,
+          shape,
+        };
+      });
+      return {
+        node: nodeLabel,
+        id: node.id,
+        type: node.data?.type,
+        output: shapeOf(node),
+        referenceExample: `${nodeLabel}.fieldName`,
+        upstreamInputs: upstream,
+      };
+    });
+
+    const guide = label
+      ? ''
+      : '\nReferencing: use "<NodeLabel>.<field>" in the output node inputFields (e.g. ["Transform.result"]) and {{input.<NodeLabel>.<field>}} in templates.';
+    return JSON.stringify(report, null, 2) + guide;
+  },
+};
+
+export function normalizeOutputSchema(schema: string): { ok: boolean; value?: string; error?: string } {
+  const trimmed = (schema || '').trim();
+  if (!trimmed) return { ok: true, value: '' };
+  let parsed: any;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (err: any) {
+    return { ok: false, error: `Invalid JSON: ${err?.message || 'parse error'}` };
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, error: 'Schema must be a JSON object.' };
+  }
+  if (!parsed.properties && Object.values(parsed).every((v) => typeof v === 'string')) {
+    // Shorthand {field: "type"} map → full JSON Schema
+    const properties: Record<string, any> = {};
+    for (const [k, v] of Object.entries(parsed)) properties[k] = { type: v };
+    parsed = { type: 'object', properties, required: Object.keys(parsed) };
+  }
+  return { ok: true, value: JSON.stringify(parsed, null, 2) };
+}
+
+const setNodeOutputSchema: AssistantTool = {
+  name: 'set_node_output_schema',
+  description: 'Set the structured output schema of the node whose config panel is open. Accepts a JSON Schema (e.g. {"type":"object","properties":{"result":{"type":"string"}}}) or a shorthand field map (e.g. {"result":"string","count":"number"}). For code nodes this fills "Output Structure (documentation)"; for LLM Agent nodes it fills "JSON Schema (optional)" (the tool switches Response Format to JSON automatically); for webhook triggers it fills "Expected Input Schema". Use get_node_output_shape first to know which fields to define.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      schema: { type: 'string', description: 'The JSON Schema, or a shorthand {field: "type"} map, of the node\'s structured output' },
+    },
+    required: ['schema'],
+  },
+  async execute({ schema }) {
+    const modal = await waitForModal();
+    if (!modal) return 'No node config panel is open. Use open_node to open the node first.';
+    let builder = modal.querySelector('[data-testid="json-schema-builder"]');
+
+    // LLM Agent nodes only render the schema builder when Response Format is JSON
+    if (!builder) {
+      if (await selectRadixOption('Response Format', 'JSON')) {
+        // wait for the builder to render after the format switch
+        for (let i = 0; i < 20; i++) {
+          builder = modal.querySelector('[data-testid="json-schema-builder"]');
+          if (builder) break;
+          await new Promise(r => setTimeout(r, 100));
+        }
+      }
+      if (!builder) return 'Could not find the schema editor. Open a code, LLM Agent, or webhook trigger node.';
+    }
+
+    const normalized = normalizeOutputSchema(schema as string);
+    if (!normalized.ok) return normalized.error || 'Invalid schema.';
+
+    // Switch the builder to raw JSON mode so we can set the value directly
+    const isRaw = !!builder.querySelector('[data-testid="json-schema-raw-input"]');
+    if (!isRaw) {
+      const rawBtn = builder.querySelector('[data-testid="json-schema-mode-raw"]');
+      if (rawBtn) {
+        (rawBtn as HTMLElement).click();
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
+
+    const textarea = builder.querySelector('[data-testid="json-schema-raw-input"]') as HTMLTextAreaElement | null;
+    if (!textarea) return 'Could not find the schema editor.';
+
+    reactSetValue(textarea, normalized.value || '');
+    await new Promise(r => setTimeout(r, 80));
+
+    const applied = textarea.value;
+    if (applied !== normalized.value) {
+      return `Failed to apply the schema. Current value: ${applied || '(empty)'}`;
+    }
+    return `Structured output schema set:\n${normalized.value}`;
+  },
+};
+
 const getFlowInfo: AssistantTool = {
   name: 'get_flow_info',
   description: 'Get the current flow metadata: name, description, trigger type, node count, edge count, and group assignment.',
@@ -1546,17 +1738,22 @@ const getNodeTypeInfo: AssistantTool = {
   description: 'Get documentation/description for a specific node type.',
   inputSchema: { type: 'object', properties: {       nodeType: { type: 'string', enum: ['trigger', 'llm-agent', 'code', 'condition', 'output', 'hitl', 'mcp-tool', 'retriever', 'parallel', 'subflow', 'flow-tool'] } }, required: ['nodeType'] },
   async execute({ nodeType }) {
+    const STRUCTURED_OUTPUTS =
+      '\n\nSTRUCTURED OUTPUTS: Every node produces a structured output object. Downstream nodes reference fields by "Label.field" (e.g. Transform.result):\n' +
+      '  - output node: set inputFields to ["Label.field1", "Label.field2"]\n' +
+      '  - LLM/template fields: use {{input.Label.field}}\n' +
+      '  Use the get_node_output_shape tool to see the exact fields a node produces.';
     const docs: Record<string, string> = {
-      'trigger': 'The starting node. Triggers define how a flow starts: manually, via chat, webhook, or on a schedule. Each flow has exactly one trigger.',
-      'llm-agent': 'Calls an LLM (e.g. OpenAI GPT-4, Anthropic Claude). Configure endpoint, model, system prompt, temperature, max tokens, and response format. Can use tools from connected MCP Tool nodes and Flow Tool nodes.',
-      'code': 'Executes JavaScript code in a sandboxed sidecar. Receives upstream data as `input`, returns an object. Has access to node, npm, python3, git, and standard Unix tools.',
-      'condition': 'Routes the flow based on a JavaScript condition expression. Has two or more output handles. The condition returns a label matching one of the output handles.',
-      'output': 'Returns the result of the flow. Select which upstream fields to include in the output. A flow must have at least one output node to return a result.',
-      'hitl': 'Human-in-the-loop: pauses execution for human approval. Configure prompt, buttons (label + value), assignment type (user, role, or group), and optional feedback.',
-      'mcp-tool': 'Calls a tool on a configured MCP server. Connect to an LLM Agent via the tool-input handle to make MCP tools available to the LLM. Can auto-discover tools from the server.',
-      'retriever': 'Performs vector search (RAG). Queries a collection in a vector store using an embedding provider. Returns matching document chunks as context. Connect to an LLM Agent via tool-input to inject context.',
-      'parallel': 'Runs multiple sub-nodes concurrently. Merges outputs from all sub-nodes into a single result. Useful for fan-out/fan-in patterns.',
-      'subflow': 'Executes another flow as a sub-routine. Maps parent flow inputs to the subflow trigger fields. Receives the subflow output as result. Supports env var inheritance.',
+      'trigger': 'The starting node. Triggers define how a flow starts: manually, via chat, webhook, or on a schedule. Each flow has exactly one trigger.\nOutputs { message: any } — chat triggers output { message: string, history: array }, webhook triggers output the fields defined in their input schema.' + STRUCTURED_OUTPUTS,
+      'llm-agent': 'Calls an LLM (e.g. OpenAI GPT-4, Anthropic Claude). Configure endpoint, model, system prompt, temperature, max tokens, and response format. Can use tools from connected MCP Tool nodes and Flow Tool nodes.\nOutputs { content: string }. When responseFormat is json_object, set outputSchema (JSON Schema with properties) — the schema properties become additional output fields (e.g. { content, name, score }).' + STRUCTURED_OUTPUTS,
+      'code': 'Executes JavaScript code in a sandboxed sidecar. Receives upstream data as `input`, returns an object. Has access to node, npm, python3, git, and standard Unix tools.\nIts output is whatever the code returns. If the code returns multiple named values, set the "Output Structure (documentation)" field (outputSchema, a JSON Schema with properties) so downstream nodes can reference named fields as Label.field — without it the output is treated as "any (determined by return value)".' + STRUCTURED_OUTPUTS,
+      'condition': 'Routes the flow based on a JavaScript condition expression. Has two or more output handles. The condition returns a label matching one of the output handles.\nOutputs { verdict: boolean, label: string }.' + STRUCTURED_OUTPUTS,
+      'output': 'Returns the result of the flow. Select which upstream fields to include in the output. A flow must have at least one output node to return a result.\nSet inputFields to the exact "Label.field" paths of upstream node outputs (e.g. ["Transform.result"]). No fields selected = all accumulated data.' + STRUCTURED_OUTPUTS,
+      'hitl': 'Human-in-the-loop: pauses execution for human approval. Configure prompt, buttons (label + value), assignment type (user, role, or group), and optional feedback.\nOutputs { decision: string, feedback: string, reviewedContent: object }.' + STRUCTURED_OUTPUTS,
+      'mcp-tool': 'Calls a tool on a configured MCP server. Connect to an LLM Agent via the tool-input handle to make MCP tools available to the LLM. Can auto-discover tools from the server.\nOutputs { result: string, toolName: string, serverName: string }.' + STRUCTURED_OUTPUTS,
+      'retriever': 'Performs vector search (RAG). Queries a collection in a vector store using an embedding provider. Returns matching document chunks as context. Connect to an LLM Agent via tool-input to inject context.\nOutputs { query: string, chunks: array, context: string, count: number }.' + STRUCTURED_OUTPUTS,
+      'parallel': 'Runs multiple sub-nodes concurrently. Merges outputs from all sub-nodes into a single result. Useful for fan-out/fan-in patterns.\nOutputs { merged: object, results: array }.' + STRUCTURED_OUTPUTS,
+      'subflow': 'Executes another flow as a sub-routine. Maps parent flow inputs to the subflow trigger fields. Receives the subflow output as result. Supports env var inheritance.\nOutputs the subflow\'s output node fields.' + STRUCTURED_OUTPUTS,
       'flow-tool': 'Exposes webhook flows as callable tools for LLM Agents. Select multiple webhook flows — each becomes a tool named flow_<name>. Connect to an LLM Agent via the purple tool-output handle.',
     };
     return docs[nodeType as string] || `No documentation available for "${nodeType}".`;
@@ -1662,7 +1859,7 @@ const reEncryptSecrets: AssistantTool = {
 
 export const toolGroups: Record<string, AssistantTool[]> = {
   'navigation': [navigateTo],
-  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows, getCanvasState, getNodeDetails, listCanvasNodes, getFlowInfo, getDebugResults, getNodeTypeInfo],
+  'flow-editor': [openNode, getFlowJson, updateFlow, saveFlow, runFlow, addNode, deleteNode, connectNodes, removeEdge, closeNodeConfig, getNodeConfig, updateNodeField, getAvailableNodes, readCode, replaceCode, listFlows, searchFlows, getCanvasState, getNodeDetails, listCanvasNodes, getNodeOutputShape, setNodeOutputSchema, getFlowInfo, getDebugResults, getNodeTypeInfo],
   'endpoint-crud': [listEndpoints, createEndpoint, deleteEndpoint, updateEndpoint, getEndpoint, getDefaultEndpoint],
   'mcp-crud': [listMcpServers, createMcpServer, deleteMcpServer, refreshMcpTools, updateMcpServer, getMcpServer],
   'embedding-crud': [listEmbeddingProviders, createEmbeddingProvider, deleteEmbeddingProvider, updateEmbeddingProvider, getEmbeddingProvider],
@@ -1682,7 +1879,7 @@ export const toolGroups: Record<string, AssistantTool[]> = {
   'group-vault-config': [listGroups, getGroupVault, setGroupVault],
   'global-context-crud': [getGlobalContext, updateGlobalContext],
   'sso-crud': [getSSOConfig, updateSSOConfig],
-  'group-context-crud': [getGroupContext],
+  'group-context-crud': [getGroupContext, updateGroupContext],
   'groups-crud': [createGroup, updateGroup, deleteGroup, addGroupMember, removeGroupMember],
   'agent-contexts-crud': [listAgentContexts, createAgentContext, updateAgentContext, deleteAgentContext],
   'vault-crud': [listVaults, createVault, updateVault, deleteVault, testVaultConnection],
@@ -1703,7 +1900,7 @@ export function getToolGroupNames(pageKey: string, nodeType?: string): string[] 
   else if (pageKey === 'settings:secrets') groups.push('secret-crud', 'group-vault-config');
   else if (pageKey === 'settings:secret-vaults') groups.push('vault-crud');
   else if (pageKey === 'settings:groups') groups.push('group-vault-config', 'group-context-crud', 'groups-crud', 'agent-contexts-crud');
-  else if (pageKey === 'settings:global-context') groups.push('global-context-crud');
+  else if (pageKey === 'settings:global-context') groups.push('global-context-crud', 'group-context-crud');
   else if (pageKey === 'settings:sso') groups.push('sso-crud');
   else if (pageKey === 'settings:env-vars') groups.push('env-vars-crud');
   else if (pageKey === 'settings:executions') groups.push('executions');

@@ -241,12 +241,12 @@ return {
     await page.goto(`/flows/${flow.id}/edit`);
     await page.getByTestId('flow-canvas').waitFor({ state: 'visible', timeout: 10000 });
 
-    // Add a trigger node and an output node from the catalog.
+    // Add a code node and an output node from the catalog.
     // The catalog panel is taller than the viewport, so its first/last items
     // can sit outside the visible area — dispatch the click directly.
     await page.getByTestId('add-node-btn').click();
-    await expect(page.getByTestId('catalog-trigger')).toBeVisible({ timeout: 5000 });
-    await page.getByTestId('catalog-trigger').evaluate((el: any) => el.click());
+    await expect(page.getByTestId('catalog-code')).toBeVisible({ timeout: 5000 });
+    await page.getByTestId('catalog-code').evaluate((el: any) => el.click());
     await page.getByTestId('add-node-btn').click();
     await expect(page.getByTestId('catalog-output')).toBeVisible({ timeout: 5000 });
     await page.getByTestId('catalog-output').evaluate((el: any) => el.click());
@@ -257,7 +257,7 @@ return {
     // Let the canvas finish its layout pass so handle coordinates are stable.
     await page.waitForTimeout(500);
 
-    // Real drag: source handle of the trigger -> input-0 handle of the output
+    // Real drag: source handle of the code node -> input-0 handle of the output
     // (the output node also has a feedback-input target handle — ignore it)
     const sourceHandle = nodes.nth(0).locator('.react-flow__handle.source').first();
     const targetHandle = nodes.nth(1).locator('.react-flow__handle.target[data-handleid="input-0"]');

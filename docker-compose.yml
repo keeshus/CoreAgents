@@ -74,6 +74,7 @@ services:
       - SIDECAR_TOKEN=${SIDECAR_TOKEN:-dev-sidecar-token-change-me}
       - VALKEY_HOST=valkey
       - VALKEY_PASSWORD=${VALKEY_PASSWORD:-dev-valkey}
+      - SECRETS_ENCRYPTION_KEY=${SECRETS_ENCRYPTION_KEY}
     restart: always
     # Plain node app: drop all Linux capabilities and reap zombie processes
     cap_drop:

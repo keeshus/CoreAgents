@@ -57,11 +57,11 @@ export default function SettingsIndex() {
       title: 'Groups',
       description: 'Manage user groups for flow visibility and HITL assignment',
     },
-    ...(can('admin') ? [{
+    ...((can('admin') || (user as any)?.groups?.some((g: any) => g.role === 'admin')) ? [{
       href: '/settings/global-context',
       icon: 'language',
       title: 'Global Context',
-      description: 'Set the global system context for all LLM agents across all flows',
+      description: 'Set the global system context or per-group context for LLM agents',
     }] : []),
     ...(can('admin') ? [{
       href: '/settings/executions',

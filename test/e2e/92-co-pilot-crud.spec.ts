@@ -553,14 +553,30 @@ test.describe('Co-Pilot tools', () => {
     await request.delete(`${API_URL}/groups/${group.id}`);
   });
 
-  test('get_group_context — reads group context', async ({ request }) => {
+  test('get_group_context — reads group context via member endpoint', async ({ request }) => {
     const groupRes = await request.post(`${API_URL}/groups`, { data: { name: `CP-Ctx-${Date.now()}`, context: 'group hello' } });
     const group = await groupRes.json();
 
-    const ctxRes = await request.get(`${API_URL}/groups/${group.id}`);
+    const ctxRes = await request.get(`${API_URL}/groups/${group.id}/context`);
     expect(ctxRes.ok()).toBe(true);
     const ctx = await ctxRes.json();
     expect(ctx.context).toBe('group hello');
+
+    await request.delete(`${API_URL}/groups/${group.id}`);
+  });
+
+  test('update_group_context — sets and reads back group context', async ({ request }) => {
+    const groupRes = await request.post(`${API_URL}/groups`, { data: { name: `CP-UpdCtx-${Date.now()}` } });
+    const group = await groupRes.json();
+
+    const putRes = await request.put(`${API_URL}/groups/${group.id}/context`, {
+      data: { context: 'Instructions for this group.' },
+    });
+    expect(putRes.ok()).toBe(true);
+    expect((await putRes.json()).context).toBe('Instructions for this group.');
+
+    const getRes = await request.get(`${API_URL}/groups/${group.id}/context`);
+    expect((await getRes.json()).context).toBe('Instructions for this group.');
 
     await request.delete(`${API_URL}/groups/${group.id}`);
   });

@@ -1116,4 +1116,151 @@ async function registerUserClean(email: string, password: string, name: string):
     await request.delete(`${API_URL}/groups/${group.id}`);
     await deleteFlow(request, flow.id);
   });
+
+  // ─── Group context ─────────────────────────────────
+
+  test('group context: admin and group admin can set context, member cannot', async ({ playwright, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, {
+      data: { name: `Ctx-API-Group-${Date.now()}` },
+    });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+
+    const adminEmail = `ctx-admin-${Date.now()}@test.local`;
+    const memberEmail = `ctx-member-${Date.now()}@test.local`;
+    const adminRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ctx Admin', email: adminEmail, password: 'Test1234!' }),
+    });
+    expect(adminRes.status).toBe(201);
+    const adminUser = await adminRes.json();
+    const memberRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ctx Member', email: memberEmail, password: 'Test1234!' }),
+    });
+    expect(memberRes.status).toBe(201);
+    const memberUser = await memberRes.json();
+    cleanupUserIds.push(adminUser.user.id, memberUser.user.id);
+
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${adminUser.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.put(`${API_URL}/users/${memberUser.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.post(`${API_URL}/groups/${group.id}/members`, { data: { userId: adminUser.user.id } });
+    await request.put(`${API_URL}/groups/${group.id}/members/${adminUser.user.id}/role`, { data: { role: 'admin' } });
+    await request.post(`${API_URL}/groups/${group.id}/members`, { data: { userId: memberUser.user.id } });
+
+    try {
+      // Admin sets the group context
+      const setRes = await request.put(`${API_URL}/groups/${group.id}/context`, {
+        data: { context: 'Admin context text' },
+      });
+      expect(setRes.status()).toBe(200);
+      expect((await setRes.json()).context).toBe('Admin context text');
+
+      // Admin reads it back
+      const getRes = await request.get(`${API_URL}/groups/${group.id}/context`);
+      expect(getRes.status()).toBe(200);
+      expect((await getRes.json()).context).toBe('Admin context text');
+
+      // Group admin can update their own group's context
+      const adminCtx = await playwright.request.newContext();
+      await adminCtx.post(`${API_URL}/auth/login`, { data: { email: adminEmail, password: 'Test1234!' } });
+      const setByGroupAdmin = await adminCtx.put(`${API_URL}/groups/${group.id}/context`, {
+        data: { context: 'Group admin context text' },
+      });
+      expect(setByGroupAdmin.status()).toBe(200);
+      expect((await setByGroupAdmin.json()).context).toBe('Group admin context text');
+
+      // Group admin can read it
+      const getByGroupAdmin = await adminCtx.get(`${API_URL}/groups/${group.id}/context`);
+      expect(getByGroupAdmin.status()).toBe(200);
+      expect((await getByGroupAdmin.json()).context).toBe('Group admin context text');
+      await adminCtx.dispose();
+
+      // Plain member can read but cannot update
+      const memberCtx = await playwright.request.newContext();
+      await memberCtx.post(`${API_URL}/auth/login`, { data: { email: memberEmail, password: 'Test1234!' } });
+      const getByMember = await memberCtx.get(`${API_URL}/groups/${group.id}/context`);
+      expect(getByMember.status()).toBe(200);
+      const setByMember = await memberCtx.put(`${API_URL}/groups/${group.id}/context`, {
+        data: { context: 'Member attempt' },
+      });
+      expect(setByMember.status()).toBe(403);
+      await memberCtx.dispose();
+
+      // Context unchanged after the member's rejected attempt
+      const afterRes = await request.get(`${API_URL}/groups/${group.id}/context`);
+      expect((await afterRes.json()).context).toBe('Group admin context text');
+    } finally {
+      await request.delete(`${API_URL}/groups/${group.id}`).catch(() => {});
+    }
+  });
+
+  test('global-context page: group admin can edit their group context', async ({ page, request }) => {
+    const gRes = await request.post(`${API_URL}/groups`, {
+      data: { name: `Ctx-UI-Group-${Date.now()}` },
+    });
+    expect(gRes.status()).toBe(201);
+    const group = await gRes.json();
+
+    const email = `ctx-ui-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ctx UI Admin', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+
+    const rolesRes = await request.get(`${API_URL}/roles`);
+    const roles = await rolesRes.json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.post(`${API_URL}/groups/${group.id}/members`, { data: { userId: regData.user.id } });
+    await request.put(`${API_URL}/groups/${group.id}/members/${regData.user.id}/role`, { data: { role: 'admin' } });
+
+    try {
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+      await page.getByRole('button', { name: /sign.?in/i }).click();
+      await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+      await expect.poll(async () => {
+        const meRes = await page.request.get(`${API_URL}/auth/me`);
+        if (!meRes.ok()) return 'ERR';
+        return (await meRes.json()).user?.role;
+      }, { timeout: 10000 }).toBe('editor');
+
+      // The settings index shows the Global Context link for group admins
+      await page.goto('/settings');
+      await expect(page.locator('a').filter({ hasText: 'Global Context' }).first()).toBeVisible({ timeout: 10000 });
+
+      await page.goto('/settings/global-context');
+      await expect(page.locator('h1').filter({ hasText: 'Global Context' }).first()).toBeVisible({ timeout: 10000 });
+
+      // Global scope is read-only for non-admins
+      const globalTextarea = page.locator('textarea');
+      await expect(globalTextarea).toBeDisabled({ timeout: 5000 });
+      await expect(page.getByText('All groups').first()).toBeVisible();
+
+      // Select the group — the group context is editable by the group admin
+      await page.getByText('All groups').first().click();
+      await page.getByText(group.name, { exact: true }).first().click();
+      await expect(globalTextarea).toBeEnabled({ timeout: 5000 });
+
+      await globalTextarea.fill('Group context set via UI');
+      await page.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByText(/Context saved for/)).toBeVisible({ timeout: 5000 });
+
+      // Verify persisted via API
+      const ctxRes = await request.get(`${API_URL}/groups/${group.id}/context`);
+      expect(ctxRes.status()).toBe(200);
+      expect((await ctxRes.json()).context).toBe('Group context set via UI');
+    } finally {
+      await request.delete(`${API_URL}/groups/${group.id}`).catch(() => {});
+    }
+  });
 });

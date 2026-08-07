@@ -9,7 +9,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message || `Request failed: ${res.status}`);
+    const e = new Error(err.message || `Request failed: ${res.status}`) as Error & { status?: number };
+    e.status = res.status;
+    throw e;
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -85,7 +87,7 @@ export const api = {
     get: (id: string) => request<any>(`/flows/${id}`),
     checkName: (name: string, excludeId?: string) =>
       request<{ available: boolean }>(`/flows/check-name?name=${encodeURIComponent(name)}${excludeId ? `&exclude=${encodeURIComponent(excludeId)}` : ''}`),
-    create: (data: { name: string; description?: string; nodes?: any[]; edges?: any[]; group_id?: string | null }) =>
+    create: (data: { id?: string; name: string; description?: string; nodes?: any[]; edges?: any[]; group_id?: string | null }) =>
       request<any>('/flows', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
       request<any>(`/flows/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

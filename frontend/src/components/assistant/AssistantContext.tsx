@@ -54,7 +54,7 @@ const AssistantContext = createContext<AssistantContextType>({} as AssistantCont
 
 function getPageCapabilities(pageKey: string): string {
   if (pageKey.startsWith('flow:')) {
-    return 'This page shows the visual flow editor canvas. You can add/delete/edit nodes, connect them, and configure their settings. Opening a node shows a config panel with fields specific to that node type (system prompt, condition, code, etc.). The left panel has a node catalog. I can also look up available LLM endpoints, MCP servers, embedding providers, and vector stores to help configure nodes.';
+    return 'This page shows the visual flow editor canvas. You can add/delete/edit nodes, connect them, and configure their settings. Opening a node shows a config panel with fields specific to that node type (system prompt, condition, code, etc.). The left panel has a node catalog. I can also look up available LLM endpoints, MCP servers, embedding providers, and vector stores to help configure nodes.\n\nSTRUCTURED OUTPUTS: Every node produces a structured output object whose fields are referenced downstream as "Label.field" (e.g. Transform.result). Use the get_node_output_shape tool to see the exact fields a node produces and its incoming data before configuring anything. The output node\'s inputFields must be "Label.field" paths (e.g. ["Transform.result"]); templates use {{input.Label.field}}. A code node\'s output is whatever it returns — use the set_node_output_schema tool to define its "Output Structure (documentation)" (outputSchema) so downstream nodes can reference named fields; for LLM Agent nodes set_node_output_schema also switches Response Format to JSON. When you write code that returns multiple named values, always define the output schema so downstream nodes can reference them.';
   }
   if (pageKey === 'flows-list') {
     return 'This page shows a list of all flows with their name, description, and version. Each flow has action buttons to run (execute once), chat (conversational interface), debug (step-through), view execution history, and delete. The "New Flow" button creates a new blank flow. There is no search/filter, no export/import, no grid/list toggle.';
@@ -90,7 +90,7 @@ function getPageCapabilities(pageKey: string): string {
     return 'This page lists all groups with their names, member counts, and provider type (local or SSO-provisioned). Group members are listed when expanded. You can create, rename, and delete groups, add/remove members, and set group-level context instructions that get injected into LLM Agent prompts for flows in this group.';
   }
   if (pageKey === 'settings:global-context') {
-    return 'This page shows the global context textarea. The global context is prepended to every LLM Agent call across all flows. You can read and update it using the available tools.';
+    return 'This page shows a context editor. With "All groups" selected it edits the global context prepended to every LLM Agent call across all flows; selecting a group edits that group\'s context, which is injected into LLM prompts for flows in the group. The global context is admin-only; group context can be edited by admins and the group\'s admins. You can read and update both using the available tools.';
   }
   if (pageKey === 'settings:sso') {
     return 'This page shows the SSO / OIDC configuration form. You can view the current SSO provider settings (issuer URL, client ID, group claim, role mappings, enabled/disabled status) using the available tools.';

@@ -8,8 +8,13 @@ test.describe('Settings pages', () => {
   const cleanupMcpIds: string[] = [];
   const cleanupEmbeddingIds: string[] = [];
   const cleanupVectorStoreIds: string[] = [];
+  const cleanupUserIds: string[] = [];
 
   test.afterEach(async ({ request }) => {
+    for (const id of cleanupUserIds) {
+      await request.delete(`${API_URL}/users/${id}`).catch(() => {});
+    }
+    cleanupUserIds.length = 0;
     for (const id of cleanupGroupIds) {
       await request.delete(`${API_URL}/groups/${id}`).catch(() => {});
     }
@@ -50,6 +55,74 @@ test.describe('Settings pages', () => {
   test('users page loads', async ({ page }) => {
     await page.goto('/settings/users');
     await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  // ─── Users page search ─────────────────────────────────────────
+
+  const createUser = async (request: any, body: Record<string, unknown>) => {
+    const res = await request.post(`${API_URL}/users`, { data: body });
+    expect(res.status()).toBe(201);
+    const user = await res.json();
+    cleanupUserIds.push(user.id);
+    return user;
+  };
+
+  test('users page: search filters users by name and email', async ({ page, request }) => {
+    const alpha = await createUser(request, { name: `Alpha Search User`, email: `alpha-search-${Date.now()}@test.local`, password: 'Test1234!' });
+    const beta = await createUser(request, { name: `Beta Search User`, email: `beta-search-${Date.now()}@test.local`, password: 'Test1234!' });
+
+    await page.goto('/settings/users');
+    await expect(page.getByText(alpha.name)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(beta.name)).toBeVisible();
+
+    const searchInput = page.getByLabel('Search users');
+    await searchInput.fill('Alpha Search');
+    await expect(page.getByText(alpha.name)).toBeVisible();
+    await expect(page.getByText(beta.name)).not.toBeVisible();
+
+    // Search by email (substring)
+    await searchInput.fill(beta.email.split('@')[0]);
+    await expect(page.getByText(beta.name)).toBeVisible();
+    await expect(page.getByText(alpha.name)).not.toBeVisible();
+  });
+
+  test('users page: search matches role, provider and group names', async ({ page, request }) => {
+    const roles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = (roles as any[]).find((r: any) => r.name === 'editor');
+    const ts = Date.now();
+
+    const group = (await (await request.post(`${API_URL}/groups`, { data: { name: `Users-Search-Group-${ts}` } })).json());
+    cleanupGroupIds.push(group.id);
+
+    const editor = await createUser(request, { name: `RoleEditor User ${ts}`, email: `role-editor-${ts}@test.local`, password: 'Test1234!', role_id: editorRole.id });
+    const member = await createUser(request, { name: `GroupMember User ${ts}`, email: `group-member-${ts}@test.local`, password: 'Test1234!' });
+    await request.post(`${API_URL}/groups/${group.id}/members`, { data: { userId: member.id } });
+
+    await page.goto('/settings/users');
+    await expect(page.getByText(editor.name)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(member.name)).toBeVisible();
+
+    // Search by role name
+    await page.getByLabel('Search users').fill('editor');
+    await expect(page.getByText(editor.name)).toBeVisible();
+    await expect(page.getByText(member.name)).not.toBeVisible();
+    // Search by group name
+    await page.getByLabel('Search users').fill(group.name);
+    await expect(page.getByText(member.name)).toBeVisible();
+    await expect(page.getByText(editor.name)).not.toBeVisible();
+
+    // Search by provider ("local" matches every local account)
+    await page.getByLabel('Search users').fill('local');
+    await expect(page.getByText(editor.name)).toBeVisible();
+    await expect(page.getByText(member.name)).toBeVisible();
+  });
+
+  test('users page: search with no matches shows empty state', async ({ page }) => {
+    await page.goto('/settings/users');
+    await expect(page.getByLabel('Search users')).toBeVisible({ timeout: 10000 });
+
+    await page.getByLabel('Search users').fill('zzz-no-such-user');
+    await expect(page.getByText('No users match your search')).toBeVisible({ timeout: 5000 });
   });
 
   test('knowledge page loads', async ({ page }) => {
@@ -230,6 +303,7 @@ test.describe('Settings pages', () => {
     await expect(page.getByText('Filter by group')).toBeVisible({ timeout: 5000 });
 
     await page.getByText('All items').first().click();
+    await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
     await page.getByText(group.name).first().click();
     await page.waitForTimeout(500);
     await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
@@ -246,6 +320,7 @@ test.describe('Settings pages', () => {
     await expect(page.getByText('Filter by group')).toBeVisible({ timeout: 5000 });
 
     await page.getByText('All items').first().click();
+    await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
     await page.getByText(group.name).first().click();
     await page.waitForTimeout(500);
     await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
@@ -262,9 +337,58 @@ test.describe('Settings pages', () => {
     await expect(page.getByText('Filter by group')).toBeVisible({ timeout: 5000 });
 
     await page.getByText('All items').first().click();
+    await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
     await page.getByText(group.name).first().click();
     await page.waitForTimeout(500);
     await expect(page.getByText(group.name).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  // ─── Non-admin group filter scoping ─────────────────────────────
+
+  test('non-admin editors only see their own groups in settings group filters', async ({ page, request }) => {
+    // Create two groups — the editor is only a member of the first
+    const mineRes = await request.post(`${API_URL}/groups`, { data: { name: `Mine-Group-${Date.now()}` } });
+    const otherRes = await request.post(`${API_URL}/groups`, { data: { name: `Other-Group-${Date.now()}` } });
+    expect(mineRes.ok()).toBe(true);
+    expect(otherRes.ok()).toBe(true);
+    const mine = await mineRes.json();
+    const other = await otherRes.json();
+    cleanupGroupIds.push(mine.id, other.id);
+
+    // Register an editor and add them to `mine` only
+    const email = `filter-editor-${Date.now()}@test.local`;
+    const regRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Filter Editor', email, password: 'Test1234!' }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = await regRes.json();
+    cleanupUserIds.push(regData.user.id);
+    const roles = await (await request.get(`${API_URL}/roles`)).json();
+    const editorRole = roles.find((r: any) => r.name === 'editor');
+    await request.put(`${API_URL}/users/${regData.user.id}/role`, { data: { role_id: editorRole.id } });
+    await request.post(`${API_URL}/groups/${mine.id}/members`, { data: { userId: regData.user.id } });
+
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password', { exact: true }).fill('Test1234!');
+    await page.getByRole('button', { name: /sign.?in/i }).click();
+    await expect(page.locator('h1').first()).toBeVisible({ timeout: 10000 });
+
+    await expect.poll(async () => {
+      const meRes = await page.request.get(`${API_URL}/auth/me`);
+      if (!meRes.ok()) return 'ERR';
+      return (await meRes.json()).user?.role;
+    }, { timeout: 10000 }).toBe('editor');
+
+    // Every settings page with a group filter must list only the editor's group
+    for (const path of ['/settings/endpoints', '/settings/knowledge', '/settings/mcp-servers', '/settings/env-vars']) {
+      await page.goto(path);
+      await expect(page.getByText('Filter by group').first()).toBeVisible({ timeout: 10000 });
+      await page.getByText('All items').first().click();
+      await expect(page.getByText(mine.name, { exact: true })).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText(other.name, { exact: true })).toHaveCount(0);
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════

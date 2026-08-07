@@ -49,6 +49,7 @@ const TRIGGER_CONFIG: Record<string, { label: string; icon: string; description:
   chat: { label: 'Chat', icon: 'sms', description: 'Send a chat message with optional history' },
   webhook: { label: 'Webhook', icon: 'webhook', description: 'Provide a JSON payload as the webhook body' },
   schedule: { label: 'Schedule', icon: 'calendar_today', description: 'Trigger the flow with a message (simulates scheduled run)' },
+  subflow: { label: 'Subflow', icon: 'call_split', description: 'Send a message to test this subflow standalone' },
 };
 
 export function DebugOverlay({ flowId, onClose, nodes: canvasNodes, edges: canvasEdges }: DebugOverlayProps) {

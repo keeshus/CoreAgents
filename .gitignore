@@ -38,3 +38,6 @@ frontend/test-results/
 frontend/e2e/.auth/
 frontend/test-results/
 test/e2e/.parallel-logs/
+.opencode/
+.playwright-mcp/
+graphify-out/

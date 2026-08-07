@@ -222,10 +222,17 @@ router.post(
   '/',
   requirePermission('flow:create'),
   asyncHandler(async (req, res) => {
-    const { name, description = '', nodes = [], edges = [], group_id, flow_context, envVars } = req.body;
+    const { id: clientId, name, description = '', nodes = [], edges = [], group_id, flow_context, envVars } = req.body;
 
     if (!name || !name.trim()) {
       res.status(400).json({ error: 'Flow name is required' });
+      return;
+    }
+
+    // Client-generated id (e.g. eagerly created draft flows) keeps the flow's
+    // identity stable from the moment the editor opens.
+    if (clientId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) {
+      res.status(400).json({ error: 'Invalid flow id' });
       return;
     }
 
@@ -242,6 +249,7 @@ router.post(
     const result = await db
       .insert(flows)
       .values({
+        ...(clientId ? { id: clientId } : {}),
         name,
         description,
         nodes,

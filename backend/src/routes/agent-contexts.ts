@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../db/connection.js';
 import { agentContexts, groups } from '../db/schema.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -12,7 +12,11 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const groupId = req.query.group_id as string | undefined;
+    const sort = req.query.sort as string | undefined;
     const conditions = groupId ? [eq(agentContexts.group_id, groupId)] : [];
+    const orderBy = sort === 'created_at'
+      ? desc(agentContexts.created_at)
+      : desc(agentContexts.updated_at);
     const rows = await db.select({
       id: agentContexts.id,
       title: agentContexts.title,
@@ -26,7 +30,7 @@ router.get(
     }).from(agentContexts)
       .leftJoin(groups, eq(agentContexts.group_id, groups.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(agentContexts.title);
+      .orderBy(orderBy);
     res.json(rows);
   }),
 );

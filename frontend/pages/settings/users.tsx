@@ -34,6 +34,7 @@ export default function UsersSettingsPage() {
   const [allGroups, setAllGroups] = useState<{ id: string; name: string; provider: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const deleteConfirm = useConfirm({ title: 'Delete user?', message: 'Delete this user? This cannot be undone.' });
   useAssistantContext({ pageKey: 'settings:users', description: 'Managing users' });
   const [error, setError] = useState('');
@@ -89,6 +90,16 @@ export default function UsersSettingsPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const filteredUsers = search
+    ? users.filter(u =>
+        u.name.toLowerCase().includes(search.toLowerCase()) ||
+        u.email.toLowerCase().includes(search.toLowerCase()) ||
+        (u.role_name || '').toLowerCase().includes(search.toLowerCase()) ||
+        u.provider.toLowerCase().includes(search.toLowerCase()) ||
+        (u.groups || []).some(g => g.name.toLowerCase().includes(search.toLowerCase()))
+      )
+    : users;
 
   const handleRoleChange = async (userId: string, roleId: string) => {
     try {
@@ -149,6 +160,10 @@ const openGroupManager = (u: User) => {
 
         </div>
 
+        <div className="mb-4 max-w-xs">
+          <TextField label="Search users" value={search} onChange={setSearch} />
+        </div>
+
         {error && (
           <div className="bg-error-container border border-red-200 text-error text-sm rounded p-3 mb-4 flex items-center gap-2">
             <Icon name="warning" className="text-base shrink-0" /> {error}
@@ -163,6 +178,11 @@ const openGroupManager = (u: User) => {
           <div className="text-center py-16 bg-surface rounded-xl border border-outline-variant">
             <Icon name="shield" className="text-5xl text-on-surface-variant mx-auto mb-3" />
             <p className="text-on-surface-variant font-medium">No users</p>
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="text-center py-16 bg-surface rounded-xl border border-outline-variant">
+            <Icon name="search_off" className="text-5xl text-on-surface-variant mx-auto mb-3" />
+            <p className="text-on-surface-variant font-medium">No users match your search</p>
           </div>
         ) : (
           <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
@@ -179,7 +199,7 @@ const openGroupManager = (u: User) => {
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => (
+                {filteredUsers.map(u => (
                   <tr key={u.id} className="border-b last:border-0 hover:bg-surface-container-high">
                     <td className="p-3 font-medium text-on-surface">{u.name}</td>
                     <td className="p-3 text-on-surface-variant">{u.email}</td>
